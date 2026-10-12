@@ -6,6 +6,11 @@ directories:
   buildResources: build
   output: dist
 
+# No auto-publish and no update feed: package.json's `repository` field would otherwise
+# make electron-builder configure a GitHub publisher and demand GH_TOKEN even with
+# --publish never. Releases are attached by the GitHub Actions workflow instead.
+publish: null
+
 # Allow-list (D-089): only the built app and package.json ship. Runtime deps for main
 # (better-sqlite3, chokidar, smol-toml) are added by electron-builder from
 # `dependencies`; renderer libraries are devDependencies because Vite bundles them.
