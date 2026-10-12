@@ -21,6 +21,6 @@ Read [CLAUDE.md](CLAUDE.md): it holds the architecture rules that are easy to br
 - No changes to how the app writes the vendor CLIs' config files unless the PR explains exactly which file and key.
 
 ## Releases
-The maintainer cuts releases: bump `package.json`, rename `[Unreleased]`, tag `vX.Y.Z`. The `release` workflow builds the unsigned arm64 dmg and attaches it to the GitHub Release.
+The maintainer cuts releases: bump `package.json`, rename `[Unreleased]`, tag `vX.Y.Z`. The `release` workflow builds the unsigned arm64 dmg and attaches it to the GitHub Release. Development happens in a private working repo; this repository receives one squashed commit per release, so merged contributions appear in the next release commit and are credited in the commit message and CHANGELOG rather than as separate commits.
 
 By contributing you agree that your contributions are licensed under the Apache License 2.0 that covers the project.
