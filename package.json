@@ -18,7 +18,7 @@
     "start": "electron-vite preview",
     "pack": "npm run build && electron-builder --dir",
     "predist": "node scripts/check-version.mjs",
-    "dist": "npm run build && electron-builder",
+    "dist": "npm run build && electron-builder --publish never",
     "postinstall": "electron-rebuild -f -w better-sqlite3",
     "knip": "knip --no-progress --include files,exports,dependencies,unlisted,duplicates"
   },
