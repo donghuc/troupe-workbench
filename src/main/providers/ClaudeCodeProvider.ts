@@ -1,0 +1,183 @@
+import { CHROME_ACCESS_SETTING } from '../../shared/providers'
+import { workFolderRules } from '../../shared/contextBudget'
+import { execFile } from 'child_process'
+import { writeFileSync, mkdtempSync } from 'fs'
+import { tmpdir } from 'os'
+import { claudeMcpToolPrefixes } from '../../shared/projectMcp'
+import { removeTempDir } from '../util/tempFiles'
+import { join } from 'path'
+import { buildEnv } from './env'
+import { CliProcess } from './cliProcess'
+import { getSetting } from '../database/settingsRepo'
+import { memoryDelivery, globalMemoryDelivery } from '../context/projectMemory'
+import { logInfo } from '../util/logger'
+import { configuredClaudeMcpNames, liveClaudeMcpNames } from '../tools/toolsService'
+import type { AgentProvider } from './AgentProvider'
+import type {
+  AgentRequest, AgentEvent, ProviderCapabilities, ProviderAvailability
+} from '../../shared/agent'
+
+export class ClaudeCodeProvider implements AgentProvider {
+  readonly id = 'claude-code' as const
+  readonly name = 'Claude'
+  private proc = new CliProcess()
+
+  isAvailable(): Promise<ProviderAvailability> {
+    return new Promise((resolve) => {
+      execFile('claude', ['--version'], { env: buildEnv() }, (err, verOut) => {
+        if (err) { resolve({ installed: false, authenticated: false, detail: 'claude CLI not found on PATH' }); return }
+        const version = String(verOut).trim()
+        execFile('claude', ['auth', 'status'], { env: buildEnv() }, (_e, statusOut) => {
+          let loggedIn = false
+          try { loggedIn = !!JSON.parse(String(statusOut)).loggedIn } catch { /* ignore */ }
+          resolve({
+            installed: true,
+            authenticated: loggedIn,
+            detail: `${version} · ${loggedIn ? 'Signed in' : 'Not signed in — run: claude auth login'}`
+          })
+        })
+      })
+    })
+  }
+
+  getCapabilities(): ProviderCapabilities {
+    return {
+      streaming: true, streamingDeltas: true, sessionResume: true,
+      fileRead: true, fileWrite: true, shell: getSetting('agent_shell_access') !== '0', web: true, mcp: true,
+      images: true, structuredOutput: true, systemPromptInjection: true,
+      permissionModel: 'per-tool'
+    }
+  }
+
+  async *run(req: AgentRequest, resumeSessionId?: string): AsyncIterable<AgentEvent> {
+    const ctx = req.context
+    // Conversation transcript goes in the PROMPT (append-system-prompt is ignored
+    // on resume and can conflict with session memory — see runner notes).
+    const preamble = [ctx?.skillText, ctx?.snapshot, ctx?.attachmentsText].filter(Boolean).join('\n\n')
+    const prompt = preamble ? `${preamble}\n\n---\n\nUser: ${req.prompt}` : req.prompt
+    // Permission mode (D-029). Headless -p can't prompt, so tools are pre-approved via
+    // --allowedTools; the mode picks how permissive that is. 'read' is read-only;
+    // 'auto' (default) auto-accepts edits with the settings-gated tool set; 'full'
+    // bypasses all permissions.
+    const mode = req.permissionMode ?? 'auto'
+    const webAccess = getSetting('agent_web_access') !== '0'
+    const shellAccess = getSetting('agent_shell_access') !== '0'
+    // Claude in Chrome (Settings ▸ Tools, off by default): `--chrome` loads the
+    // extension's browser tools, which act in the user's own signed-in Chrome. Not in
+    // read-only mode — the tools click and type. Verified working in headless -p
+    // (2026-09-28); "Enabled by default" in /chrome does NOT apply to -p runs.
+    const chromeAccess = getSetting(CHROME_ACCESS_SETTING) === '1' && mode !== 'read'
+    const readOnly = ['Read', 'Grep', 'Glob']
+    let permFlag = 'acceptEdits'
+    let allowed = [...readOnly, ...(webAccess ? ['WebSearch', 'WebFetch'] : []), ...(shellAccess ? ['Bash'] : [])]
+    if (mode === 'read') { permFlag = 'default'; allowed = [...readOnly, ...(req.allowWeb && webAccess ? ['WebSearch', 'WebFetch'] : [])] }
+    else if (mode === 'full') { permFlag = 'bypassPermissions'; allowed = [...readOnly, 'Bash', 'WebSearch', 'WebFetch', 'Write', 'Edit'] }
+    // Pre-approve configured MCP servers (e.g. browser tools) so their tools aren't
+    // denied in headless -p — except in read-only mode. `mcp__<server>` allows all of
+    // that server's tools (D-030).
+    if (mode !== 'read') {
+      // Claude namespaces MCP tools as mcp__<server>__<tool>; the prefix must match its
+      // spelling of the server name (B-029 dots/spaces → _, B-050 dashes kept).
+      const mcpNames = new Set<string>([...configuredClaudeMcpNames(req.cwd), ...liveClaudeMcpNames()])
+      const off = new Set(req.mcpOff ?? [])
+      allowed.push(...[...mcpNames].filter((n) => !off.has(n)).flatMap(claudeMcpToolPrefixes))
+    }
+    // 'auto' (default) keeps acceptEdits + the settings-gated tool set above.
+    // The prompt goes over STDIN, not argv (D-060 item 3): argv is capped at ~1 MiB on
+    // macOS (spawn E2BIG once transcript + context grow) and is readable by every local
+    // process via `ps`. `claude -p` with no positional prompt reads the prompt from stdin.
+    const args = ['-p', '--output-format', 'stream-json', '--verbose', '--permission-mode', permFlag]
+    if (chromeAccess) { args.push('--chrome'); allowed.push('mcp__claude-in-chrome') }
+    args.push('--allowedTools', ...allowed)
+    // Servers switched off for this project (D-075): deny their tools so they are not
+    // offered to the model (their definitions otherwise ride along on every step).
+    if (req.mcpOff?.length) args.push('--disallowedTools', ...req.mcpOff.flatMap(claudeMcpToolPrefixes))
+    // Additional folders this run may read and edit (D-054). `--add-dir` is variadic,
+    // so it must not sit directly before a positional argument; `-p prompt` is already
+    // first, so appending here is safe.
+    if (req.addDirs?.length) args.push('--add-dir', ...req.addDirs)
+    if (req.model) args.push('--model', req.model)
+    if (resumeSessionId) args.push('--resume', resumeSessionId)
+
+    // Project-level context (Instructions/Memory/Persistent Context) via system
+    // prompt append, without writing into the project folder (D-003).
+    // CLAUDE.md is the canonical memory file and Claude Code auto-loads it from the
+    // cwd, so injection is skipped exactly when delivery is native (D-055).
+    const memory = memoryDelivery('claude-code', req.cwd ?? null, ctx?.memory ?? '') === 'injected' ? ctx?.memory : undefined
+    // Global memory lives in ~/.claude/CLAUDE.md, Claude's own canonical file, which it
+    // auto-loads in every session — always native, so this is never injected (D-055).
+    const globalMemory = globalMemoryDelivery('claude-code', ctx?.globalMemory ?? '') === 'injected' ? ctx?.globalMemory : undefined
+    // With Chrome on, say which web route is which so the model doesn't guess (D-085).
+    const webRouting = chromeAccess
+      ? 'Web routing: use WebSearch to find things and WebFetch for public pages. For any page that needs a login, or clicking and typing, use the Claude in Chrome tools (mcp__claude-in-chrome), which run in the user\'s own signed-in browser. Use Playwright only when the user asks for it.'
+      : undefined
+    const sys = [ctx?.instructions, globalMemory, memory, ctx?.persistentContext, workFolderRules(req.cwd, req.addDirs), webRouting].filter(Boolean).join('\n\n')
+    // The system-prompt file lives in a temp folder that is removed when the run ends (audit #10).
+    let tempDir: string | null = null
+    if (sys.trim()) {
+      const dir = mkdtempSync(join(tmpdir(), 'workbench-ctx-'))
+      tempDir = dir
+      const file = join(dir, 'context.md')
+      writeFileSync(file, sys, 'utf8')
+      args.push('--append-system-prompt-file', file)
+    }
+
+    let sawTextDelta = false
+    let fallbackText = ''
+    try {
+      yield* this.proc.jsonl({
+        bin: 'claude', args, cwd: req.cwd, stdin: prompt,
+        onMapError: (err) => logInfo('[claude] frame mapping failed', String(err)),
+        onJson: (e, push) => {
+          if (e.type === 'system' && e.subtype === 'init') {
+            push({ type: 'session_started', providerSessionId: e.session_id, model: e.model })
+          } else if (e.type === 'stream_event') {
+            const inner = e.event
+            if (inner?.type === 'content_block_delta' && inner.delta?.type === 'text_delta') {
+              sawTextDelta = true
+              push({ type: 'text_delta', text: inner.delta.text })
+            }
+          } else if (e.type === 'assistant') {
+            for (const b of e.message?.content ?? []) {
+              if (b.type === 'tool_use') push({ type: 'tool_start', tool: b.name, input: b.input, itemId: b.id })
+              else if (b.type === 'text' && typeof b.text === 'string') fallbackText = b.text
+            }
+          } else if (e.type === 'user') {
+            for (const b of e.message?.content ?? []) {
+              if (b?.type === 'tool_result') push({ type: 'tool_end', tool: 'tool', isError: !!b.is_error, itemId: b.tool_use_id })
+            }
+          } else if (e.type === 'result') {
+            if (!sawTextDelta && fallbackText.trim()) push({ type: 'text_delta', text: fallbackText })
+            const errored = e.is_error === true || (typeof e.subtype === 'string' && e.subtype.startsWith('error'))
+            const producedText = sawTextDelta || !!fallbackText.trim()
+            if (errored && !producedText) {
+              // Claude reported an error and gave no text (e.g. a usage limit or an
+              // execution error that exits cleanly) — surface it instead of a silent
+              // blank complete. (B-041, parallel to the Grok swallow.)
+              const msg = (typeof e.result === 'string' && e.result.trim()) || e.subtype || 'Claude reported an error'
+              logInfo('[claude] error result', JSON.stringify({ subtype: e.subtype, is_error: e.is_error }))
+              push({ type: 'error', message: String(msg), fatal: true })
+            }
+            // Keep fresh input, cache-read and cache-write separate so the UI
+            // can show whether prompt caching is actually helping across turns.
+            const u = e.usage ?? {}
+            push({
+              type: 'complete',
+              usage: {
+                inputTokens: u.input_tokens,
+                cacheReadTokens: u.cache_read_input_tokens,
+                cacheCreationTokens: u.cache_creation_input_tokens,
+                outputTokens: u.output_tokens,
+                costUsd: e.total_cost_usd
+              }
+            })
+          }
+        }
+      })
+    } finally {
+      removeTempDir(tempDir)
+    }
+  }
+
+  async cancel(): Promise<void> { this.proc.cancel() }
+}

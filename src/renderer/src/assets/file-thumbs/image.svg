@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="264" viewBox="0 0 240 264">
+  <defs>
+    <clipPath id="image-paper">
+      <path d="M 28,6 L 186,6 L 232,52 L 232,236 Q 232,256 212,256 L 28,256 Q 8,256 8,236 L 8,26 Q 8,6 28,6 Z"/>
+    </clipPath>
+    <linearGradient id="image-paperFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFEFB"/>
+      <stop offset="1" stop-color="#F6F2E8"/>
+    </linearGradient>
+    <linearGradient id="image-header" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#D96A32"/>
+      <stop offset="1" stop-color="#B55424"/>
+    </linearGradient>
+  </defs>
+  <path d="M 28,6 L 186,6 L 232,52 L 232,236 Q 232,256 212,256 L 28,256 Q 8,256 8,236 L 8,26 Q 8,6 28,6 Z" fill="url(#image-paperFill)"/>
+  <g clip-path="url(#image-paper)">
+    <rect x="8" y="6" width="224" height="62" fill="url(#image-header)"/>
+    <rect x="8" y="66" width="224" height="2" fill="#B55424"/>
+  </g>
+  <path d="M 186,6 L 186,52 L 232,52 Z" fill="#EDE8DC"/>
+  <path d="M 186,6 L 186,52 L 232,52" fill="none" stroke="#D8D1C2" stroke-width="1"/>
+  <path d="M 186,6 L 232,52" fill="none" stroke="#C8C0B0" stroke-width="1.4"/>
+  <path d="M 28,6 L 186,6 L 232,52 L 232,236 Q 232,256 212,256 L 28,256 Q 8,256 8,236 L 8,26 Q 8,6 28,6 Z" fill="none" stroke="#E0DACD" stroke-width="1.2"/>
+  <text x="97.0" y="48.160000000000004" text-anchor="middle"
+        font-family="SFDisplay, -apple-system, 'Helvetica Neue', sans-serif"
+        font-size="26" font-weight="700" letter-spacing="1.8"
+        fill="#FFFEFB">IMG</text>
+  
+    <defs>
+      <linearGradient id="image-sky" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#F6E2B8"/>
+        <stop offset="0.55" stop-color="#F3D3A0"/>
+        <stop offset="1" stop-color="#E7B07A"/>
+      </linearGradient>
+      <clipPath id="image-photo">
+        <rect x="30" y="86" width="180" height="138" rx="12"/>
+      </clipPath>
+    </defs>
+    <rect x="30" y="86" width="180" height="138" rx="12" fill="#EDE6D6"/>
+    <g clip-path="url(#image-photo)">
+      <rect x="30" y="86" width="180" height="138" fill="url(#image-sky)"/>
+      <circle cx="176" cy="120" r="18" fill="#F4B64D"/>
+      <path d="M 30 224 L 30 178 L 92 130 L 134 170 L 210 136 L 210 224 Z"
+            fill="#C45A2A"/>
+      <path d="M 30 224 L 30 202 L 78 170 L 124 200 L 210 166 L 210 224 Z"
+            fill="#8A4A28"/>
+    </g>
+    <rect x="30" y="86" width="180" height="138" rx="12" fill="none" stroke="#E4D9C4" stroke-width="1.5"/>
+    
+</svg>

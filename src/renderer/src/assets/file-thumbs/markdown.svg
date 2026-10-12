@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="264" viewBox="0 0 240 264">
+  <defs>
+    <clipPath id="markdown-paper">
+      <path d="M 28,6 L 186,6 L 232,52 L 232,236 Q 232,256 212,256 L 28,256 Q 8,256 8,236 L 8,26 Q 8,6 28,6 Z"/>
+    </clipPath>
+    <linearGradient id="markdown-paperFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFEFB"/>
+      <stop offset="1" stop-color="#F6F2E8"/>
+    </linearGradient>
+    <linearGradient id="markdown-header" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3A372F"/>
+      <stop offset="1" stop-color="#2A2720"/>
+    </linearGradient>
+  </defs>
+  <path d="M 28,6 L 186,6 L 232,52 L 232,236 Q 232,256 212,256 L 28,256 Q 8,256 8,236 L 8,26 Q 8,6 28,6 Z" fill="url(#markdown-paperFill)"/>
+  <g clip-path="url(#markdown-paper)">
+    <rect x="8" y="6" width="224" height="62" fill="url(#markdown-header)"/>
+    <rect x="8" y="66" width="224" height="2" fill="#2A2720"/>
+  </g>
+  <path d="M 186,6 L 186,52 L 232,52 Z" fill="#EDE8DC"/>
+  <path d="M 186,6 L 186,52 L 232,52" fill="none" stroke="#D8D1C2" stroke-width="1"/>
+  <path d="M 186,6 L 232,52" fill="none" stroke="#C8C0B0" stroke-width="1.4"/>
+  <path d="M 28,6 L 186,6 L 232,52 L 232,236 Q 232,256 212,256 L 28,256 Q 8,256 8,236 L 8,26 Q 8,6 28,6 Z" fill="none" stroke="#E0DACD" stroke-width="1.2"/>
+  <text x="97.0" y="48.160000000000004" text-anchor="middle"
+        font-family="SFDisplay, -apple-system, 'Helvetica Neue', sans-serif"
+        font-size="26" font-weight="700" letter-spacing="1.8"
+        fill="#FFFEFB">MD</text>
+  
+    <text x="34" y="134" font-family="SFDisplay, -apple-system, Helvetica, sans-serif"
+          font-size="42" font-weight="700" fill="#C48A1A">#</text>
+    <rect x="72" y="112" width="118" height="10" rx="5.0" fill="#D4CFC3"/>
+<rect x="72" y="134" width="142" height="10" rx="5.0" fill="#D4CFC3"/>
+<rect x="72" y="156" width="126" height="10" rx="5.0" fill="#D4CFC3"/>
+<rect x="72" y="178" width="88" height="10" rx="5.0" fill="#D4CFC3"/>
+    
+</svg>

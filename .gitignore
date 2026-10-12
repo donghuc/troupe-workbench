@@ -1,0 +1,21 @@
+# dependencies & build output
+node_modules/
+out/
+dist/
+*.tsbuildinfo
+
+# app-local state that must never be committed
+.workbench/
+_to_delete/
+.playwright-mcp/
+*.log
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# secrets, if any ever appear
+.env
+.env.*
+build/icon-compiled/

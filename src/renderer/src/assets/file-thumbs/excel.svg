@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="264" viewBox="0 0 240 264">
+  <defs>
+    <clipPath id="excel-paper">
+      <path d="M 28,6 L 186,6 L 232,52 L 232,236 Q 232,256 212,256 L 28,256 Q 8,256 8,236 L 8,26 Q 8,6 28,6 Z"/>
+    </clipPath>
+    <linearGradient id="excel-paperFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFEFB"/>
+      <stop offset="1" stop-color="#F6F2E8"/>
+    </linearGradient>
+    <linearGradient id="excel-header" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1F7A4D"/>
+      <stop offset="1" stop-color="#18623D"/>
+    </linearGradient>
+  </defs>
+  <path d="M 28,6 L 186,6 L 232,52 L 232,236 Q 232,256 212,256 L 28,256 Q 8,256 8,236 L 8,26 Q 8,6 28,6 Z" fill="url(#excel-paperFill)"/>
+  <g clip-path="url(#excel-paper)">
+    <rect x="8" y="6" width="224" height="62" fill="url(#excel-header)"/>
+    <rect x="8" y="66" width="224" height="2" fill="#18623D"/>
+  </g>
+  <path d="M 186,6 L 186,52 L 232,52 Z" fill="#EDE8DC"/>
+  <path d="M 186,6 L 186,52 L 232,52" fill="none" stroke="#D8D1C2" stroke-width="1"/>
+  <path d="M 186,6 L 232,52" fill="none" stroke="#C8C0B0" stroke-width="1.4"/>
+  <path d="M 28,6 L 186,6 L 232,52 L 232,236 Q 232,256 212,256 L 28,256 Q 8,256 8,236 L 8,26 Q 8,6 28,6 Z" fill="none" stroke="#E0DACD" stroke-width="1.2"/>
+  <text x="97.0" y="48.160000000000004" text-anchor="middle"
+        font-family="SFDisplay, -apple-system, 'Helvetica Neue', sans-serif"
+        font-size="26" font-weight="700" letter-spacing="1.8"
+        fill="#FFFEFB">XLS</text>
+  <rect x="34" y="98" width="42" height="26" fill="#1F7A4D"/><rect x="76" y="98" width="42" height="26" fill="#1F7A4D"/><rect x="118" y="98" width="42" height="26" fill="#1F7A4D"/><rect x="160" y="98" width="42" height="26" fill="#1F7A4D"/><rect x="34" y="124" width="42" height="26" fill="#F7FBF8"/><rect x="76" y="124" width="42" height="26" fill="#E5F3EB"/><rect x="118" y="124" width="42" height="26" fill="#F7FBF8"/><rect x="160" y="124" width="42" height="26" fill="#E5F3EB"/><rect x="34" y="150" width="42" height="26" fill="#E5F3EB"/><rect x="76" y="150" width="42" height="26" fill="#F7FBF8"/><rect x="118" y="150" width="42" height="26" fill="#E5F3EB"/><rect x="160" y="150" width="42" height="26" fill="#F7FBF8"/><rect x="34" y="176" width="42" height="26" fill="#F7FBF8"/><rect x="76" y="176" width="42" height="26" fill="#E5F3EB"/><rect x="118" y="176" width="42" height="26" fill="#F7FBF8"/><rect x="160" y="176" width="42" height="26" fill="#E5F3EB"/><rect x="34" y="98" width="168" height="104" fill="none" stroke="#1F7A4D" stroke-width="1.8"/><line x1="76" y1="98" x2="76" y2="202" stroke="#1F7A4D" stroke-width="1.2"/><line x1="118" y1="98" x2="118" y2="202" stroke="#1F7A4D" stroke-width="1.2"/><line x1="160" y1="98" x2="160" y2="202" stroke="#1F7A4D" stroke-width="1.2"/><line x1="34" y1="124" x2="202" y2="124" stroke="#1F7A4D" stroke-width="1.2"/><line x1="34" y1="150" x2="202" y2="150" stroke="#1F7A4D" stroke-width="1.2"/><line x1="34" y1="176" x2="202" y2="176" stroke="#1F7A4D" stroke-width="1.2"/>
+</svg>

@@ -1,0 +1,17 @@
+import { handle } from './handle'
+import { describeProviders } from '../providers/registry'
+import { maybeCompress } from '../agent/snapshotService'
+import { startTurn, regenerateTurn, cancelTurn, getTurnState, snapshotTurns, compareTurn } from '../agent/turns'
+import type { StartTurnInput, RegenerateInput } from '../../shared/turns'
+
+export function registerAgentIpc(): void {
+  handle('providers.list', () => describeProviders())
+  handle('conversations.compressNow', (e, conversationId: string) => maybeCompress(conversationId, e.sender, true))
+  // Turn orchestration (D-061): the renderer sends messages here; there is no direct run request (D-099).
+  handle('turns.start', (e, input: StartTurnInput) => startTurn(e.sender, input))
+  handle('turns.regenerate', (e, input: RegenerateInput) => regenerateTurn(e.sender, input))
+  handle('turns.cancel', (_e, conversationId: string) => cancelTurn(conversationId))
+  handle('turns.compare', (e, conversationId: string) => compareTurn(e.sender, conversationId))
+  handle('turns.get', (_e, conversationId: string) => getTurnState(conversationId))
+  handle('turns.snapshot', () => snapshotTurns())
+}

@@ -1,0 +1,55 @@
+appId: com.troupe.app
+productName: Troupe
+copyright: © 2026 Hien Do
+
+directories:
+  buildResources: build
+  output: dist
+
+# Allow-list (D-089): only the built app and package.json ship. Runtime deps for main
+# (better-sqlite3, chokidar, smol-toml) are added by electron-builder from
+# `dependencies`; renderer libraries are devDependencies because Vite bundles them.
+files:
+  - out/main/**
+  - out/preload/**
+  - out/renderer/**
+  - package.json
+  - '!**/*.map'
+  - '!out/*.tgz'
+  # better-sqlite3 13 loads prebuilds/<platform>-<arch>.node; ship only the macOS ones,
+  # without the bundled SQLite sources.
+  - '!node_modules/better-sqlite3/{deps,src,build}/**'
+  - '!node_modules/better-sqlite3/binding.gyp'
+  - '!node_modules/better-sqlite3/prebuilds/{linux,linuxmusl,win32}-*.node'
+  - '!node_modules/@napi-rs/**'
+  - '!node_modules/**/{README,CHANGELOG,HISTORY}*'
+  - '!node_modules/**/*.{md,d.ts,map}'
+
+# The native module must live outside the asar so it can load.
+asarUnpack:
+  - '**/*.node'
+
+# The UI is English; keep Vietnamese for system dialogs. Drops ~48 MB of Electron locales.
+electronLanguages:
+  - en
+  - vi
+
+mac:
+  target:
+    - dmg
+    - zip
+  category: public.app-category.productivity
+  # macOS 26 (Tahoe) icon: the Icon Composer bundle in build/Troupe.icon is compiled by
+  # scripts/compile-icon.sh into build/Assets.car; CFBundleIconName tells macOS to use
+  # it. build/icon.icns (from icon.png) stays as the fallback for macOS 15 and older.
+  extraResources:
+    - from: build/Assets.car
+      to: Assets.car
+  extendInfo:
+    CFBundleIconName: Troupe
+  # Unsigned personal build. First launch: right-click the app → Open (Gatekeeper).
+  identity: null
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+dmg:
+  artifactName: ${productName}-${version}-${arch}.${ext}

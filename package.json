@@ -1,0 +1,50 @@
+{
+  "name": "ai-workbench",
+  "version": "2.1.0",
+  "description": "Local-first workspace for multiple AI agent runtimes",
+  "author": "Hien Do",
+  "license": "Apache-2.0",
+  "repository": { "type": "git", "url": "https://github.com/donghuc/troupe-workbench.git" },
+  "homepage": "https://github.com/donghuc/troupe-workbench#readme",
+  "main": "./out/main/index.js",
+  "private": true,
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm run test && npm run knip",
+    "icon": "sh scripts/compile-icon.sh",
+    "start": "electron-vite preview",
+    "pack": "npm run build && electron-builder --dir",
+    "predist": "node scripts/check-version.mjs",
+    "dist": "npm run build && electron-builder",
+    "postinstall": "electron-rebuild -f -w better-sqlite3",
+    "knip": "knip --no-progress --include files,exports,dependencies,unlisted,duplicates"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^4.2.0",
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^22.10.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^44.4.3",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^2.3.0",
+    "knip": "^5.88.1",
+    "pdfjs-dist": "^4.7.76",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-markdown": "^9.0.1",
+    "remark-gfm": "^4.0.0",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.8"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "chokidar": "^4.0.1",
+    "smol-toml": "^1.9.0"
+  }
+}

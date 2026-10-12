@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="264" viewBox="0 0 240 264">
+  <defs>
+    <clipPath id="video-paper">
+      <path d="M 28,6 L 186,6 L 232,52 L 232,236 Q 232,256 212,256 L 28,256 Q 8,256 8,236 L 8,26 Q 8,6 28,6 Z"/>
+    </clipPath>
+    <linearGradient id="video-paperFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFEFB"/>
+      <stop offset="1" stop-color="#F6F2E8"/>
+    </linearGradient>
+    <linearGradient id="video-header" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3B1E2D"/>
+      <stop offset="1" stop-color="#2A1520"/>
+    </linearGradient>
+  </defs>
+  <path d="M 28,6 L 186,6 L 232,52 L 232,236 Q 232,256 212,256 L 28,256 Q 8,256 8,236 L 8,26 Q 8,6 28,6 Z" fill="url(#video-paperFill)"/>
+  <g clip-path="url(#video-paper)">
+    <rect x="8" y="6" width="224" height="62" fill="url(#video-header)"/>
+    <rect x="8" y="66" width="224" height="2" fill="#2A1520"/>
+  </g>
+  <path d="M 186,6 L 186,52 L 232,52 Z" fill="#EDE8DC"/>
+  <path d="M 186,6 L 186,52 L 232,52" fill="none" stroke="#D8D1C2" stroke-width="1"/>
+  <path d="M 186,6 L 232,52" fill="none" stroke="#C8C0B0" stroke-width="1.4"/>
+  <path d="M 28,6 L 186,6 L 232,52 L 232,236 Q 232,256 212,256 L 28,256 Q 8,256 8,236 L 8,26 Q 8,6 28,6 Z" fill="none" stroke="#E0DACD" stroke-width="1.2"/>
+  <text x="97.0" y="48.160000000000004" text-anchor="middle"
+        font-family="SFDisplay, -apple-system, 'Helvetica Neue', sans-serif"
+        font-size="26" font-weight="700" letter-spacing="1.8"
+        fill="#FFFEFB">VID</text>
+  
+    <rect x="30" y="90" width="180" height="128" rx="14" fill="#2A1520"/>
+    <rect x="33" y="93" width="174" height="122" rx="12" fill="#3B1E2D"/>
+    <rect x="38" y="106" width="9" height="12" rx="2" fill="#CDB8BE"/><rect x="193" y="106" width="9" height="12" rx="2" fill="#CDB8BE"/><rect x="38" y="127" width="9" height="12" rx="2" fill="#CDB8BE"/><rect x="193" y="127" width="9" height="12" rx="2" fill="#CDB8BE"/><rect x="38" y="148" width="9" height="12" rx="2" fill="#CDB8BE"/><rect x="193" y="148" width="9" height="12" rx="2" fill="#CDB8BE"/><rect x="38" y="169" width="9" height="12" rx="2" fill="#CDB8BE"/><rect x="193" y="169" width="9" height="12" rx="2" fill="#CDB8BE"/><rect x="38" y="190" width="9" height="12" rx="2" fill="#CDB8BE"/><rect x="193" y="190" width="9" height="12" rx="2" fill="#CDB8BE"/>
+    <polygon points="110.0,132.0 110.0,176.0 146.0,154.0" fill="#FDFCF8"/>
+    
+</svg>

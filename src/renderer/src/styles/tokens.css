@@ -1,0 +1,89 @@
+/* AI Workbench design tokens.
+   Palette + type adopted from Hien's portfolio design system (Sep 2026):
+   warm cream grounds, ink text, terracotta accent, Instrument Sans.
+   Single source of truth for color, space, type, radius. */
+
+:root {
+  /* portfolio ramp — lightened (Sep 2026: airier grounds, dark ink kept for contrast).
+     Panel is a soft warm off-white, not pure #FFFFFF, to avoid eye strain. */
+  --cream: #fdfcf8;    /* panel / lightest surface (softened from white) */
+  --cream-2: #faf9f5;  /* app background */
+  --cream-3: #f2f0e9;  /* sidebar */
+  --rule: #e7e3d8;
+  --ink: #1d1b16;
+  --ink-soft: #5b564c;
+  --muted: #8a8378;
+  --muted-line: #b0aa9e;
+  --accent-500: #d9503a;
+  --accent-600: #b83e29;
+
+  /* semantic — light */
+  --bg-app: var(--cream-2);
+  --bg-sidebar: var(--cream-3);
+  --bg-panel: var(--cream);
+  --bg-hover: #eeebe3;
+  --bg-active: #e6e2d7;
+  --bg-composer: var(--cream);
+  --text-primary: var(--ink);
+  --text-secondary: var(--ink-soft);
+  --text-tertiary: var(--muted);
+  --text-inverse: #fdfcf8;
+  --border-subtle: rgba(29, 27, 22, 0.07);
+  --border-default: rgba(29, 27, 22, 0.13);
+  --accent: var(--accent-500);
+  --accent-hover: var(--accent-600);
+  --accent-wash: #fbede9;
+
+  /* space */
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px;
+  --sp-5: 20px; --sp-6: 24px; --sp-8: 32px; --sp-10: 40px;
+
+  /* type — Instrument Sans throughout (no serif) */
+  --font-ui: "Instrument Sans", -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --fs-xs: 11px; --fs-sm: 13px; --fs-md: 14px; --fs-lg: 16px;
+  --fs-xl: 22px; --fs-2xl: 30px;
+
+  /* radius */
+  --r-sm: 6px; --r-md: 10px; --r-lg: 14px; --r-xl: 20px;
+
+  /* layout */
+  --sidebar-w: 260px;
+  --context-panel-w: 300px;
+}
+
+/* Dark palette (portfolio dark theme). Applied for the OS setting only when the
+   user hasn't picked an explicit theme (DX-005), and always for explicit dark. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --bg-app: #14120d;
+    --bg-sidebar: #100e09;
+    --bg-panel: #1c1a14;
+    --bg-hover: rgba(243, 239, 227, 0.05);
+    --bg-active: rgba(243, 239, 227, 0.09);
+    --bg-composer: #1c1a14;
+    --text-primary: #f3efe3;
+    --text-secondary: #cfc9b7;
+    --text-tertiary: #a49e89;
+    --border-subtle: rgba(243, 239, 227, 0.07);
+    --border-default: rgba(243, 239, 227, 0.14);
+    --accent: #e2664d;
+    --accent-hover: #ee7b62;
+    --accent-wash: #26170f;
+  }
+}
+:root[data-theme="dark"] {
+    --bg-app: #14120d;
+    --bg-sidebar: #100e09;
+    --bg-panel: #1c1a14;
+    --bg-hover: rgba(243, 239, 227, 0.05);
+    --bg-active: rgba(243, 239, 227, 0.09);
+    --bg-composer: #1c1a14;
+    --text-primary: #f3efe3;
+    --text-secondary: #cfc9b7;
+    --text-tertiary: #a49e89;
+    --border-subtle: rgba(243, 239, 227, 0.07);
+    --border-default: rgba(243, 239, 227, 0.14);
+    --accent: #e2664d;
+    --accent-hover: #ee7b62;
+    --accent-wash: #26170f;
+}
