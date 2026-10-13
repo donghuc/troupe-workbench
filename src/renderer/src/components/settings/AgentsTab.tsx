@@ -2,12 +2,17 @@ import { useState } from 'react'
 import ProviderAvatar from '../ProviderAvatar'
 import Modal from '../Modal'
 import AgentSetupCard from '../AgentSetupCard'
+import AddAgentModal from './AddAgentModal'
 import Icon from '../Icon'
 import Switch from './Switch'
 import { Stack, Field, Section } from '../Form'
-import { PROVIDERS, PROVIDER_IDS } from '../../../../shared/providers'
-import { allPresetsFor, modelKey, type ModelLists } from '../../../../shared/models'
-import type { ProviderId } from '../../../../shared/types'
+import { agentEntry, agentIds, isBuiltinId } from '../../../../shared/providers'
+import { allPresetsFor, modelKey, parseExtraModels, addExtraModel, removeExtraModel, type ModelLists } from '../../../../shared/models'
+import type { ProviderId, BuiltinProviderId } from '../../../../shared/types'
+import type { CustomAgent } from '../../../../shared/customAgents'
+import { presetRecipe } from '../../../../shared/agentRecipes'
+import { useAgentList, customAgentFor } from '../../agents'
+import { api } from '../../api'
 
 type Status = Partial<Record<ProviderId, { installed: boolean; authenticated: boolean }>>
 interface Props {
@@ -20,69 +25,133 @@ interface Props {
   codexImageModel: string; setCodexImageModel: (v: string) => void
 }
 
-// Settings ▸ Agents (D-071, D-072, D-078): agents on/off, which models show, extra models.
+// Settings ▸ Agents (D-071, D-072, D-078; reworked for 2.4). One compact row per agent —
+// tile, name, status, on/off — that opens to its details: which models the picker shows
+// (plus Add model, which writes the "More models" lines), Codex's image model, and for
+// user-added agents the command with Edit / Remove.
 export default function AgentsTab({ offAgents, toggleAgent, offModels, toggleModel, agentStatus, onAgentStatus, lists, extraModels, setExtraModelsText, codexImageModel, setCodexImageModel }: Props) {
-  // 2.3: agents that aren't Ready get Set up, which opens the same card the Welcome uses.
-  const [setupFor, setSetupFor] = useState<ProviderId | null>(null)
+  const [setupFor, setSetupFor] = useState<BuiltinProviderId | null>(null)
+  const [adding, setAdding] = useState(false)
+  const [editing, setEditing] = useState<CustomAgent | null>(null)
+  const [open, setOpen] = useState<ProviderId | null>(null)
+  const [newModel, setNewModel] = useState('')
+  useAgentList()   // re-render when an agent is added or removed
+  const ids = agentIds()
+  const typed = parseExtraModels(extraModels)
+
+  const remove = async (a: CustomAgent) => {
+    if (!confirm(`Remove ${a.name}? It leaves your pickers; past messages keep its name.`)) return
+    setOpen(null)
+    await api.customAgents.remove(a.id)
+  }
+  const addModel = (id: ProviderId) => {
+    const next = addExtraModel(extraModels, id, newModel)
+    if (next !== extraModels) setExtraModelsText(next)
+    setNewModel('')
+  }
+
   return (
     <Stack>
       {setupFor && (
-        <Modal title={`Set up ${PROVIDERS[setupFor].label}`} onClose={() => setSetupFor(null)}>
+        <Modal title={`Set up ${agentEntry(setupFor).label}`} onClose={() => setSetupFor(null)}>
           <AgentSetupCard id={setupFor} status={agentStatus[setupFor]} onStatus={onAgentStatus} />
         </Modal>
       )}
-      <Section title="Agents">
-      <Field hint="Off agents leave every picker; at least one stays on. Click a model to hide or show it.">
-      <div className="settings-group" role="group" aria-label="Agents">
-        {PROVIDER_IDS.map((id) => {
-          const on = !offAgents.includes(id)
-          const last = on && PROVIDER_IDS.length - offAgents.length === 1
-          const av = agentStatus[id]
-          const status = !av ? 'Checking…' : !av.installed ? 'Not installed' : av.authenticated ? 'Ready' : 'Signed out'
-          const tone = !av ? '' : !av.installed || !av.authenticated ? 'warn' : 'ok'
-          return (
-            <div key={id} className={`settings-row${on ? '' : ' off'}`}>
-              <ProviderAvatar id={id} size={28} />
-              <div className="settings-row-text">
-                <div className="settings-row-title">{PROVIDERS[id].label} <span className="settings-row-handle">@{PROVIDERS[id].handle}</span></div>
-                <div className={`settings-row-sub ${tone}`}>{on ? status : 'Off'}</div>
-              </div>
-              {av && (!av.installed || !av.authenticated) && <button className="btn btn-sm" onClick={() => setSetupFor(id)}>Set up</button>}
-              <Switch on={on} disabled={last} label={`${PROVIDERS[id].label} ${on ? 'on' : 'off'}`} title={last ? 'At least one agent must stay on' : undefined} onChange={(v) => toggleAgent(id, v)} />
-              {on && (() => {
-                // Models this agent offers (D-072): its presets or own newest few, plus the "More models" lines as currently typed (D-078).
-                const models = allPresetsFor(id, lists).filter((m) => m.v)
-                return (
-                  <div className="settings-models" role="group" aria-label={`${PROVIDERS[id].label} models`}>
-                    <span className="model-chip locked" title="The agent's own default model is always available">Default</span>
-                    {models.map((m) => {
-                      const key = modelKey(id, m.v)
-                      const mOn = !offModels.has(key)
-                      return (
-                        <button key={key} type="button" className={`model-chip${mOn ? ' on' : ''}`} aria-pressed={mOn} title={`${m.v}${m.note ? ` — ${m.note}` : ''}\n${mOn ? `Hide ${m.l} from the model picker` : `Show ${m.l} in the model picker`}`} onClick={() => toggleModel(key, !mOn)}>
-                          <Icon name={mOn ? 'check' : 'close'} size={11} />{m.l}{m.note && <span className="model-chip-note"> · retiring</span>}
-                        </button>
-                      )
-                    })}
-                    {models.length === 0 && <span className="settings-models-empty">{id === 'codex' || id === 'gemini' ? `Model list not found — run ${PROVIDERS[id].cli} once, or add models below.` : 'Default model only — add more below.'}</span>}
+      {(adding || editing) && <AddAgentModal editing={editing ?? undefined} onClose={() => { setAdding(false); setEditing(null) }} />}
+
+      <Section title="Agents" actions={<button className="btn btn-sm" onClick={() => setAdding(true)}><Icon name="plus" size={12} /> Add agent</button>}>
+        <Field hint="Off agents leave every picker; at least one stays on. Open an agent to choose the models its picker shows.">
+          <div className="settings-group agents-list" role="list" aria-label="Agents">
+            {ids.map((id) => {
+              const e = agentEntry(id)
+              const custom = customAgentFor(id)
+              const on = !offAgents.includes(id)
+              const last = on && ids.length - offAgents.length === 1
+              const av = agentStatus[id]
+              const ready = !!av && av.installed && av.authenticated
+              const status = !on ? 'Off' : !av ? 'Checking…' : !av.installed ? (custom ? `${custom.bin} not found` : 'Not installed') : av.authenticated ? 'Ready' : 'Signed out'
+              const tone = !on || !av ? '' : ready ? 'ok' : 'warn'
+              const models = allPresetsFor(id, lists).filter((m) => m.v)
+              const shown = models.filter((m) => !offModels.has(modelKey(id, m.v))).length
+              const isOpen = open === id && on
+              const canSetUp = isBuiltinId(id) && !!av && !ready && on
+              return (
+                <div key={id} role="listitem" className={`agent-item${on ? '' : ' off'}${isOpen ? ' open' : ''}`}>
+                  <div className="agent-head">
+                    <button type="button" className="agent-head-main" aria-expanded={isOpen} disabled={!on} onClick={() => { setOpen(isOpen ? null : id); setNewModel('') }}>
+                      <ProviderAvatar id={id} size={28} />
+                      <span className="settings-row-text">
+                        <span className="settings-row-title">
+                          {e.label} <span className="settings-row-handle">@{e.handle}</span>
+                          {custom && <span className="agent-tag" title="Shows replies only. Live tool steps and cost aren't available for this agent.">Basic</span>}
+                        </span>
+                        <span className={`settings-row-sub ${tone}`}>
+                          {status}{on && ready ? ` · ${shown + 1} model${shown ? 's' : ''}` : ''}
+                        </span>
+                      </span>
+                    </button>
+                    {canSetUp && <button className="btn btn-sm" onClick={() => setSetupFor(id as BuiltinProviderId)}>Set up</button>}
+                    <button type="button" className="agent-chevron-btn" aria-label={isOpen ? `Close ${e.label} details` : `Open ${e.label} details`} disabled={!on} onClick={() => { setOpen(isOpen ? null : id); setNewModel('') }}>
+                      {on && <Icon name="chevron-down" size={14} className="agent-chevron" />}
+                    </button>
+                    <Switch on={on} disabled={last} label={`${e.label} ${on ? 'on' : 'off'}`} title={last ? 'At least one agent must stay on' : undefined} onChange={(v) => { toggleAgent(id, v); if (!v && open === id) setOpen(null) }} />
                   </div>
-                )
-              })()}
-            </div>
-          )
-        })}
-      </div>
-      </Field>
-      <Field label="More models" htmlFor="extra-models" hint={<>Each agent lists its three newest models. Add more, one per line: <code>agent: model-id</code> or <code>agent: model-id | Label</code> (agent: {PROVIDER_IDS.map((pid) => PROVIDERS[pid].handle).join(', ')}).</>}>
-        <textarea id="extra-models" className="field-input mono" rows={4} placeholder={'claude: haiku | Haiku\ncodex: gpt-5.5 | GPT-5.5'} value={extraModels} onChange={(e) => setExtraModelsText(e.target.value)} />
-      </Field>
-      </Section>
-      <Section title={`Codex${offAgents.includes('codex') ? ' · off' : ''}`} dim={offAgents.includes('codex')}>
-        <fieldset className="settings-fieldset" disabled={offAgents.includes('codex')}>
-          <Field label="Image model" htmlFor="codex-image-model">
-            <input id="codex-image-model" className="field-input mono" placeholder="gpt-5.6-sol (default)" value={codexImageModel} onChange={(e) => setCodexImageModel(e.target.value)} />
-          </Field>
-        </fieldset>
+
+                  {isOpen && (
+                    <div className="agent-body">
+                      <div className="agent-body-label">Models in the picker</div>
+                      <div className="settings-models" role="group" aria-label={`${e.label} models`}>
+                        <span className="model-chip locked" title="The agent's own default model is always available">Default</span>
+                        {models.map((m) => {
+                          const key = modelKey(id, m.v)
+                          const mOn = !offModels.has(key)
+                          const isTyped = (typed[id] ?? []).some((t) => t.v === m.v)
+                          return (
+                            <span key={key} className={`model-chip-wrap${isTyped ? ' typed' : ''}`}>
+                              <button type="button" className={`model-chip${mOn ? ' on' : ''}`} aria-pressed={mOn} title={`${m.v}${m.note ? ` — ${m.note}` : ''}\n${mOn ? `Hide ${m.l} from the model picker` : `Show ${m.l} in the model picker`}`} onClick={() => toggleModel(key, !mOn)}>
+                                <Icon name={mOn ? 'check' : 'close'} size={11} />{m.l}{m.note && <span className="model-chip-note"> · retiring</span>}
+                              </button>
+                              {isTyped && <button type="button" className="model-chip-remove" aria-label={`Remove ${m.l}`} title={`Remove ${m.l}`} onClick={() => setExtraModelsText(removeExtraModel(extraModels, id, m.v))}><Icon name="close" size={10} /></button>}
+                            </span>
+                          )
+                        })}
+                      </div>
+                      {custom && !custom.modelFlag
+                        ? <p className="agent-body-hint">This agent has no model flag, so it always uses its own default. Set one in Edit to pick models here.</p>
+                        : (
+                          <form className="agent-add-model" onSubmit={(ev) => { ev.preventDefault(); addModel(id) }}>
+                            <input className="field-input mono" placeholder={id === 'claude-code' ? 'haiku' : custom?.presetId === 'opencode' ? 'provider/model, e.g. opencode/big-pickle' : custom ? 'model id' : 'model-id'} value={newModel} onChange={(ev) => setNewModel(ev.target.value)} aria-label={`Add a ${e.label} model`} />
+                            <button className="btn btn-sm" type="submit" disabled={!newModel.trim()}>Add model</button>
+                          </form>
+                        )}
+                      {(id === 'codex' || id === 'gemini') && models.length === 0 && <p className="agent-body-hint">Model list not found — run {e.cli} once, or add models above.</p>}
+
+                      {id === 'codex' && (
+                        <Field label="Image model" htmlFor="codex-image-model" hint="Used on the Image canvas.">
+                          <input id="codex-image-model" className="field-input mono" placeholder="gpt-5.6-sol (default)" value={codexImageModel} onChange={(ev) => setCodexImageModel(ev.target.value)} />
+                        </Field>
+                      )}
+
+                      {custom && (
+                        <div className="agent-custom">
+                          <div className="agent-body-label">Command</div>
+                          <code className="agent-command">{custom.command}</code>
+                          <div className="agent-custom-actions">
+                            <button className="btn btn-sm" onClick={() => setEditing(custom)}><Icon name="edit" size={12} /> Edit</button>
+                            {custom.presetId && presetRecipe(custom.presetId)?.signIn && (
+                              <button className="btn btn-sm" title={`Opens Terminal and runs: ${presetRecipe(custom.presetId)!.signIn!.cmd} — sign in or add an API key there`} onClick={() => api.agents.setupStart(custom.presetId!, 'signIn', true)}>Sign in / API key…</button>
+                            )}
+                            <button className="btn btn-sm btn-ghost danger" onClick={() => remove(custom)}>Remove</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </Field>
       </Section>
     </Stack>
   )

@@ -1,6 +1,6 @@
 import type { ProviderId } from '../../shared/types'
 import { parseAgentMentions } from '../../shared/mentions'
-import { PROVIDER_IDS } from '../../shared/providers'
+import { agentIds } from '../../shared/providers'
 import type { ModeId } from '../../shared/modes'
 
 // The pure part of turn orchestration (D-061): what a message means in terms of
@@ -16,7 +16,7 @@ export interface TurnPlan {
 
 // `enabled`: agents switched on in Settings ▸ Agents. @all fans out to those only; naming
 // (or defaulting to) an agent that is off blocks the turn rather than silently rerouting it.
-export function planTurn(text: string, defaultProvider: ProviderId, enabled: ProviderId[] = PROVIDER_IDS): TurnPlan {
+export function planTurn(text: string, defaultProvider: ProviderId, enabled: ProviderId[] = agentIds()): TurnPlan {
   const { targets, cleaned, parallel, thinking } = parseAgentMentions(text)
   const on = new Set(enabled)
   const wanted = parallel ? targets.filter((t) => on.has(t)) : (targets.length ? targets : [defaultProvider])

@@ -1,9 +1,10 @@
 import type { TurnState, TurnDelta, StartTurnInput, RegenerateInput } from './turns'
 import type {
   Project, NewProjectInput, ProjectPatch, FileNode, FileChange,
-  Conversation, RecentConversation, SearchHit, Message, NewMessageInput, ProviderId, AgentTools, McpAddInput, McpMutationResult, Note, NewNoteInput, MemoryOverview, MirrorResult, ConnectFolderResult, Schedule, NewScheduleInput, SchedulePatch, FileSearchResult } from './types'
+  Conversation, RecentConversation, SearchHit, Message, NewMessageInput, ProviderId, CustomAgentId, AgentTools, McpAddInput, McpMutationResult, Note, NewNoteInput, MemoryOverview, MirrorResult, ConnectFolderResult, Schedule, NewScheduleInput, SchedulePatch, FileSearchResult } from './types'
 import type { ProviderDescriptor, ProviderAvailability, ContextInspection, PermissionMode } from './agent'
 import type { SetupEvent } from './agentSetup'
+import type { CustomAgent, CustomAgentDraft, TestResult } from './customAgents'
 import type { Skill, SkillInput, SkillScope } from './types'
 import type { CollabRun, CollabStartInput, CollabTaskDraft } from './types'
 import type { ModelLists } from './models'
@@ -100,10 +101,19 @@ export interface WorkbenchApi {
   }
   // Agent setup (2.3, Part A): the window names an agent; the command comes from its bundled recipe.
   agents: {
-    setupStart(id: ProviderId, kind: 'install' | 'signIn', terminal?: boolean): Promise<{ runId: string | null; mode: 'run' | 'terminal' | 'none' }>
+    setupStart(id: ProviderId | string, kind: 'install' | 'signIn', terminal?: boolean): Promise<{ runId: string | null; mode: 'run' | 'terminal' | 'none' }>
     setupCancel(runId: string): Promise<void>
     check(id: ProviderId, fresh?: boolean): Promise<ProviderAvailability>
     onEvent(cb: (e: SetupEvent) => void): () => void
+  }
+  // User-added agents (2.4, Part B). Save/remove push the new list to every window.
+  customAgents: {
+    list(): Promise<CustomAgent[]>
+    save(draft: CustomAgentDraft, id?: CustomAgentId): Promise<CustomAgent>
+    remove(id: CustomAgentId): Promise<void>
+    test(draft: CustomAgentDraft, id?: CustomAgentId): Promise<TestResult>
+    presets(): Promise<{ id: string; found: string | null }[]>   // bundled presets and the binary found for each
+    onChanged(cb: (list: CustomAgent[]) => void): () => void
   }
   turns: {
     start(input: StartTurnInput): Promise<TurnState>

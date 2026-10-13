@@ -1,6 +1,6 @@
 import Switch from './Switch'
 import { Stack, Field, Section } from '../Form'
-import { PROVIDERS, PROVIDER_IDS } from '../../../../shared/providers'
+import { agentEntry, agentIds } from '../../../../shared/providers'
 import { allPresetsFor, modelKey, type ModelLists } from '../../../../shared/models'
 import { MODES, MODE_IDS, type ModeTemplates } from '../../../../shared/modes'
 import type { ProviderId } from '../../../../shared/types'
@@ -17,7 +17,7 @@ interface Props {
 // Settings ▸ Thinking (D-081, D-083): the drafting agent, Compare, and thinking-mode casts.
 export default function ThinkingTab({ thinkAgent, setThinkAgent, thinkModel, setThinkModel, compareAuto, setCompareAuto, modeTpl, setModeTpl, offAgents, offModels, lists }: Props) {
   const models = allPresetsFor(thinkAgent, lists).filter((m) => !m.v || !offModels.has(modelKey(thinkAgent, m.v)))
-  const agentsOn = PROVIDER_IDS.filter((id) => !offAgents.includes(id))
+  const agentsOn = agentIds().filter((id) => !offAgents.includes(id))
   return (
     <Stack>
       <Section title="Drafting agent">
@@ -29,7 +29,7 @@ export default function ThinkingTab({ thinkAgent, setThinkAgent, thinkModel, set
             <div className="settings-row-sub">Writes Compare cards and drafts saved outcomes.</div>
           </div>
           <select className="field-input field-inline" value={thinkAgent} onChange={(e) => { setThinkAgent(e.target.value as ProviderId); setThinkModel('') }}>
-            {agentsOn.map((id) => <option key={id} value={id}>{PROVIDERS[id].label}</option>)}
+            {agentsOn.map((id) => <option key={id} value={id}>{agentEntry(id).label}</option>)}
           </select>
         </div>
         <div className="settings-row">
@@ -84,7 +84,7 @@ export default function ThinkingTab({ thinkAgent, setThinkAgent, thinkModel, set
                   <div className="settings-row-sub">{r.hint}</div>
                 </div>
                 <select className="field-input field-inline" value={tpl.roles[r.key]} onChange={(e) => setRole(r.key, e.target.value as ProviderId)}>
-                  {PROVIDER_IDS.map((pid) => <option key={pid} value={pid}>{PROVIDERS[pid].label}{offAgents.includes(pid) ? ' (off)' : ''}</option>)}
+                  {agentIds().map((pid) => <option key={pid} value={pid}>{agentEntry(pid).label}{offAgents.includes(pid) ? ' (off)' : ''}</option>)}
                 </select>
               </div>
             ))}

@@ -8,14 +8,14 @@ import { api } from '../api'
 import { setAgentStatus } from '../agents'
 import { BUILTIN_RECIPES, recipeHash, SETUP_CONFIRMED_SETTING } from '../../../shared/agentRecipes'
 import { agentState } from '../../../shared/welcome'
-import type { ProviderId } from '../../../shared/types'
+import type { ProviderId, BuiltinProviderId } from '../../../shared/types'
 import type { SetupEvent } from '../../../shared/agentSetup'
 
 type Avail = { installed: boolean; authenticated: boolean; detail?: string }
 type Phase = 'idle' | 'confirm' | 'installing' | 'signingIn' | 'terminal' | 'failed'
 
 interface Props {
-  id: ProviderId
+  id: BuiltinProviderId
   status?: Avail
   /** Fresh status after a step or a re-check. */
   onStatus?: (id: ProviderId, s: Avail) => void

@@ -75,7 +75,11 @@ export interface ConversationSummary {
   title: string
 }
 
-export type ProviderId = 'claude-code' | 'codex' | 'grok' | 'gemini'
+/** The four agents Troupe ships with a runner for. */
+export type BuiltinProviderId = 'claude-code' | 'codex' | 'grok' | 'gemini'
+/** A user-added agent (2.4). The prefix keeps it from ever colliding with a future built-in. */
+export type CustomAgentId = `x-${string}`
+export type ProviderId = BuiltinProviderId | CustomAgentId
 
 export interface ProviderInfo {
   id: ProviderId

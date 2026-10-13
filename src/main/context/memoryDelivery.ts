@@ -59,7 +59,7 @@ export function memoryDelivery(provider: ProviderId, dir: string | null, resolve
   const canonical = readMemoryFile(dir)?.trim() ?? ''
   if (!canonical) return 'injected'                       // DB blob only
   if (provider === 'claude-code') return 'native'         // CLAUDE.md is the canonical file
-  if (provider === 'grok' || provider === 'gemini') return 'injected'   // no known native memory file
+  if (provider !== 'codex') return 'injected'   // Grok, Gemini, user-added agents: no known native memory file
   return isMirrorOf(ensureInside(dir, 'AGENTS.md'), canonical) ? 'native' : 'injected'
 }
 
@@ -70,6 +70,6 @@ export function globalMemoryDelivery(provider: ProviderId, resolved: string, age
   const canonical = resolved.trim()
   if (!canonical) return 'none'
   if (provider === 'claude-code') return 'native'
-  if (provider === 'grok' || provider === 'gemini') return 'injected'
+  if (provider !== 'codex') return 'injected'
   return isMirrorOf(agentsPath, canonical) ? 'native' : 'injected'
 }

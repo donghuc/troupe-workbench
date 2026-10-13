@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { PROVIDERS, PROVIDER_IDS, isProviderId, providerLabel, parseDisabledAgents, enabledProviderIds, serializeDisabledAgents, offMessage, firstRunAgentsOff } from './providers'
+import { BUILTIN_PROVIDERS, BUILTIN_IDS, setCustomAgents, agentIds, agentEntry, isCustomAgentId, isProviderId, providerLabel, parseDisabledAgents, enabledProviderIds, serializeDisabledAgents, offMessage, firstRunAgentsOff } from './providers'
 import { agentHandles } from './mentions'
 
 describe('provider catalog', () => {
   it('has one consistent entry per agent', () => {
-    expect(PROVIDER_IDS).toEqual(['claude-code', 'codex', 'grok', 'gemini'])
-    for (const id of PROVIDER_IDS) expect(PROVIDERS[id].id).toBe(id)
-    expect(new Set(PROVIDER_IDS.map((id) => PROVIDERS[id].handle)).size).toBe(PROVIDER_IDS.length)
+    expect(BUILTIN_IDS).toEqual(['claude-code', 'codex', 'grok', 'gemini'])
+    for (const id of BUILTIN_IDS) expect(BUILTIN_PROVIDERS[id].id).toBe(id)
+    expect(new Set(BUILTIN_IDS.map((id) => BUILTIN_PROVIDERS[id].handle)).size).toBe(BUILTIN_IDS.length)
   })
   it('labels agents, including Grok, with a fallback for unknown ids', () => {
     expect(providerLabel('grok')).toBe('Grok')
@@ -20,7 +20,7 @@ describe('provider catalog', () => {
     expect(isProviderId(undefined)).toBe(false)
   })
   it('drives @mention handles', () => {
-    expect(agentHandles.map((a) => a.handle)).toEqual(['claude', 'codex', 'grok', 'gemini'])
+    expect(agentHandles().map((a) => a.handle)).toEqual(['claude', 'codex', 'grok', 'gemini'])
   })
 })
 
@@ -53,3 +53,31 @@ describe('first launch (D-074)', () => {
   })
 })
 
+
+describe('user-added agents (2.4)', () => {
+  const entry = (id: `x-${string}`, label: string, archived = false) => ({ id, label, handle: label.toLowerCase(), cli: label.toLowerCase(), strongModel: '', memoryFile: null, globalMemoryPath: null, builtinTools: [], archived })
+  it('joins the agent list after the built-ins, archived ones left out but still labelled', () => {
+    setCustomAgents([entry('x-opencode', 'OpenCode'), entry('x-old', 'Old', true)])
+    try {
+      expect(agentIds()).toEqual(['claude-code', 'codex', 'grok', 'gemini', 'x-opencode'])
+      expect(isProviderId('x-opencode')).toBe(true)
+      expect(isProviderId('x-old')).toBe(true)
+      expect(providerLabel('x-old')).toBe('Old')
+      expect(agentHandles().map((a) => a.handle)).toContain('opencode')
+      expect(enabledProviderIds('x-opencode')).toEqual(['claude-code', 'codex', 'grok', 'gemini'])
+    } finally { setCustomAgents([]) }
+  })
+  it('keeps custom ids in the off-list even before they are loaded', () => {
+    expect(isCustomAgentId('x-cursor')).toBe(true)
+    expect(isCustomAgentId('x-')).toBe(false)
+    expect(isCustomAgentId('opencode')).toBe(false)
+    expect(parseDisabledAgents('grok,x-cursor')).toEqual(['grok', 'x-cursor'])
+    expect(serializeDisabledAgents(['x-cursor', 'grok'])).toBe('grok,x-cursor')
+    expect(isProviderId('x-cursor')).toBe(false)
+    expect(agentEntry('x-cursor').label).toBe('cursor')
+  })
+  it('never lets a custom entry shadow a built-in', () => {
+    setCustomAgents([entry('codex' as `x-${string}`, 'Fake')])
+    try { expect(agentIds()).toEqual(BUILTIN_IDS) } finally { setCustomAgents([]) }
+  })
+})

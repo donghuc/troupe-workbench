@@ -20,6 +20,14 @@ Read [CLAUDE.md](CLAUDE.md): it holds the architecture rules that are easy to br
 - No new runtime dependency without saying why in the PR.
 - No changes to how the app writes the vendor CLIs' config files unless the PR explains exactly which file and key.
 
+## Add an agent preset
+
+A preset is a ready-made user-added agent (Settings ▸ Agents ▸ + Add agent). No TypeScript needed:
+
+1. Copy `src/shared/agents/opencode.json` to `src/shared/agents/<id>.json` and fill it in: `detect` (binary names), `needs` (one line about the account it needs), `install` (the official installer and the host it downloads from — no `sudo`), `signIn`, `docs`, and `agent.command` (the command that runs one prompt and exits; `{prompt}` marks where the prompt goes, otherwise it's sent on stdin), plus `modelFlag` and `readOnlyArgs` if the CLI has them.
+2. Add the file to `RECIPE_FILES` and `PRESET_RECIPES` in `src/shared/agentRecipes.ts`.
+3. Check every flag against the CLI's current `--help`, run `npm test` (it loads every recipe), and attach a screenshot of a passing **Test** to the pull request.
+
 ## Releases
 The maintainer cuts releases: bump `package.json`, rename `[Unreleased]`, tag `vX.Y.Z`. The `release` workflow builds the unsigned arm64 dmg and attaches it to the GitHub Release. Development happens in a private working repo; this repository receives one squashed commit per release, so merged contributions appear in the next release commit and are credited in the commit message and CHANGELOG rather than as separate commits.
 

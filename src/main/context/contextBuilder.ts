@@ -10,7 +10,7 @@ import { resolveProjectMemory, readGlobalMemory, memoryDelivery, globalMemoryDel
 import { buildContextBlock, formatTranscript } from '../agent/handoff'
 import type { ProviderContext, ContextInspection, ContextSection, ContextFolders, Delivery } from '../../shared/agent'
 import type { ProviderId } from '../../shared/types'
-import { PROVIDERS, isProviderId } from '../../shared/providers'
+import { agentEntry, isProviderId } from '../../shared/providers'
 import { mcpOffFor, MCP_OFF_SETTING } from '../../shared/projectMcp'
 import { renderPinnedFile, memoryWarning, staleMemoryNote, renderScheduledTask, SINCE_SUMMARY_TRANSCRIPT } from '../../shared/contextBudget'
 import { getScheduleByConv } from '../schedules/schedulesRepo'
@@ -134,7 +134,7 @@ export function inspectContext(conversationId: string, providerId: ProviderId = 
   const rows: Row[] = [
     { name: 'Global Instructions', text: globalInstructions, delivery: sent(globalInstructions), source: 'Workbench settings', always: true },
     { name: 'Project Instructions', text: projectInstructions, delivery: sent(projectInstructions), source: 'Project settings', always: true },
-    { name: 'Global Memory', text: globalMemory, delivery: globalMemoryDelivery(providerId, globalMemory), source: (isProviderId(providerId) && PROVIDERS[providerId].globalMemoryPath) || '~/.claude/CLAUDE.md', always: true, warning: memoryWarning('Global memory', globalMemory.length) },
+    { name: 'Global Memory', text: globalMemory, delivery: globalMemoryDelivery(providerId, globalMemory), source: (isProviderId(providerId) && agentEntry(providerId).globalMemoryPath) || '~/.claude/CLAUDE.md', always: true, warning: memoryWarning('Global memory', globalMemory.length) },
     {
       name: 'Project Memory',
       text: memory,

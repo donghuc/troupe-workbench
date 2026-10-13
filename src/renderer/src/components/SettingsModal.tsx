@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { setExtraModels, setAutoModels } from '../models'
 import { saveDisabledAgents, saveDisabledModels, refreshAgentStatus } from '../agents'
 import { parseExtraModels, modelListFor, EXTRA_MODELS_SETTING, type ModelLists, parseDisabledModels, DISABLED_MODELS_SETTING } from '../../../shared/models'
-import { PROVIDER_IDS, parseDisabledAgents, DISABLED_AGENTS_SETTING, CHROME_ACCESS_SETTING } from '../../../shared/providers'
+import { agentIds, BUILTIN_IDS, parseDisabledAgents, DISABLED_AGENTS_SETTING, CHROME_ACCESS_SETTING } from '../../../shared/providers'
 import type { ProviderId } from '../../../shared/types'
 import Modal from './Modal'
 import ToolsSettings from './ToolsSettings'
@@ -65,7 +65,7 @@ export default function SettingsModal({ onClose, initialTab = 'general' }: { onC
   const [agentStatus, setAgentStatus] = useState<Partial<Record<ProviderId, { installed: boolean; authenticated: boolean }>>>({})
   const toggleAgent = (id: ProviderId, on: boolean) => setOffAgents((cur) => {
     const next = on ? cur.filter((x) => x !== id) : [...cur, id]
-    return next.length >= PROVIDER_IDS.length ? cur : next   // at least one agent stays on
+    return next.length >= agentIds().length ? cur : next   // at least one agent stays on
   })
 
   useEffect(() => {
@@ -76,7 +76,7 @@ export default function SettingsModal({ onClose, initialTab = 'general' }: { onC
     api.settings.get(DISABLED_MODELS_SETTING).then((v: string | null) => setOffModels(parseDisabledModels(v)))
     api.settings.get(DISABLED_AGENTS_SETTING).then((v: string | null) => setOffAgents(parseDisabledAgents(v)))
     api.settings.get(MCP_OFF_SETTING).then((v: string | null) => setMcpOff(parseMcpOff(v)))
-    api.settings.get(THINKING_AGENT_SETTING).then((v: string | null) => { if (v && PROVIDER_IDS.includes(v as ProviderId)) setThinkAgent(v as ProviderId) })
+    api.settings.get(THINKING_AGENT_SETTING).then((v: string | null) => { if (v && agentIds().includes(v as ProviderId)) setThinkAgent(v as ProviderId) })
     api.settings.get(THINKING_MODEL_SETTING).then((v: string | null) => setThinkModel(v ?? ''))
     api.settings.get(COMPARE_AUTO_SETTING).then((v: string | null) => setCompareAuto(v !== '0'))
     api.settings.get(MODES_SETTING).then((v: string | null) => setModeTpl(parseModeTemplates(v)))
@@ -207,7 +207,7 @@ export default function SettingsModal({ onClose, initialTab = 'general' }: { onC
           )}
 
           {tab === 'tools' && (
-            <ToolsSettings agents={PROVIDER_IDS.filter((id) => !offAgents.includes(id))} mcpOff={mcpOff} setMcpOff={setMcpOff}
+            <ToolsSettings agents={BUILTIN_IDS.filter((id) => !offAgents.includes(id))} mcpOff={mcpOff} setMcpOff={setMcpOff}
               webAccess={webAccess} setWebAccess={setWebAccess} shellAccess={shellAccess} setShellAccess={setShellAccess} chromeAccess={chromeAccess} setChromeAccess={setChromeAccess} />
           )}
 

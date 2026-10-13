@@ -9,6 +9,7 @@ import FileTree from './FileTree'
 import { api } from '../api'
 import Icon from './Icon'
 import { presetsFor } from '../models'
+import { customAgentFor } from '../agents'
 import { MODES, MODE_IDS } from '../../../shared/modes'
 import { agentHandles } from '../../../shared/mentions'
 import { getDraft, setDraft, getDraftSelections, setDraftSelections, getDraftAttachments, setDraftAttachments } from '../drafts'
@@ -39,7 +40,7 @@ interface Props {
   collabBusy?: boolean
 }
 
-const handleFor = (id: ProviderId) => agentHandles.find((a) => a.id === id)?.handle ?? id
+const handleFor = (id: ProviderId) => agentHandles().find((a) => a.id === id)?.handle ?? id
 
 const PERM_OPTS: { v: PermissionMode; l: string; d: string }[] = [
   { v: 'read', l: 'Read-only', d: 'No edits, shell, or web' },
@@ -404,7 +405,7 @@ export default function Composer({ providers, onSend, disabled, placeholder = 'H
                   {PERM_OPTS.map((o) => (
                     <button key={o.v} className={`perm-opt ${permMode === o.v ? 'active' : ''}`} onClick={() => { setPermMode(o.v); setPermOpen(false) }}>
                       <span className="perm-opt-l">{o.l}</span>
-                      <span className="perm-opt-d">{o.d}</span>
+                      <span className="perm-opt-d">{o.v === 'read' && customAgentFor(providerId) && !customAgentFor(providerId)!.readOnlyArgs?.length ? `Read-only can't be enforced for ${customAgentFor(providerId)!.name}` : o.d}</span>
                     </button>
                   ))}
                 </div>

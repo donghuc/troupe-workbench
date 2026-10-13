@@ -19,3 +19,4 @@ _to_delete/
 .env
 .env.*
 build/icon-compiled/
+.fuse_hidden*

@@ -17,6 +17,7 @@ Troupe is a local-first Mac app for thinking with AI agents — Claude Code, Cod
 **Work on real files**
 - **Projects are folders.** Agents read and edit the files in a project's folder (plus any additional folders you add). Memory is the folder's `CLAUDE.md`, mirrored to `AGENTS.md` and delivered to each agent the way it can load it.
 - **One conversation, several agents.** `@claude` / `@codex` / `@grok` / `@gemini` route a turn; Troupe owns continuity, so agents can be switched or combined in one thread.
+- **Bring any CLI agent.** Add OpenCode, Cursor CLI or any command-line agent in Settings ▸ Agents, test it, and use it alongside the others.
 - **Collab mode.** A lead agent drafts a task plan; agents carry out each task with a read-only reviewer gate, budgets and retries.
 - **Artifacts in place.** Markdown, HTML, images, video, CSV, JSON and PDF open in the app; files outside the project offer *Copy into project*.
 

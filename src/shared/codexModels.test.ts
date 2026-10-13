@@ -52,3 +52,18 @@ describe('model lists (D-078)', () => {
     expect(allPresetsFor('claude-code', lists).map((m) => m.l)).toEqual(['Default', 'Opus 5', 'Sonnet', 'Fable', 'Haiku'])
   })
 })
+
+describe('adding and removing typed models (Settings ▸ Agents, 2.4)', () => {
+  it('appends one line per model, skipping duplicates', async () => {
+    const { addExtraModel, removeExtraModel, parseExtraModels } = await import('./models')
+    let raw = addExtraModel('', 'claude-code', 'haiku', 'Haiku')
+    expect(raw).toBe('claude: haiku | Haiku')
+    raw = addExtraModel(raw, 'codex', 'gpt-5.5')
+    expect(raw).toBe('claude: haiku | Haiku\ncodex: gpt-5.5')
+    expect(addExtraModel(raw, 'codex', 'gpt-5.5')).toBe(raw)
+    expect(addExtraModel(raw, 'codex', 'a | b')).toBe(raw)
+    raw = `# notes\n${raw}`
+    expect(removeExtraModel(raw, 'claude-code', 'haiku')).toBe('# notes\ncodex: gpt-5.5')
+    expect(parseExtraModels(removeExtraModel(raw, 'codex', 'gpt-5.5')).codex).toBeUndefined()
+  })
+})

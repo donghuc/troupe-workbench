@@ -15,7 +15,7 @@ import { ensureInside } from '../filesystem/fsService'
 import { logInfo, logError } from '../util/logger'
 import { mcpOffFor, MCP_OFF_SETTING } from '../../shared/projectMcp'
 import { codexServerNames, codexDefaultModel } from '../tools/codexConfig'
-import { DISABLED_AGENTS_SETTING, enabledProviderIds, PROVIDERS } from '../../shared/providers'
+import { DISABLED_AGENTS_SETTING, enabledProviderIds, agentEntry } from '../../shared/providers'
 import { IPC } from '../../shared/ipc'
 import {
   IMAGE_FOLDER_SETTING, CANVAS_FILE, INPUTS_DIR, OUTPUTS_DIR, SAVED_DIR, HISTORY_DIR, savedName, emptyCanvas, parseCanvas, newId,
@@ -278,7 +278,7 @@ function friendlyRunError(agent: string, model: string, msg: string): string {
   const m = /"message"\s*:\s*"([^"]+)"/.exec(msg)
   const text = m ? m[1] : msg
   if (/model is not supported|model_not_found|does not exist|not supported when using/i.test(text)) {
-    return `${PROVIDERS[agent as keyof typeof PROVIDERS]?.label ?? agent} can't use ${model ? `the model “${model}”` : 'its default model'} with your account. Pick another model on the Processor.`
+    return `${agentEntry(agent as Parameters<typeof agentEntry>[0]).label} can't use ${model ? `the model “${model}”` : 'its default model'} with your account. Pick another model on the Processor.`
   }
   return text
 }
@@ -378,7 +378,7 @@ function send(sender: WebContents, channel: string, payload: unknown) {
 export function startImageRun(sender: WebContents, input: ImageRunInput): string {
   const root = requireFolder()
   if (!isImageAgent(input.agent)) throw new Error('This agent can’t make images')
-  if (!enabledProviderIds(getSetting(DISABLED_AGENTS_SETTING)).includes(input.agent)) throw new Error(`${PROVIDERS[input.agent].label} is turned off in Settings ▸ Agents.`)
+  if (!enabledProviderIds(getSetting(DISABLED_AGENTS_SETTING)).includes(input.agent)) throw new Error(`${agentEntry(input.agent).label} is turned off in Settings ▸ Agents.`)
   if (!input.prompt?.trim()) throw new Error('The prompt is empty')
   const refs = (input.refs ?? []).filter((r) => typeof r === 'string')
   const refAbs = refs.map((r) => ensureInside(root, r)).filter((p) => existsSync(p))
@@ -425,7 +425,7 @@ export function startImageRun(sender: WebContents, input: ImageRunInput): string
     if (!files.length) {
       try { if (!(await fsp.readdir(outDir)).length) await fsp.rmdir(outDir) } catch { /* keep */ }
       const said = reply.trim().replace(/\s+/g, ' ').slice(0, 280)
-      const error = (fatal && friendlyRunError(input.agent, model, fatal)) || `${PROVIDERS[input.agent].label} finished without saving an image.${said ? ` It said: “${said}”` : ''}`
+      const error = (fatal && friendlyRunError(input.agent, model, fatal)) || `${agentEntry(input.agent).label} finished without saving an image.${said ? ` It said: “${said}”` : ''}`
       logInfo('[image] run produced nothing', { runId, error })
       done({ files: [], error })
       return

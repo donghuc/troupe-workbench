@@ -18,6 +18,17 @@ Each version here matches a packaged build — the dmg is named
 > - Bumping rules: PATCH = fixes/small tweaks, MINOR = new features (backward-compatible),
 >   MAJOR = breaking changes or a data format users can't roll back from.
 
+## [2.4.0] - 2026-10-13
+
+Add your own agents. No database change.
+
+### Added
+- **Add any command-line agent.** Settings ▸ Agents ▸ **+ Add agent**: type the command that runs one prompt (for example `opencode run {prompt}`), click **Test** — Troupe runs it once in an empty folder — and add it. It then works like the others: `@handle` mentions, `@all` and Compare, thinking modes, Collab tasks and schedules. Added agents show replies only (a **Basic** tag), can't plan or review a Collab run, and can be edited or removed (past messages keep their name).
+- **Ready-made OpenCode and Cursor CLI.** If either is installed, it's one click to fill in the form; if not, Troupe can open its official installer in Terminal.
+
+### Changed
+- **Settings ▸ Agents is tidier.** One compact row per agent; open it to choose which models its picker shows, add a model in place, and (for added agents) edit the command, sign in or add an API key, or remove it. The separate "More models" box and Codex section are folded into the agents themselves.
+
 ## [2.3.0] - 2026-10-13
 
 Set up your agents without Terminal. No database change.

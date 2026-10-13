@@ -8,6 +8,7 @@ import { removeTempDir } from '../util/tempFiles'
 import { join } from 'path'
 import { buildEnv } from './env'
 import { CliProcess } from './cliProcess'
+import { claudeEvents, newClaudeState } from './claudeEvents'
 import { getSetting } from '../database/settingsRepo'
 import { memoryDelivery, globalMemoryDelivery } from '../context/projectMemory'
 import { logInfo } from '../util/logger'
@@ -122,55 +123,15 @@ export class ClaudeCodeProvider implements AgentProvider {
       args.push('--append-system-prompt-file', file)
     }
 
-    let sawTextDelta = false
-    let fallbackText = ''
+    const st = newClaudeState()
     try {
       yield* this.proc.jsonl({
         bin: 'claude', args, cwd: req.cwd, stdin: prompt,
         onMapError: (err) => logInfo('[claude] frame mapping failed', String(err)),
         onJson: (e, push) => {
-          if (e.type === 'system' && e.subtype === 'init') {
-            push({ type: 'session_started', providerSessionId: e.session_id, model: e.model })
-          } else if (e.type === 'stream_event') {
-            const inner = e.event
-            if (inner?.type === 'content_block_delta' && inner.delta?.type === 'text_delta') {
-              sawTextDelta = true
-              push({ type: 'text_delta', text: inner.delta.text })
-            }
-          } else if (e.type === 'assistant') {
-            for (const b of e.message?.content ?? []) {
-              if (b.type === 'tool_use') push({ type: 'tool_start', tool: b.name, input: b.input, itemId: b.id })
-              else if (b.type === 'text' && typeof b.text === 'string') fallbackText = b.text
-            }
-          } else if (e.type === 'user') {
-            for (const b of e.message?.content ?? []) {
-              if (b?.type === 'tool_result') push({ type: 'tool_end', tool: 'tool', isError: !!b.is_error, itemId: b.tool_use_id })
-            }
-          } else if (e.type === 'result') {
-            if (!sawTextDelta && fallbackText.trim()) push({ type: 'text_delta', text: fallbackText })
-            const errored = e.is_error === true || (typeof e.subtype === 'string' && e.subtype.startsWith('error'))
-            const producedText = sawTextDelta || !!fallbackText.trim()
-            if (errored && !producedText) {
-              // Claude reported an error and gave no text (e.g. a usage limit or an
-              // execution error that exits cleanly) — surface it instead of a silent
-              // blank complete. (B-041, parallel to the Grok swallow.)
-              const msg = (typeof e.result === 'string' && e.result.trim()) || e.subtype || 'Claude reported an error'
-              logInfo('[claude] error result', JSON.stringify({ subtype: e.subtype, is_error: e.is_error }))
-              push({ type: 'error', message: String(msg), fatal: true })
-            }
-            // Keep fresh input, cache-read and cache-write separate so the UI
-            // can show whether prompt caching is actually helping across turns.
-            const u = e.usage ?? {}
-            push({
-              type: 'complete',
-              usage: {
-                inputTokens: u.input_tokens,
-                cacheReadTokens: u.cache_read_input_tokens,
-                cacheCreationTokens: u.cache_creation_input_tokens,
-                outputTokens: u.output_tokens,
-                costUsd: e.total_cost_usd
-              }
-            })
+          for (const ev of claudeEvents(e, st)) {
+            if (ev.type === 'error') logInfo('[claude] error result', JSON.stringify({ subtype: e.subtype, is_error: e.is_error }))
+            push(ev)
           }
         }
       })

@@ -2,11 +2,14 @@
 // per agent in src/shared/agents/. Bundled by import, so they ship inside the app (the
 // packaged allow-list only includes out/ — D-089). Setup data only: the built-in agents'
 // runners stay as code. Pure; tested.
-import type { ProviderId } from './types'
+import type { ProviderId, BuiltinProviderId } from './types'
+import { parseCommandLine, type CustomOutput } from './customAgents'
 import claude from './agents/claude-code.json'
 import codex from './agents/codex.json'
 import gemini from './agents/gemini.json'
 import grok from './agents/grok.json'
+import opencode from './agents/opencode.json'
+import cursor from './agents/cursor.json'
 
 export interface AgentRecipe {
   id: string
@@ -23,6 +26,8 @@ export interface AgentRecipe {
   /** `terminal: true` = interactive-only, always opened in a Terminal window. */
   signIn?: { cmd: string; terminal?: boolean }
   docs?: string
+  /** Presets only (2.4, Part C): how to run it as a user-added agent. Built-ins leave it out. */
+  agent?: { command: string; output: CustomOutput; modelFlag?: string; readOnlyArgs?: string }
 }
 
 export type RecipeResult = { ok: true; recipe: AgentRecipe } | { ok: false; reason: string }
@@ -37,7 +42,7 @@ const isStr = (v: unknown): v is string => typeof v === 'string' && v.trim().len
 /** Validate one recipe. Never throws: a bad recipe comes back with the reason. */
 export function parseAgentRecipe(raw: unknown): RecipeResult {
   if (!isObj(raw)) return { ok: false, reason: 'not an object' }
-  const { id, label, recommended, detect, needs, prereq, install, signIn, docs } = raw
+  const { id, label, recommended, detect, needs, prereq, install, signIn, docs, agent } = raw
   if (!isStr(id) || !ID_RE.test(id)) return { ok: false, reason: 'id must be lowercase letters, digits and dashes' }
   if (!isStr(label)) return { ok: false, reason: `${id}: label is required` }
   if (!Array.isArray(detect) || !detect.length || !detect.every((b) => isStr(b) && BIN_RE.test(b))) return { ok: false, reason: `${id}: detect must list binary names` }
@@ -61,6 +66,18 @@ export function parseAgentRecipe(raw: unknown): RecipeResult {
   }
   if (docs !== undefined && !(isStr(docs) && /^https:\/\//.test(docs))) return { ok: false, reason: `${id}: docs must be an https link` }
   if (!inst && !docs) return { ok: false, reason: `${id}: needs an install command or a docs link` }
+  let run: AgentRecipe['agent']
+  if (agent !== undefined) {
+    if (!isObj(agent) || !isStr(agent.command) || !parseCommandLine(agent.command).ok) return { ok: false, reason: `${id}: agent.command must be a command line` }
+    if (agent.output !== undefined && agent.output !== 'text' && agent.output !== 'claude-stream-json') return { ok: false, reason: `${id}: agent.output must be "text" or "claude-stream-json"` }
+    if (agent.modelFlag !== undefined && !isStr(agent.modelFlag)) return { ok: false, reason: `${id}: agent.modelFlag must be text` }
+    if (agent.readOnlyArgs !== undefined && !(isStr(agent.readOnlyArgs) && parseCommandLine(agent.readOnlyArgs).ok)) return { ok: false, reason: `${id}: agent.readOnlyArgs must be arguments` }
+    run = {
+      command: agent.command.trim(), output: agent.output === 'claude-stream-json' ? 'claude-stream-json' : 'text',
+      ...(agent.modelFlag ? { modelFlag: (agent.modelFlag as string).trim() } : {}),
+      ...(agent.readOnlyArgs ? { readOnlyArgs: (agent.readOnlyArgs as string).trim() } : {})
+    }
+  }
   return {
     ok: true,
     recipe: {
@@ -70,7 +87,8 @@ export function parseAgentRecipe(raw: unknown): RecipeResult {
       ...(prereq ? { prereq } : {}),
       ...(inst ? { install: inst } : {}),
       ...(sign ? { signIn: sign } : {}),
-      ...(docs ? { docs: docs as string } : {})
+      ...(docs ? { docs: docs as string } : {}),
+      ...(run ? { agent: run } : {})
     }
   }
 }
@@ -88,7 +106,8 @@ export function recipeHash(r: AgentRecipe): string {
 
 /** Every bundled recipe file, by file name — a test checks this matches the folder. */
 export const RECIPE_FILES: Record<string, unknown> = {
-  'claude-code.json': claude, 'codex.json': codex, 'gemini.json': gemini, 'grok.json': grok
+  'claude-code.json': claude, 'codex.json': codex, 'gemini.json': gemini, 'grok.json': grok,
+  'opencode.json': opencode, 'cursor.json': cursor
 }
 
 function load(raw: unknown): AgentRecipe {
@@ -98,6 +117,13 @@ function load(raw: unknown): AgentRecipe {
 }
 
 /** Setup recipes for the built-in agents. */
-export const BUILTIN_RECIPES: Record<ProviderId, AgentRecipe> = {
+export const BUILTIN_RECIPES: Record<BuiltinProviderId, AgentRecipe> = {
   'claude-code': load(claude), codex: load(codex), gemini: load(gemini), grok: load(grok)
 }
+
+/**
+ * Ready-made user-added agents (2.4, Part C). Before shipping a change, check the CLI's
+ * current --help: binary name, non-interactive flag, model flag, read-only flag, install URL.
+ */
+export const PRESET_RECIPES: AgentRecipe[] = [load(opencode), load(cursor)]
+export const presetRecipe = (id: string): AgentRecipe | undefined => PRESET_RECIPES.find((r) => r.id === id)

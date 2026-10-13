@@ -7,7 +7,7 @@ import ProviderAvatar from './ProviderAvatar'
 import { refreshAgentStatus, saveDisabledAgents, setAgentStatus } from '../agents'
 import AgentSetupCard from './AgentSetupCard'
 import { api } from '../api'
-import { PROVIDERS, PROVIDER_IDS } from '../../../shared/providers'
+import { agentEntry, BUILTIN_IDS } from '../../../shared/providers'
 import type { ProviderId } from '../../../shared/types'
 import type { ProviderAvailability } from '../../../shared/agent'
 import {
@@ -40,14 +40,14 @@ export default function Welcome({ createProject, onFinish }: Props) {
       const st = await refreshAgentStatus()
       setStatus(st); setChecking(false)
       // Open on the agent most worth setting up: Claude unless it's ready, then the first not ready.
-      if (agentState(st['claude-code']) === 'ready') setSel(PROVIDER_IDS.find((id) => agentState(st[id]) !== 'ready') ?? 'claude-code')
+      if (agentState(st['claude-code']) === 'ready') setSel(BUILTIN_IDS.find((id) => agentState(st[id]) !== 'ready') ?? 'claude-code')
     })()
   }, [])
   // Back from a browser or Terminal: re-check the agents that aren't ready yet, one by one.
   useEffect(() => {
     if (step !== 1) return
     const onFocus = () => {
-      for (const id of PROVIDER_IDS) {
+      for (const id of BUILTIN_IDS) {
         if (agentState(status[id]) === 'ready') continue
         void api.agents.check(id).then((a: ProviderAvailability) => { setAgentStatus(id, a); setStatus((s) => ({ ...s, [id]: a })) }).catch(() => {})
       }
@@ -82,7 +82,7 @@ export default function Welcome({ createProject, onFinish }: Props) {
   }
 
   const prompt = welcomePrompt(ready, !!folder && !scratch)
-  const names = (ids: ProviderId[]) => ids.map((id) => PROVIDERS[id].label).join(' + ')
+  const names = (ids: ProviderId[]) => ids.map((id) => agentEntry(id).label).join(' + ')
 
   return (
     <div className="welcome-overlay">
@@ -100,19 +100,19 @@ export default function Welcome({ createProject, onFinish }: Props) {
             </div>
             <div className="welcome-setup">
               <div className="welcome-rail" role="listbox" aria-label="Agents">
-                {PROVIDER_IDS.map((id) => {
+                {BUILTIN_IDS.map((id) => {
                   const st = agentState(status[id])
                   return (
                     <button key={id} role="option" aria-selected={sel === id} className={`welcome-rail-row${sel === id ? ' on' : ''}`} onClick={() => setSel(id)}>
                       <ProviderAvatar id={id} size={24} />
-                      <span className="welcome-rail-name">{PROVIDERS[id].label}</span>
+                      <span className="welcome-rail-name">{agentEntry(id).label}</span>
                       <span className={`welcome-dot ${st}`} title={st} />
                     </button>
                   )
                 })}
               </div>
               {/* One card per agent, all mounted: an install keeps its progress while you look at another agent. */}
-              {PROVIDER_IDS.map((id) => (
+              {BUILTIN_IDS.map((id) => (
                 <div key={id} hidden={sel !== id}>
                   <AgentSetupCard id={id} status={status[id]} onStatus={(aid, a) => setStatus((s) => ({ ...s, [aid]: a }))} />
                 </div>
@@ -164,7 +164,7 @@ export default function Welcome({ createProject, onFinish }: Props) {
                 <div className="welcome-try-prompt">{prompt.text}</div>
                 <div className="welcome-try-row">
                   <button className="btn btn-primary" onClick={() => onFinish(projectId, { text: prompt.text, provider: prompt.provider })}>
-                    Run with {prompt.compare ? names(ready) : PROVIDERS[prompt.provider].label}
+                    Run with {prompt.compare ? names(ready) : agentEntry(prompt.provider).label}
                   </button>
                   <span className="welcome-hint">
                     {prompt.compare ? 'Each agent answers on its own, then a Compare card shows where they agree and disagree. ' : ''}
@@ -179,7 +179,7 @@ export default function Welcome({ createProject, onFinish }: Props) {
         <div className="welcome-foot">
           {/* Back sits on the left, apart from the forward actions on the right. */}
           {step > 1 && <button className="btn btn-ghost" onClick={() => setStep((step - 1) as 1 | 2)}>Back</button>}
-          <span className="welcome-meta">{step === 1 && (checking ? 'Checking your agents…' : ready.length ? `${ready.length} of ${PROVIDER_IDS.length} ready` : 'Install and sign in to at least one agent to continue')}</span>
+          <span className="welcome-meta">{step === 1 && (checking ? 'Checking your agents…' : ready.length ? `${ready.length} of ${BUILTIN_IDS.length} ready` : 'Install and sign in to at least one agent to continue')}</span>
           {step < 3 && <button className="btn btn-ghost" onClick={() => onFinish(projectId)}>Skip setup</button>}
           {step === 1 && <button className="btn btn-primary" disabled={!canContinue1} onClick={next1}>Continue</button>}
           {step === 2 && <button className="btn btn-primary" disabled={busy || (!folder && !scratch)} onClick={next2}>{busy ? 'Creating…' : 'Continue'}</button>}

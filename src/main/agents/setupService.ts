@@ -7,8 +7,8 @@ import { writeFileSync, chmodSync, unlink } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { randomBytes } from 'crypto'
-import { BUILTIN_RECIPES } from '../../shared/agentRecipes'
-import { isProviderId } from '../../shared/providers'
+import { BUILTIN_RECIPES, presetRecipe } from '../../shared/agentRecipes'
+import { isProviderId, isBuiltinId } from '../../shared/providers'
 import { IPC } from '../../shared/ipc'
 import type { SetupEvent } from '../../shared/agentSetup'
 import type { ProviderId } from '../../shared/types'
@@ -33,12 +33,15 @@ function openInTerminal(cmd: string): void {
 }
 
 export function startSetup(sender: WebContents, id: unknown, kind: unknown, terminal?: unknown): { runId: string | null; mode: 'run' | 'terminal' | 'none' } {
-  if (!isProviderId(id)) throw new Error('Unknown agent')
+  // Built-ins and bundled presets (2.4) have recipes; a custom agent typed in the form has
+  // no install step. Presets always open in Terminal: the user sees the installer run.
+  const preset = typeof id === 'string' && !isBuiltinId(id) ? presetRecipe(id) : undefined
+  if (!isBuiltinId(id) && !preset) throw new Error('Unknown agent')
   if (kind !== 'install' && kind !== 'signIn') throw new Error('Unknown setup step')
-  const recipe = BUILTIN_RECIPES[id]
+  const recipe = preset ?? BUILTIN_RECIPES[id as keyof typeof BUILTIN_RECIPES]
   const plan = setupPlan(recipe, kind as SetupKind)
   // "Open in Terminal" after a failed background step (or a sign-in that needs a terminal).
-  if (terminal === true && plan.mode === 'run') plan.mode = 'terminal'
+  if ((terminal === true || preset) && plan.mode === 'run') plan.mode = 'terminal'
   logInfo('agent setup', { agent: id, kind, mode: plan.mode })
   if (plan.mode === 'none') return { runId: null, mode: 'none' }
   if (plan.mode === 'terminal') { openInTerminal(plan.cmd); return { runId: null, mode: 'terminal' } }
@@ -46,14 +49,14 @@ export function startSetup(sender: WebContents, id: unknown, kind: unknown, term
   const handle = runSetupCommand(plan.cmd, {
     env: buildEnv(),
     timeoutMs: SETUP_TIMEOUT_MS[kind as SetupKind],
-    onLine: (line) => send(sender, { runId, agent: id, kind: kind as SetupKind, line })
+    onLine: (line) => send(sender, { runId, agent: id as ProviderId, kind: kind as SetupKind, line })
   })
   running.set(runId, handle)
   void handle.done.then((r) => {
     running.delete(runId)
     if (r.ok && kind === 'install') resetLoginPath()   // a new binary may live in a new PATH dir
     if (!r.ok) logError('agent setup failed', { agent: id, kind, code: r.code, timedOut: r.timedOut, cancelled: r.cancelled })
-    send(sender, { runId, agent: id, kind: kind as SetupKind, done: r })
+    send(sender, { runId, agent: id as ProviderId, kind: kind as SetupKind, done: r })
   })
   return { runId, mode: 'run' }
 }

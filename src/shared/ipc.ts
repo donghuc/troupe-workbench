@@ -10,4 +10,5 @@ export const IPC = {
   imageEvent: 'image:event',   // main -> renderer
   imageDone: 'image:done',      // main -> renderer
   agentSetup: 'agents:setup',   // 2.3: install / sign-in output lines and results
+  customAgentsChanged: 'customAgents:changed',   // 2.4: the user-added agent list
 } as const

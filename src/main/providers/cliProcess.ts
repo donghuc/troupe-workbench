@@ -5,6 +5,7 @@ import { join } from 'path'
 import { appendCapped } from '../util/limits'
 import { buildEnv } from './env'
 import type { AgentEvent } from '../../shared/agent'
+import { stripAnsi } from '../../shared/customAgents'
 
 // D-096: the process plumbing every agent CLI shares — spawn, write the prompt to stdin
 // and close it, read stdout as JSON lines, keep a capped stderr, turn the exit into an
@@ -29,6 +30,17 @@ export interface JsonlSpec {
   onClose?: (code: number | null, stderr: string, push: Push) => void
   onMapError?: (err: unknown) => void
   /** Overridable for tests. */
+  env?: NodeJS.ProcessEnv
+}
+
+export interface TextSpec {
+  bin: string
+  args: string[]
+  cwd?: string
+  stdin?: string
+  label?: string
+  /** Stop the process after this long (Test runs). */
+  timeoutMs?: number
   env?: NodeJS.ProcessEnv
 }
 
@@ -93,6 +105,65 @@ export class CliProcess {
     }
   }
 
+  /**
+   * Stream a plain-text CLI (user-added agents, 2.4): every stdout chunk, colour codes
+   * removed, is a text_delta; exit 0 completes; anything else is an error carrying the most
+   * useful stderr line.
+   */
+  async *text(spec: TextSpec): AsyncGenerator<AgentEvent> {
+    const label = spec.label ?? spec.bin
+    const queue: AgentEvent[] = []
+    let done = false
+    let notify: (() => void) | null = null
+    const push: Push = (ev) => { queue.push(ev); const n = notify; notify = null; n?.() }
+    const finish = () => { done = true; const n = notify; notify = null; n?.() }
+
+    let child: ChildProcessWithoutNullStreams
+    try {
+      child = spawn(spec.bin, spec.args, { cwd: spec.cwd, env: spec.env ?? buildEnv() })
+    } catch (err) {
+      yield { type: 'error', message: `Failed to start ${label}: ${(err as Error).message}`, fatal: true }
+      return
+    }
+    this.child = child
+    child.stdin.on('error', () => { /* EPIPE */ })
+    child.stdin.end(spec.stdin ?? '')
+    child.stdout.setEncoding('utf8')
+    child.stdout.on('data', (d: string) => { const t = stripAnsi(d); if (t) push({ type: 'text_delta', text: t }) })
+    let stderr = ''
+    child.stderr.on('data', (d) => { stderr = appendCapped(stderr, String(d)) })
+    let timedOut = false
+    const timer = spec.timeoutMs ? setTimeout(() => { timedOut = true; this.cancel() }, spec.timeoutMs) : null
+    let started = true
+    child.on('error', (err) => {
+      started = false
+      const missing = (err as NodeJS.ErrnoException).code === 'ENOENT'
+      push({ type: 'error', message: missing ? `${label} not found. Check it's installed and the command is right.` : `Failed to start ${label}: ${err.message}`, fatal: true })
+      finish()
+    })
+    child.on('close', (code) => {
+      if (timer) clearTimeout(timer)
+      if (started) {
+        if (timedOut) push({ type: 'error', message: `${label} didn't finish within ${Math.round(spec.timeoutMs! / 1000)} seconds.`, fatal: true })
+        else if (code === 0) push({ type: 'complete', usage: {} })
+        else push({ type: 'error', message: stderrLine(stderr) || `${label} exited with code ${code ?? 'unknown'}`, fatal: true })
+      }
+      finish()
+    })
+
+    try {
+      while (true) {
+        while (queue.length) yield queue.shift()!
+        if (done) break
+        await new Promise<void>((r) => { notify = r })
+      }
+      while (queue.length) yield queue.shift()!
+    } finally {
+      if (timer) clearTimeout(timer)
+      if (this.child === child) this.child = null
+    }
+  }
+
   /** Run a CLI to completion and collect its output (non-streaming CLIs, e.g. grok). */
   exec(bin: string, args: string[], cwd?: string, env?: NodeJS.ProcessEnv): Promise<ExecResult> {
     return new Promise((resolve) => {
@@ -130,6 +201,15 @@ export class CliProcess {
     // `killed` only means a signal was sent; check whether the process actually exited.
     setTimeout(() => { if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL') }, KILL_GRACE_MS).unref?.()
   }
+}
+
+/** The stderr line worth showing: the last one that reads like an error, else the last one. */
+export function stderrLine(stderr: string): string {
+  const lines = stripAnsi(stderr).split('\n').map((l) => l.trim()).filter(Boolean)
+  // A JSON fragment such as `"message": "Unexpected server error",` reads as its value.
+  const tidy = (l: string) => (l.match(/^"?(?:message|error)"?\s*:\s*"(.*?)"\s*,?$/i)?.[1] ?? l).replace(/^Error:\s*/i, '').slice(0, 400)
+  for (let i = lines.length - 1; i >= 0; i--) if (/error|fail|denied|not found|unauthor|invalid|login|sign in|api key|quota|limit/i.test(lines[i])) return tidy(lines[i])
+  return tidy(lines[lines.length - 1] ?? '')
 }
 
 /**

@@ -90,6 +90,11 @@ export const INVOKE_PATHS = [
   'agents.setupStart',
   'agents.setupCancel',
   'agents.check',
+  'customAgents.list',
+  'customAgents.save',
+  'customAgents.remove',
+  'customAgents.test',
+  'customAgents.presets',
 
   'turns.start',
   'turns.regenerate',

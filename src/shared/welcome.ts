@@ -1,6 +1,6 @@
 // First-run welcome (D-103): the three-screen setup a brand-new user sees once. Pure rules
 // only — the screens live in renderer/src/components/Welcome.tsx.
-import { PROVIDER_IDS } from './providers'
+import { BUILTIN_IDS } from './providers'
 import type { ProviderId } from './types'
 
 /** Set once the welcome has been finished or skipped; never shown again automatically. */
@@ -24,7 +24,7 @@ export function agentState(s: { installed: boolean; authenticated: boolean } | u
 
 /** Ready agents in display order. Grok and Gemini have no sign-in probe, so installed counts as ready. */
 export function readyAgents(status: AgentStatus): ProviderId[] {
-  return PROVIDER_IDS.filter((id) => agentState(status[id]) === 'ready')
+  return BUILTIN_IDS.filter((id) => agentState(status[id]) === 'ready')
 }
 
 /**
@@ -33,9 +33,9 @@ export function readyAgents(status: AgentStatus): ProviderId[] {
  * all of them, and nothing while any check is still running.
  */
 export function welcomeAgentsOff(status: AgentStatus): ProviderId[] {
-  if (PROVIDER_IDS.some((id) => !status[id])) return []
+  if (BUILTIN_IDS.some((id) => !status[id])) return []
   const ready = readyAgents(status)
-  return ready.length ? PROVIDER_IDS.filter((id) => !ready.includes(id)) : []
+  return ready.length ? BUILTIN_IDS.filter((id) => !ready.includes(id)) : []
 }
 
 /**

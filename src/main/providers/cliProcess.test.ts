@@ -86,3 +86,30 @@ describe('mediaFilesSince', () => {
     expect(await mediaFilesSince([root, join(root, 'missing')], 0, /\.png$/i)).toEqual([a, old])
   })
 })
+
+describe('CliProcess.text (2.4 custom agents)', () => {
+  it('streams stdout as text without colour codes and completes on exit 0', async () => {
+    const script = `let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{process.stdout.write('\\u001b[32mGot: '+s+'\\u001b[0m');process.exit(0)})`
+    const evs = await collect(new CliProcess().text({ bin: node, args: ['-e', script], stdin: 'hi', env }))
+    expect(evs.filter((e) => e.type === 'text_delta').map((e) => (e as { text: string }).text).join('')).toBe('Got: hi')
+    expect(evs[evs.length - 1]).toEqual({ type: 'complete', usage: {} })
+  })
+  it('turns a failed exit into an error with the useful stderr line', async () => {
+    const evs = await collect(new CliProcess().text({ bin: node, args: ['-e', `console.error('loading…');console.error('Error: invalid API key');console.error('bye');process.exit(1)`], env }))
+    expect(evs).toEqual([{ type: 'error', message: 'invalid API key', fatal: true }])
+  })
+  it('says plainly when the program is missing, and stops a run that takes too long', async () => {
+    const miss = await collect(new CliProcess().text({ bin: 'definitely-not-a-cli-xyz', args: [], env, label: 'xyz' }))
+    expect(miss).toEqual([{ type: 'error', message: "xyz not found. Check it's installed and the command is right.", fatal: true }])
+    const slow = await collect(new CliProcess().text({ bin: node, args: ['-e', 'setTimeout(()=>{},10000)'], env, label: 'slow', timeoutMs: 300 }))
+    expect(slow[slow.length - 1]).toMatchObject({ type: 'error', message: "slow didn't finish within 0 seconds." })
+  })
+})
+
+describe('stderrLine', () => {
+  it('reads a JSON error fragment as its message', async () => {
+    const { stderrLine } = await import('./cliProcess')
+    expect(stderrLine('{\n  "name": "APIError",\n  "message": "Unexpected server error. Check server logs for details.",\n}')).toBe('Unexpected server error. Check server logs for details.')
+    expect(stderrLine('Error: not logged in')).toBe('not logged in')
+  })
+})

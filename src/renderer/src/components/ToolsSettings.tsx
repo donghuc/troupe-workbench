@@ -4,7 +4,7 @@ import McpAddModal from './McpAddModal'
 import { Stack, Field, Section } from './Form'
 import { api } from '../api'
 import { failed, notify, reportError } from '../notices'
-import { PROVIDERS } from '../../../shared/providers'
+import { agentEntry } from '../../../shared/providers'
 import { mcpOffKey, mcpDisplay, groupMcpServers } from '../../../shared/projectMcp'
 import type { AgentTools, McpServer, ProviderId } from '../../../shared/types'
 import Switch from './settings/Switch'
@@ -82,7 +82,7 @@ export default function ToolsSettings({ agents, mcpOff, setMcpOff, webAccess, se
       {agents.length > 1 && (
         <div className="seg-control" role="tablist" aria-label="Agent">
           {agents.map((id) => (
-            <button key={id} role="tab" aria-selected={agent === id} className={`seg-btn${agent === id ? ' active' : ''}`} onClick={() => setAgent(id)}>{PROVIDERS[id].label}</button>
+            <button key={id} role="tab" aria-selected={agent === id} className={`seg-btn${agent === id ? ' active' : ''}`} onClick={() => setAgent(id)}>{agentEntry(id).label}</button>
           ))}
         </div>
       )}
@@ -94,7 +94,7 @@ export default function ToolsSettings({ agents, mcpOff, setMcpOff, webAccess, se
       <Field hint={<>Off servers are left out of every run, in every project.{agent === 'codex' && ' On Codex, MCP tools run only in Full access.'}</>}>
       <Stack tight>
       {loading && !tools && <div className="skeleton-stack"><div className="skeleton skeleton-row" /><div className="skeleton skeleton-row short" /></div>}
-      {g && tools!.mcp.length === 0 && <p className="field-hint">No MCP servers set up for {PROVIDERS[agent].label}.</p>}
+      {g && tools!.mcp.length === 0 && <p className="field-hint">No MCP servers set up for {agentEntry(agent).label}.</p>}
 
       {g && g.own.length > 0 && (
         <div>

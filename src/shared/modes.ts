@@ -3,7 +3,7 @@
 // short instruction — followed by a Compare card. Casts live in a template (Settings ▸
 // Thinking), never asked per run (Hien: option A). Pure; tested.
 import type { ProviderId } from './types'
-import { PROVIDERS, isProviderId, enabledProviderIds } from './providers'
+import { agentEntry, isProviderId, enabledProviderIds } from './providers'
 
 export type ModeId = 'debate' | 'critique' | 'research'
 export const MODE_IDS: ModeId[] = ['debate', 'critique', 'research']
@@ -72,7 +72,7 @@ export function castFor(mode: ModeId, template: ModeTemplate, disabledRaw: strin
 export function buildModeSteps(mode: ModeId, template: ModeTemplate, disabledRaw: string | null | undefined): ModeStep[] {
   const { cast, fallbacks } = castFor(mode, template, disabledRaw)
   const fb = (role: string) => fallbacks.includes(role)
-  const name = (role: string) => PROVIDERS[cast[role]].label
+  const name = (role: string) => agentEntry(cast[role]).label
   const steps: ModeStep[] = []
   if (mode === 'debate') {
     const rounds = template.rounds ?? MODES.debate.rounds!.default
@@ -95,7 +95,7 @@ export function buildModeSteps(mode: ModeId, template: ModeTemplate, disabledRaw
 /** One-line description of a run for the header, e.g. "Debate · For: Claude · Against: Codex · Judge: Gemini · 2 rounds". */
 export function describeCast(mode: ModeId, template: ModeTemplate, disabledRaw: string | null | undefined): string {
   const { cast, fallbacks } = castFor(mode, template, disabledRaw)
-  const parts = MODES[mode].roles.map((r) => `${r.label}: ${PROVIDERS[cast[r.key]].label}${fallbacks.includes(r.key) ? ' (fallback)' : ''}`)
+  const parts = MODES[mode].roles.map((r) => `${r.label}: ${agentEntry(cast[r.key]).label}${fallbacks.includes(r.key) ? ' (fallback)' : ''}`)
   const rounds = MODES[mode].rounds ? ` · ${template.rounds ?? MODES[mode].rounds!.default} rounds` : ''
   return `${MODES[mode].label} · ${parts.join(' · ')}${rounds}`
 }

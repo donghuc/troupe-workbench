@@ -1,5 +1,5 @@
 import type { ProviderId } from './types'
-import { PROVIDERS, PROVIDER_IDS } from './providers'
+import { agentEntry, agentIds } from './providers'
 
 export interface ModelPreset { v: string; l: string; note?: string }
 
@@ -85,7 +85,7 @@ export const EXTRA_MODELS_SETTING = 'extra_models'
 
 const agentByName = (name: string): ProviderId | null => {
   const n = name.trim().toLowerCase()
-  return PROVIDER_IDS.find((id) => id === n || PROVIDERS[id].handle === n || PROVIDERS[id].label.toLowerCase() === n) ?? null
+  return agentIds().find((id) => id === n || agentEntry(id).handle === n || agentEntry(id).label.toLowerCase() === n) ?? null
 }
 
 // The global "More models" field: one per line, `agent: model-id` or `agent: model-id | Label`,
@@ -93,7 +93,7 @@ const agentByName = (name: string): ProviderId | null => {
 export function parseExtraModels(raw: string | null | undefined): ModelLists {
   const out: ModelLists = {}
   for (const line of (raw ?? '').split('\n')) {
-    const m = /^\s*([A-Za-z-]+)\s*:\s*(.+)$/.exec(line)
+    const m = /^\s*([A-Za-z0-9-]+)\s*:\s*(.+)$/.exec(line)
     const id = m ? agentByName(m[1]) : null
     if (!m || !id) continue
     const [v, l] = m[2].split('|').map((x) => x.trim())
@@ -102,6 +102,24 @@ export function parseExtraModels(raw: string | null | undefined): ModelLists {
     if (!list.some((x) => x.v === v)) list.push({ v, l: l || v })
   }
   return out
+}
+
+/** Add one typed model for an agent to the "More models" text (Settings ▸ Agents ▸ Add model). */
+export function addExtraModel(raw: string, id: ProviderId, model: string, label?: string): string {
+  const v = model.trim()
+  if (!v || /[|\n]/.test(v)) return raw
+  if ((parseExtraModels(raw)[id] ?? []).some((m) => m.v === v)) return raw
+  const l = label?.trim()
+  const line = `${agentEntry(id).handle}: ${v}${l && l !== v ? ` | ${l}` : ''}`
+  return raw.trim() ? `${raw.replace(/\s+$/, '')}\n${line}` : line
+}
+
+/** Remove a typed model from the "More models" text; other lines are kept as written. */
+export function removeExtraModel(raw: string, id: ProviderId, model: string): string {
+  return raw.split('\n').filter((line) => {
+    const m = /^\s*([A-Za-z0-9-]+)\s*:\s*(.+)$/.exec(line)
+    return !(m && agentByName(m[1]) === id && m[2].split('|')[0].trim() === model)
+  }).join('\n')
 }
 
 // Gemini (D-079): `agy models` lists Gemini, Claude and GPT-OSS models, each Gemini one

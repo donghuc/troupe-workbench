@@ -5,6 +5,9 @@ import { ClaudeCodeProvider } from './ClaudeCodeProvider'
 import { CodexProvider } from './CodexProvider'
 import { GrokProvider } from './GrokProvider'
 import { GeminiProvider } from './GeminiProvider'
+import { CustomCliProvider } from './CustomCliProvider'
+import { isCustomAgentId } from '../../shared/providers'
+import { getCustomAgent, listCustomAgents } from '../agents/customAgentStore'
 
 type ProviderFactory = () => AgentProvider
 
@@ -15,11 +18,16 @@ function registerProvider(id: ProviderId, factory: ProviderFactory): void {
 }
 
 // Fresh instance per run → isolated cancel state, safe for parallel conversations (D-004).
+// User-added agents (2.4) are built from their saved entry; a removed (archived) one can't run.
 export function createProvider(id: ProviderId): AgentProvider | undefined {
+  if (isCustomAgentId(id)) {
+    const a = getCustomAgent(id)
+    return a && !a.archived ? new CustomCliProvider(a) : undefined
+  }
   return factories.get(id)?.()
 }
 
-// Every id in shared/providers.ts PROVIDERS must be registered here (D-070).
+// Every id in shared/providers.ts BUILTIN_PROVIDERS must be registered here (D-070).
 export function registerDefaultProviders(): void {
   registerProvider('claude-code', () => new ClaudeCodeProvider())
   registerProvider('codex', () => new CodexProvider())
@@ -29,7 +37,8 @@ export function registerDefaultProviders(): void {
 
 export async function describeProviders(): Promise<ProviderDescriptor[]> {
   const out: ProviderDescriptor[] = []
-  for (const [id, make] of factories) {
+  const makers: [ProviderId, ProviderFactory][] = [...factories, ...listCustomAgents().filter((a) => !a.archived).map((a): [ProviderId, ProviderFactory] => [a.id, () => new CustomCliProvider(a)])]
+  for (const [id, make] of makers) {
     const p = make()
     out.push({ id, name: p.name, capabilities: p.getCapabilities(), availability: await p.isAvailable() })
   }

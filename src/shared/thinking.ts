@@ -1,6 +1,6 @@
 // Thinking settings and the Compare prompt (D-080 items 1–2, D-081). Pure; tested.
 import type { ProviderId } from './types'
-import { PROVIDERS, isProviderId, enabledProviderIds } from './providers'
+import { agentEntry, isProviderId, enabledProviderIds } from './providers'
 
 export const THINKING_AGENT_SETTING = 'thinking_agent'   // provider id; default Claude
 export const THINKING_MODEL_SETTING = 'thinking_model'   // '' = that agent's default
@@ -21,7 +21,7 @@ export interface CompareInput { question: string; replies: { provider: ProviderI
 // Kept short on purpose (D-080 principle: Troupe reads, Hien decides). Fixed headings so
 // the card renders predictably; sections without content are left out.
 export function buildComparePrompt(input: CompareInput): string {
-  const replies = input.replies.map((r, i) => `### Reply ${i + 1} — ${PROVIDERS[r.provider].label}\n\n${r.text.trim() || '(no reply)'}`).join('\n\n')
+  const replies = input.replies.map((r, i) => `### Reply ${i + 1} — ${agentEntry(r.provider).label}\n\n${r.text.trim() || '(no reply)'}`).join('\n\n')
   return [
     'You are comparing several AI agents\' independent answers to the same question, for a reader who wants to decide quickly. Write a compact comparison card in Markdown, under 160 words, no preamble, no closing remarks.',
     '',

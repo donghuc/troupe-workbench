@@ -1,9 +1,10 @@
-// The single list of agents Troupe can run (audit #15, D-070). Everything that needs an
-// agent's label, @handle, CLI binary, memory file or built-in tools reads it from here.
-// Adding an agent = add it to ProviderId (types.ts), add an entry here (TypeScript
-// refuses to build until you do), write its provider class and register it
-// (providers/registry.ts), and add its logo/colour (renderer providerMeta.ts).
-import type { ProviderId } from './types'
+// The agents Troupe can run (audit #15, D-070). Everything that needs an agent's label,
+// @handle, CLI binary, memory file or built-in tools asks `agentEntry(id)`.
+// Built-in agents: an entry in BUILTIN_PROVIDERS, a provider class (providers/registry.ts)
+// and a logo/colour (renderer providerMeta.ts). User-added agents (2.4) are registered at
+// runtime with setCustomAgents(); their ids start with "x-". `agentIds()` is the live list
+// (built-ins first, then custom agents in the order added; archived ones left out).
+import type { ProviderId, BuiltinProviderId, CustomAgentId } from './types'
 
 export interface ProviderCatalogEntry {
   id: ProviderId
@@ -16,7 +17,7 @@ export interface ProviderCatalogEntry {
   builtinTools: string[]        // shown in the Tools panel
 }
 
-export const PROVIDERS: Record<ProviderId, ProviderCatalogEntry> = {
+export const BUILTIN_PROVIDERS: Record<BuiltinProviderId, ProviderCatalogEntry> = {
   'claude-code': {
     id: 'claude-code', label: 'Claude', handle: 'claude', cli: 'claude', strongModel: 'opus',
     memoryFile: 'CLAUDE.md', globalMemoryPath: '~/.claude/CLAUDE.md',
@@ -40,14 +41,41 @@ export const PROVIDERS: Record<ProviderId, ProviderCatalogEntry> = {
   }
 }
 
-/** Agents in display order. */
-export const PROVIDER_IDS = Object.keys(PROVIDERS) as ProviderId[]
+/** Built-in agents in display order. */
+export const BUILTIN_IDS = Object.keys(BUILTIN_PROVIDERS) as BuiltinProviderId[]
 
-export const isProviderId = (v: unknown): v is ProviderId => typeof v === 'string' && v in PROVIDERS
+export const isBuiltinId = (v: unknown): v is BuiltinProviderId => typeof v === 'string' && Object.prototype.hasOwnProperty.call(BUILTIN_PROVIDERS, v)
+export const isCustomAgentId = (v: unknown): v is CustomAgentId => typeof v === 'string' && /^x-[a-z0-9][a-z0-9-]*$/.test(v)
+
+// ── User-added agents (2.4) ──────────────────────────────────────────────────
+export interface CustomCatalogEntry extends ProviderCatalogEntry { id: CustomAgentId; archived?: boolean }
+let custom: CustomCatalogEntry[] = []
+
+/** Register the user's custom agents (main and renderer each call this when the list changes). */
+export function setCustomAgents(list: CustomCatalogEntry[]): void {
+  custom = list.filter((e) => isCustomAgentId(e.id) && !isBuiltinId(e.id))
+}
+
+/** Every agent that can be picked: built-ins, then custom agents in the order added (archived left out). */
+export function agentIds(): ProviderId[] {
+  return [...BUILTIN_IDS, ...custom.filter((e) => !e.archived).map((e) => e.id)]
+}
+
+/** A known agent id — built-in, or a registered custom agent (archived ones still count, so old chats resolve). */
+export const isProviderId = (v: unknown): v is ProviderId => isBuiltinId(v) || (isCustomAgentId(v) && custom.some((e) => e.id === v))
+
+/** The catalog entry for any agent id. An unknown custom id gets a stand-in, so labels never break. */
+export function agentEntry(id: ProviderId): ProviderCatalogEntry {
+  if (isBuiltinId(id)) return BUILTIN_PROVIDERS[id]
+  const c = custom.find((e) => e.id === id)
+  if (c) return c
+  const name = String(id).replace(/^x-/, '')
+  return { id, label: name, handle: name, cli: '', strongModel: '', memoryFile: null, globalMemoryPath: null, builtinTools: [] }
+}
 
 /** Label for an agent id; `fallback` for null/unknown (e.g. an assistant message with no provider). */
 export const providerLabel = (id: string | null | undefined, fallback = 'Assistant'): string =>
-  (isProviderId(id) ? PROVIDERS[id].label : fallback)
+  (isProviderId(id) ? agentEntry(id).label : fallback)
 
 // ── Turning agents on/off (D-071) ────────────────────────────────────────────
 /** Setting key: comma-separated ids of agents switched off in Settings ▸ Agents. */
@@ -57,21 +85,23 @@ export const CHROME_ACCESS_SETTING = 'agent_chrome_access'
 export const DISABLED_AGENTS_SETTING = 'disabled_agents'
 
 export function parseDisabledAgents(raw: string | null | undefined): ProviderId[] {
-  return (raw ?? '').split(',').map((s) => s.trim()).filter(isProviderId)
+  // Custom ids are kept even before the custom list is loaded (fix 7): dropping them would turn them back on.
+  return (raw ?? '').split(',').map((s) => s.trim()).filter((s): s is ProviderId => isBuiltinId(s) || isCustomAgentId(s))
 }
 
 /** Agents that are on, in display order. Never empty: if everything is off, Claude stays on. */
 export function enabledProviderIds(raw: string | null | undefined): ProviderId[] {
   const off = new Set(parseDisabledAgents(raw))
-  const on = PROVIDER_IDS.filter((id) => !off.has(id))
+  const on = agentIds().filter((id) => !off.has(id))
   return on.length ? on : ['claude-code']
 }
 
-export const serializeDisabledAgents = (ids: ProviderId[]): string => PROVIDER_IDS.filter((id) => ids.includes(id)).join(',')
+// Keeps ids of custom agents that aren't loaded yet, so turning one agent off never forgets another.
+export const serializeDisabledAgents = (ids: ProviderId[]): string => [...agentIds().filter((id) => ids.includes(id)), ...ids.filter((id) => !agentIds().includes(id) && isCustomAgentId(id))].join(',')
 
 /** "Grok is" / "Codex and Grok are" turned off — for refusal messages. */
 export function offMessage(ids: ProviderId[]): string {
-  const names = ids.map((id) => PROVIDERS[id].label)
+  const names = ids.map((id) => agentEntry(id).label)
   const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0]
   return `${list} ${names.length > 1 ? 'are' : 'is'} turned off in Settings ▸ Agents.`
 }
@@ -85,7 +115,7 @@ export const AGENTS_FIRST_RUN_SETTING = 'agents_first_run_done'
  * is found, all stay on so the "not found" errors point the way).
  */
 export function firstRunAgentsOff(status: Partial<Record<ProviderId, { installed: boolean }>>): ProviderId[] {
-  if (PROVIDER_IDS.some((id) => !status[id])) return []
-  const missing = PROVIDER_IDS.filter((id) => !status[id]!.installed)
-  return missing.length < PROVIDER_IDS.length ? missing : []
+  if (BUILTIN_IDS.some((id) => !status[id])) return []
+  const missing = BUILTIN_IDS.filter((id) => !status[id]!.installed)
+  return missing.length < BUILTIN_IDS.length ? missing : []
 }

@@ -1,0 +1,10 @@
+{
+  "id": "cursor",
+  "label": "Cursor CLI",
+  "detect": ["cursor-agent", "agent"],
+  "needs": "Needs a Cursor account",
+  "install": { "cmd": "curl https://cursor.com/install -fsS | bash", "host": "cursor.com" },
+  "signIn": { "cmd": "cursor-agent login", "terminal": true },
+  "docs": "https://cursor.com/docs/cli/overview",
+  "agent": { "command": "cursor-agent -p --output-format text {prompt}", "output": "text", "modelFlag": "--model", "readOnlyArgs": "--mode=ask" }
+}

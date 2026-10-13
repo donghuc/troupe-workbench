@@ -25,6 +25,7 @@ import { registerSystemIpc } from './ipc/system'
 import { registerImageIpc } from './ipc/image'
 import { cancelAllImageRuns } from './image/imageService'
 import { registerDefaultProviders } from './providers/registry'
+import { loadCustomAgents } from './agents/customAgentStore'
 import { refreshLiveMcpNames } from './tools/toolsService'
 import { cancelAllRuns } from './agent/runner'
 import { logInfo, logError } from './util/logger'
@@ -129,6 +130,7 @@ app.whenReady().then(() => {
   sweepInterruptedTurns()
   try { migrateProjectMcpOff() } catch (e) { logError('mcp migration failed', String(e)) }
   try { migrateExtraModels() } catch (e) { logError('model list migration failed', String(e)) }
+  try { loadCustomAgents() } catch (e) { logError('custom agents failed to load', String(e)) }
   // audit #10: temp folders left by older versions or crashes
   setTimeout(() => { const n = sweepStaleTempDirs(); if (n) logInfo(`removed ${n} leftover temp folder(s)`) }, 5000)
   try { const swept = sweepInterruptedRuns(); if (swept.runs || swept.tasks) logInfo('swept interrupted collab runs', swept) } catch (e) { logError('sweep failed', String(e)) }

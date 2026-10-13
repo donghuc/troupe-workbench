@@ -108,4 +108,50 @@ describe('providers through CliProcess (D-096)', () => {
     expect(evs.at(-1)?.type).toBe('complete')
     expect(recorded('grok').argv).toContain('-p')
   })
+  it('Custom (text): prompt as one argument, context preamble, plain text streamed', async () => {
+    fake('mytool', ['Four.'])
+    const { CustomCliProvider } = await import('./CustomCliProvider')
+    const agent = { id: 'x-mytool' as const, name: 'My Tool', handle: 'mytool', command: 'mytool run {prompt}', bin: 'mytool', args: ['run', '{prompt}'], output: 'text' as const, modelFlag: '--model' }
+    const evs = await collect(new CustomCliProvider(agent).run(req({ model: 'm1' })))
+    expect(evs.filter((e) => e.type === 'text_delta').map((e: any) => e.text).join('')).toBe('Four.\n')
+    expect(evs.at(-1)).toEqual({ type: 'complete', usage: {} })
+    const r = recorded('mytool')
+    expect(r.argv).toHaveLength(4)
+    expect(r.argv[0]).toBe('run'); expect(r.argv[1]).toContain('<workbench_context>'); expect(r.argv[1]).toContain('What is 2+2?')
+    expect(r.argv.slice(2)).toEqual(['--model', 'm1'])
+    expect(r.stdin).toBe('')
+  })
+
+  it('Custom (text): stdin when there is no {prompt}; read-only asked for when it can\'t be enforced', async () => {
+    fake('mytool', ['ok'])
+    const { CustomCliProvider, READ_ONLY_NOTE } = await import('./CustomCliProvider')
+    const agent = { id: 'x-mytool' as const, name: 'My Tool', handle: 'mytool', command: 'mytool -p', bin: 'mytool', args: ['-p'], output: 'text' as const }
+    await collect(new CustomCliProvider(agent).run(req({ permissionMode: 'read' })))
+    const r = recorded('mytool')
+    expect(r.argv).toEqual(['-p'])
+    expect(r.stdin).toContain(READ_ONLY_NOTE)
+    await collect(new CustomCliProvider({ ...agent, readOnlyArgs: ['--plan'] }).run(req({ permissionMode: 'read' })))
+    expect(recorded('mytool').argv).toEqual(['-p', '--plan'])
+    expect(recorded('mytool').stdin).not.toContain(READ_ONLY_NOTE)
+  })
+
+  it('Custom (Claude-style JSON): frames mapped like Claude, failed exit is an error', async () => {
+    fake('jsontool', [
+      { type: 'stream_event', event: { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Four' } } },
+      { type: 'result', subtype: 'success', usage: { input_tokens: 5, output_tokens: 2 } }
+    ])
+    const { CustomCliProvider } = await import('./CustomCliProvider')
+    const agent = { id: 'x-jsontool' as const, name: 'JSON Tool', handle: 'jsontool', command: 'jsontool', bin: 'jsontool', args: [], output: 'claude-stream-json' as const }
+    const evs = await collect(new CustomCliProvider(agent).run(req()))
+    expect(evs.map((e) => e.type)).toEqual(['text_delta', 'complete'])
+    fake('jsontool', [], 1, 'Error: not logged in')
+    expect(await collect(new CustomCliProvider(agent).run(req()))).toEqual([{ type: 'error', message: 'not logged in', fatal: true }])
+  })
+
+  it('Custom: availability is a PATH lookup', async () => {
+    const { CustomCliProvider, whichBin } = await import('./CustomCliProvider')
+    expect(whichBin('mytool', process.env)).toBe(join(bin, 'mytool'))
+    const missing = { id: 'x-nope' as const, name: 'Nope', handle: 'nope', command: 'nope', bin: 'nope-not-here', args: [], output: 'text' as const }
+    expect((await new CustomCliProvider(missing).isAvailable()).installed).toBe(false)
+  })
 })

@@ -5,7 +5,7 @@ import { useSyncExternalStore } from 'react'
 import type { ProviderInfo, ProviderId } from '../../shared/types'
 import type { ProviderDescriptor } from '../../shared/agent'
 import {
-  PROVIDERS, enabledProviderIds, serializeDisabledAgents, firstRunAgentsOff,
+  agentEntry, enabledProviderIds, setCustomAgents, serializeDisabledAgents, firstRunAgentsOff,
   DISABLED_AGENTS_SETTING, AGENTS_FIRST_RUN_SETTING
 } from '../../shared/providers'
 import { parseDisabledModels, serializeDisabledModels, DISABLED_MODELS_SETTING } from '../../shared/models'
@@ -13,18 +13,38 @@ import { setDisabledModelsState } from './models'
 import { api } from './api'
 import { notify } from './notices'
 import { WELCOME_DONE_SETTING, shouldShowWelcome } from '../../shared/welcome'
+import { catalogEntry, type CustomAgent } from '../../shared/customAgents'
 
 type Status = Partial<Record<ProviderId, { installed: boolean; authenticated: boolean }>>
 let status: Status = {}
+let disabledRaw: string | null = null
 let enabled: ProviderId[] = enabledProviderIds(null)
+// User-added agents (2.4): the saved list, registered with the shared catalog.
+let custom: CustomAgent[] = []
 // Unknown status counts as fine, so nothing is flagged while the check is still running.
 const toInfo = (ids: ProviderId[]): ProviderInfo[] =>
-  ids.map((id) => ({ id, name: PROVIDERS[id].label, installed: status[id]?.installed ?? true, authenticated: status[id]?.authenticated ?? true }))
+  ids.map((id) => ({ id, name: agentEntry(id).label, installed: status[id]?.installed ?? true, authenticated: status[id]?.authenticated ?? true }))
 
 let list: ProviderInfo[] = toInfo(enabled)
 const listeners = new Set<() => void>()
 const publish = () => { list = toInfo(enabled); for (const l of listeners) l() }
 const setEnabled = (ids: ProviderId[]) => { enabled = ids; publish() }
+
+function applyCustomAgents(list: CustomAgent[]): void {
+  custom = list
+  setCustomAgents(list.map(catalogEntry))
+  setEnabled(enabledProviderIds(disabledRaw))   // a new agent appears in pickers; a removed one leaves
+}
+
+/** The user-added agents, archived ones included (old messages still need their names). */
+export const customAgents = (): CustomAgent[] => custom
+export const customAgentFor = (id: ProviderId | null | undefined): CustomAgent | undefined => custom.find((a) => a.id === id)
+
+async function loadCustomAgents(): Promise<void> {
+  try { applyCustomAgents(await api.customAgents.list()) } catch { /* none */ }
+}
+// Main pushes the whole list after every save or remove, to every window.
+api?.customAgents?.onChanged?.((list: CustomAgent[]) => { applyCustomAgents(list); void refreshAgentStatus() })
 
 /** Record one agent's fresh status (from agents.check) and update every picker. */
 export function setAgentStatus(id: ProviderId, s: { installed: boolean; authenticated: boolean }): Status {
@@ -49,6 +69,8 @@ export async function loadAgentSettings(): Promise<void> {
       api.settings.get(DISABLED_AGENTS_SETTING), api.settings.get(DISABLED_MODELS_SETTING), api.settings.get(AGENTS_FIRST_RUN_SETTING)
     ])
     setDisabledModelsState(parseDisabledModels(models))
+    disabledRaw = agents
+    await loadCustomAgents()
     setEnabled(enabledProviderIds(agents))
     const st = await refreshAgentStatus()
     if (!firstDone) await firstRun(st, agents)
@@ -69,7 +91,7 @@ async function firstRun(st: Status, agentsRaw: string | null): Promise<void> {
       if (off.length && welcoming) await saveDisabledAgents(off)
       else if (off.length) {
         await saveDisabledAgents(off)
-        const names = (ids: ProviderId[]) => { const n = ids.map((id) => PROVIDERS[id].label); return n.length > 1 ? `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}` : n[0] }
+        const names = (ids: ProviderId[]) => { const n = ids.map((id) => agentEntry(id).label); return n.length > 1 ? `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}` : n[0] }
         const on = enabledProviderIds(serializeDisabledAgents(off))
         notify(`${names(off)} ${off.length > 1 ? "aren't" : "isn't"} installed on this Mac, so ${off.length > 1 ? "they're" : "it's"} switched off — you're set up with ${names(on)}. After installing, turn ${off.length > 1 ? 'them' : 'it'} on in Settings ▸ Agents.`)
       }
@@ -82,6 +104,7 @@ async function firstRun(st: Status, agentsRaw: string | null): Promise<void> {
 export async function saveDisabledAgents(off: ProviderId[]): Promise<void> {
   const raw = serializeDisabledAgents(off)
   await api.settings.set(DISABLED_AGENTS_SETTING, raw)
+  disabledRaw = raw
   setEnabled(enabledProviderIds(raw))
 }
 

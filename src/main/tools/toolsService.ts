@@ -5,7 +5,7 @@ import { homedir } from 'os'
 import { join, dirname } from 'path'
 import { buildEnv } from '../providers/env'
 import type { ProviderId, AgentTools, McpServer, McpAddInput, McpMutationResult } from '../../shared/types'
-import { PROVIDERS, isProviderId } from '../../shared/providers'
+import { agentEntry, isProviderId } from '../../shared/providers'
 import { planCodexEdit, codexServerNames, CODEX_NAME_RE, type CodexServerInput } from './codexConfig'
 const CODEX_NAME_OK = (n: string): boolean => CODEX_NAME_RE.test(n)
 import { logInfo, logError } from '../util/logger'
@@ -69,7 +69,7 @@ export function configuredClaudeMcpNames(cwd?: string): string[] {
 }
 
 export async function listAgentTools(provider: ProviderId, cwd?: string): Promise<AgentTools> {
-  const builtin = isProviderId(provider) ? PROVIDERS[provider].builtinTools : []
+  const builtin = isProviderId(provider) ? agentEntry(provider).builtinTools : []
   const mcp = provider === 'claude-code' ? await claudeMcp(cwd) : provider === 'grok' ? grokMcp() : provider === 'gemini' ? [] : codexMcp()   // Gemini's MCP list: not read yet (D-079)
   return { provider, builtin, mcp }
 }

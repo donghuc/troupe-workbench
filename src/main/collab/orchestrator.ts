@@ -17,7 +17,7 @@ import { nextRunnable, tasksToRetry, defaultOutputDir, sanitizeOutputDir, retarg
 import { resolveTaskModel, modelForProvider, parseDisabledModels, DISABLED_MODELS_SETTING } from '../../shared/models'
 import { getSetting } from '../database/settingsRepo'
 import { modelLists } from '../tools/codexModels'
-import { PROVIDERS, isProviderId, providerLabel, enabledProviderIds, DISABLED_AGENTS_SETTING } from '../../shared/providers'
+import { agentEntry, isProviderId, isCustomAgentId, providerLabel, enabledProviderIds, DISABLED_AGENTS_SETTING } from '../../shared/providers'
 
 const SK_PROTOCOL = 'global/collab-protocol'
 const SK_PLANNER = 'global/role-planner'
@@ -85,7 +85,7 @@ const providerLabelOf = (id: string): string => providerLabel(id, 'Claude')
 // Planner + Reviewer always run on the provider's strong tier, regardless of a task's
 // (possibly cheap) Maker model. Codex stays on its default until the catalog fix (backlog).
 // Planner/Reviewer model; if it has been switched off (D-072) the agent's default is used.
-const strongModel = (id: string): string => (isProviderId(id) ? modelForProvider(id, PROVIDERS[id].strongModel || undefined, {}, parseDisabledModels(getSetting(DISABLED_MODELS_SETTING))) : '')
+const strongModel = (id: string): string => (isProviderId(id) ? modelForProvider(id, agentEntry(id).strongModel || undefined, {}, parseDisabledModels(getSetting(DISABLED_MODELS_SETTING))) : '')
 function today(): string { return new Date().toISOString().slice(0, 10) }
 
 function runDirFor(run: CollabRun): string {
@@ -139,6 +139,13 @@ export function startCollab(sender: WebContents, input: CollabStartInput): Colla
   if (existing) { senderFor.set(existing.id, sender); return getCollabRun(existing.id) ?? existing }
   const run = createCollabRun(input)
   senderFor.set(run.id, sender)
+  // Planner and Reviewer need tool steps and structured replies; user-added agents (2.4)
+  // can be Makers but not lead a run.
+  if (isCustomAgentId(run.providerId)) {
+    const failed = updateCollabRun(run.id, { status: 'failed', reason: `${providerLabel(run.providerId)} can do Collab tasks but can't plan or review. Switch this conversation to Claude, Codex, Gemini or Grok to start Collab.` })!
+    emitChanged()
+    return failed
+  }
   if (!lockFor(run)) {
     const failed = updateCollabRun(run.id, { status: 'failed', reason: 'This conversation is busy with another turn. Wait for it to finish, then start Collab again.' })!
     emitChanged()
