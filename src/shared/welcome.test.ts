@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { shouldShowWelcome, agentState, readyAgents, welcomeAgentsOff, isBroadFolder, nameFromFolder, welcomePrompt, AGENT_SETUP } from './welcome'
-import { PROVIDER_IDS } from './providers'
+import { shouldShowWelcome, agentState, readyAgents, welcomeAgentsOff, isBroadFolder, nameFromFolder, welcomePrompt } from './welcome'
 
 const ok = { installed: true, authenticated: true }
 const out = { installed: true, authenticated: false }
@@ -40,8 +39,5 @@ describe('first-run welcome (D-103)', () => {
     expect(one).toMatchObject({ provider: 'codex', compare: false })
     expect(one.text).not.toContain('@all')
     expect(welcomePrompt([], true)).toBeNull()
-  })
-  it('has setup instructions for every agent', () => {
-    for (const id of PROVIDER_IDS) expect(AGENT_SETUP[id].signIn).toBeTruthy()
   })
 })

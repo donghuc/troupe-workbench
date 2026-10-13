@@ -9,4 +9,5 @@ export const IPC = {
   collabChanged: 'collab:changed',
   imageEvent: 'image:event',   // main -> renderer
   imageDone: 'image:done',      // main -> renderer
+  agentSetup: 'agents:setup',   // 2.3: install / sign-in output lines and results
 } as const

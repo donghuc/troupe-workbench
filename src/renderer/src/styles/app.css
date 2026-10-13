@@ -1788,3 +1788,27 @@ select.field-input {
 .btn-ghost { background: none; border-color: transparent; color: var(--text-secondary); }
 .btn-ghost:hover { background: var(--bg-hover); color: var(--text-primary); }
 @media (max-width: 560px) { .welcome-choices { grid-template-columns: 1fr; } }
+
+/* ---- Agent setup (2.3, Part A) ---- */
+.welcome-setup { display: grid; grid-template-columns: 168px 1fr; gap: var(--sp-4); align-items: start; }
+@media (max-width: 560px) { .welcome-setup { grid-template-columns: 1fr; } }
+.welcome-rail { display: flex; flex-direction: column; gap: var(--sp-1); }
+.welcome-rail-row { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); border-radius: var(--r-sm); text-align: left; background: none; border: 1px solid transparent; }
+.welcome-rail-row:hover { background: var(--bg-hover); }
+.welcome-rail-row.on { background: var(--bg-active); border-color: var(--border-subtle); }
+.welcome-rail-name { flex: 1; font-weight: 500; }
+.setup-card { display: flex; flex-direction: column; gap: var(--sp-4); padding: var(--sp-4); border: 1px solid var(--border-subtle); border-radius: var(--r-md); min-width: 0; }
+.setup-card-head { display: flex; align-items: center; gap: var(--sp-3); }
+.setup-card-title { display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0; }
+.setup-card-name { font-weight: 600; font-size: var(--fs-lg); display: flex; align-items: center; gap: var(--sp-2); }
+.setup-actions { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; }
+.setup-confirm, .setup-failed { display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-3); border-radius: var(--r-sm); background: var(--bg-app); font-size: var(--fs-sm); }
+.setup-failed { color: var(--accent-hover); }
+.setup-cmd { font-family: ui-monospace, Menlo, monospace; font-size: var(--fs-xs); background: var(--bg-hover); border-radius: var(--r-sm); padding: var(--sp-2); overflow-wrap: anywhere; }
+.setup-progress { display: flex; flex-direction: column; gap: var(--sp-2); font-size: var(--fs-sm); }
+.setup-progress-row { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; }
+.setup-progress-row > span:nth-child(2) { flex: 1; }
+.setup-log { margin: 0; font-family: ui-monospace, Menlo, monospace; font-size: var(--fs-xs); color: var(--text-secondary); background: var(--bg-app); border-radius: var(--r-sm); padding: var(--sp-2); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 9.5em; overflow: hidden; }
+.setup-diy { display: flex; flex-direction: column; gap: var(--sp-2); font-size: var(--fs-sm); }
+.setup-diy > .link-btn { align-self: flex-start; color: var(--text-secondary); text-decoration: none; }
+.setup-diy-body { display: flex; flex-direction: column; gap: var(--sp-2); }

@@ -18,6 +18,19 @@ Each version here matches a packaged build — the dmg is named
 > - Bumping rules: PATCH = fixes/small tweaks, MINOR = new features (backward-compatible),
 >   MAJOR = breaking changes or a data format users can't roll back from.
 
+## [2.3.0] - 2026-10-13
+
+Set up your agents without Terminal. No database change.
+
+### Added
+- **Set up agents from inside Troupe.** The welcome and Settings ▸ Agents can install Claude, Codex and Gemini and sign you in with a button: Troupe shows the official installer command and where it downloads from, and runs it only after you confirm. Sign-ins that need a terminal open in a Terminal window, and Troupe notices when you're done. Every command is still there to copy if you prefer Terminal.
+
+### Changed
+- Codex installs with OpenAI's standalone installer; Node.js is no longer needed.
+
+### Fixed
+- **A signed-out Codex showed as Ready.** Troupe read Codex's "Not logged in" as signed in, so runs failed later instead of the agent being flagged. It now shows "not signed in" with a Sign in button.
+
 ## [2.2.1] - 2026-10-13
 
 ### Fixed

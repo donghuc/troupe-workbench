@@ -26,6 +26,13 @@ const listeners = new Set<() => void>()
 const publish = () => { list = toInfo(enabled); for (const l of listeners) l() }
 const setEnabled = (ids: ProviderId[]) => { enabled = ids; publish() }
 
+/** Record one agent's fresh status (from agents.check) and update every picker. */
+export function setAgentStatus(id: ProviderId, s: { installed: boolean; authenticated: boolean }): Status {
+  status = { ...status, [id]: { installed: !!s.installed, authenticated: !!s.authenticated } }
+  publish()
+  return status
+}
+
 /** Ask each CLI whether it is installed and signed in (runs `--version` / auth checks). */
 export async function refreshAgentStatus(): Promise<Status> {
   try {

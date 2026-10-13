@@ -5,9 +5,38 @@ Troupe is a Mac app that lets you work with AI agents (Claude, Codex, Grok and G
 ## What you need
 
 - A Mac with Apple silicon (M1 or later). Intel Macs aren't supported by this build.
-- At least one agent CLI, installed and signed in. Claude is the main one; Codex, Grok and Gemini are optional.
+- An account for at least one agent: Claude (Pro, Max or API), ChatGPT for Codex, a Google account for Gemini, or xAI for Grok. Troupe installs and signs in to Claude, Codex and Gemini for you.
 
-## 1. Install at least one agent
+## 1. Install Troupe
+
+1. Download the latest `Troupe-<version>-arm64.dmg` from the project's GitHub **Releases** page, open it, and drag **Troupe** into **Applications**.
+2. Open Troupe from Applications. macOS will say it can't check the app for malicious software, because the app isn't signed with an Apple developer certificate. Click **Done**.
+3. Open **System Settings ▸ Privacy & Security**, scroll down to the message about Troupe, and click **Open Anyway**. Confirm with your password.
+
+You only do this once. If you prefer Terminal, this does the same thing:
+```
+xattr -dr com.apple.quarantine /Applications/Troupe.app
+```
+
+**"Troupe is damaged and can't be opened"?** That was a packaging bug in 2.2.0 (fixed in 2.2.1) — the app isn't damaged. Install 2.2.1 or later, or run the `xattr` command above and open it again.
+
+## 2. Set up your agents in Troupe
+
+The first time Troupe opens, a welcome screen lists Claude, Codex, Gemini and Grok and shows which are ready. For any that aren't:
+
+1. Pick the agent and click **Install**. Troupe shows the official installer command and the site it downloads from, and runs it only after you confirm.
+2. Click **Sign in**. A browser window opens to sign in; if the agent needs a terminal for this, Troupe opens a Terminal window with the command ready — finish there and come back.
+3. The agent turns **Ready** on its own. At least one ready agent lets you continue; Claude is the recommended one.
+
+Later, **Settings ▸ Agents ▸ Set up** does the same for any agent that isn't ready. Grok is installed by hand (see below).
+
+## 3. Your first project
+
+The welcome then asks for a folder (the agents read and edit files in it) and offers a first question to try. Agents that aren't ready are switched off; turn them on later in **Settings ▸ Agents**. To make images, open **Image** in the sidebar and choose a folder for it in **Settings ▸ Image**.
+
+## Prefer Terminal?
+
+Everything above can be done by hand. These are the same commands Troupe runs.
 
 Open **Terminal** and run the commands for the agents you want.
 
@@ -20,10 +49,10 @@ The second command opens Claude Code once so you can sign in. After you're signe
 
 **Codex** (needs a ChatGPT plan or an OpenAI API key), optional:
 ```
-npm install -g @openai/codex
+curl -fsSL https://chatgpt.com/codex/install.sh | sh
 codex login
 ```
-(`npm` comes with Node.js. If `npm` isn't found, install Node.js from https://nodejs.org first.)
+(If you already use Node.js, `npm install -g @openai/codex` works too.)
 
 **Grok**, optional: install the Grok CLI following xAI's instructions and sign in.
 
@@ -42,25 +71,6 @@ To check what's installed:
 which claude codex grok agy
 ```
 Each installed agent prints a path.
-
-## 2. Install Troupe
-
-1. Download the latest `Troupe-<version>-arm64.dmg` from the project's GitHub **Releases** page, open it, and drag **Troupe** into **Applications**.
-2. Open Troupe from Applications. macOS will say it can't check the app for malicious software, because the app isn't signed with an Apple developer certificate. Click **Done**.
-3. Open **System Settings ▸ Privacy & Security**, scroll down to the message about Troupe, and click **Open Anyway**. Confirm with your password.
-
-You only do this once. If you prefer Terminal, this does the same thing:
-```
-xattr -dr com.apple.quarantine /Applications/Troupe.app
-```
-
-**"Troupe is damaged and can't be opened"?** That was a packaging bug in 2.2.0 (fixed in 2.2.1) — the app isn't damaged. Install 2.2.1 or later, or run the `xattr` command above and open it again.
-
-## 3. First launch
-
-Troupe checks which agents are installed. Any that aren't are switched off, and a note tells you so. After you install one later, turn it on in **Settings ▸ Agents**.
-
-Create a project and connect a folder (the agents read and edit files in it), then start a chat. To make images, open **Image** in the sidebar and choose a folder for it in **Settings ▸ Image**.
 
 ## If something doesn't work
 

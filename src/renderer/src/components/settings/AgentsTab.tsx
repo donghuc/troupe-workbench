@@ -1,4 +1,7 @@
+import { useState } from 'react'
 import ProviderAvatar from '../ProviderAvatar'
+import Modal from '../Modal'
+import AgentSetupCard from '../AgentSetupCard'
 import Icon from '../Icon'
 import Switch from './Switch'
 import { Stack, Field, Section } from '../Form'
@@ -11,15 +14,23 @@ interface Props {
   offAgents: ProviderId[]; toggleAgent: (id: ProviderId, on: boolean) => void
   offModels: Set<string>; toggleModel: (key: string, on: boolean) => void
   agentStatus: Status
+  onAgentStatus?: (id: ProviderId, s: { installed: boolean; authenticated: boolean }) => void
   lists: ModelLists                       // each agent's models incl. the typed "More models"
   extraModels: string; setExtraModelsText: (v: string) => void
   codexImageModel: string; setCodexImageModel: (v: string) => void
 }
 
 // Settings ▸ Agents (D-071, D-072, D-078): agents on/off, which models show, extra models.
-export default function AgentsTab({ offAgents, toggleAgent, offModels, toggleModel, agentStatus, lists, extraModels, setExtraModelsText, codexImageModel, setCodexImageModel }: Props) {
+export default function AgentsTab({ offAgents, toggleAgent, offModels, toggleModel, agentStatus, onAgentStatus, lists, extraModels, setExtraModelsText, codexImageModel, setCodexImageModel }: Props) {
+  // 2.3: agents that aren't Ready get Set up, which opens the same card the Welcome uses.
+  const [setupFor, setSetupFor] = useState<ProviderId | null>(null)
   return (
     <Stack>
+      {setupFor && (
+        <Modal title={`Set up ${PROVIDERS[setupFor].label}`} onClose={() => setSetupFor(null)}>
+          <AgentSetupCard id={setupFor} status={agentStatus[setupFor]} onStatus={onAgentStatus} />
+        </Modal>
+      )}
       <Section title="Agents">
       <Field hint="Off agents leave every picker; at least one stays on. Click a model to hide or show it.">
       <div className="settings-group" role="group" aria-label="Agents">
@@ -36,6 +47,7 @@ export default function AgentsTab({ offAgents, toggleAgent, offModels, toggleMod
                 <div className="settings-row-title">{PROVIDERS[id].label} <span className="settings-row-handle">@{PROVIDERS[id].handle}</span></div>
                 <div className={`settings-row-sub ${tone}`}>{on ? status : 'Off'}</div>
               </div>
+              {av && (!av.installed || !av.authenticated) && <button className="btn btn-sm" onClick={() => setSetupFor(id)}>Set up</button>}
               <Switch on={on} disabled={last} label={`${PROVIDERS[id].label} ${on ? 'on' : 'off'}`} title={last ? 'At least one agent must stay on' : undefined} onChange={(v) => toggleAgent(id, v)} />
               {on && (() => {
                 // Models this agent offers (D-072): its presets or own newest few, plus the "More models" lines as currently typed (D-078).

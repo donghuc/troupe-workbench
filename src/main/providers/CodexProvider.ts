@@ -29,6 +29,7 @@ import type {
 import { buildEnv } from './env'
 import { CliProcess, mediaFilesSince } from './cliProcess'
 import { memoryDelivery, globalMemoryDelivery } from '../context/projectMemory'
+import { codexLoggedIn } from './authProbe'
 
 // codex exec --json. No token-level streaming (Phase 0): agent text arrives as a
 // whole agent_message item, emitted here as a single text_delta.
@@ -48,9 +49,9 @@ export class CodexProvider implements AgentProvider {
     return new Promise((resolve) => {
       execFile('codex', ['--version'], { env: buildEnv() }, (err, verOut) => {
         if (err) { resolve({ installed: false, authenticated: false, detail: 'codex CLI not found on PATH' }); return }
-        execFile('codex', ['login', 'status'], { env: buildEnv() }, (_e, statusOut, statusErr) => {
+        execFile('codex', ['login', 'status'], { env: buildEnv() }, (e, statusOut, statusErr) => {
           const text = `${statusOut}${statusErr}`
-          const authed = /Logged in/i.test(text)
+          const authed = codexLoggedIn(!!e, text)
           resolve({ installed: true, authenticated: authed, detail: `${String(verOut).trim()} · ${authed ? text.trim().split('\n')[0] : 'Not logged in'}` })
         })
       })

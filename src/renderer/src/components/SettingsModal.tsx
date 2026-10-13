@@ -202,7 +202,7 @@ export default function SettingsModal({ onClose, initialTab = 'general' }: { onC
           )}
 
           {tab === 'agents' && (
-            <AgentsTab offAgents={offAgents} toggleAgent={toggleAgent} offModels={offModels} toggleModel={toggleModel} agentStatus={agentStatus}
+            <AgentsTab offAgents={offAgents} toggleAgent={toggleAgent} offModels={offModels} toggleModel={toggleModel} agentStatus={agentStatus} onAgentStatus={(id, st) => setAgentStatus((p) => ({ ...p, [id]: st }))}
               lists={lists} extraModels={extraModels} setExtraModelsText={setExtraModelsText} codexImageModel={codexImageModel} setCodexImageModel={setCodexImageModel} />
           )}
 

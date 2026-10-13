@@ -87,6 +87,9 @@ export const INVOKE_PATHS = [
   'messages.append',
 
   'providers.list',
+  'agents.setupStart',
+  'agents.setupCancel',
+  'agents.check',
 
   'turns.start',
   'turns.regenerate',

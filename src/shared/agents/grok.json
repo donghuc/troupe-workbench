@@ -1,0 +1,8 @@
+{
+  "id": "grok",
+  "label": "Grok",
+  "detect": ["grok"],
+  "needs": "Needs an xAI account",
+  "signIn": { "cmd": "grok", "terminal": true },
+  "docs": "https://github.com/donghuc/troupe-workbench/blob/main/INSTALL.md"
+}

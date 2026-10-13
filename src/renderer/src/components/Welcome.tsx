@@ -4,13 +4,15 @@
 // 3 · permission modes + a one-click first prompt (read-only).
 import { useEffect, useState } from 'react'
 import ProviderAvatar from './ProviderAvatar'
-import { refreshAgentStatus, saveDisabledAgents } from '../agents'
+import { refreshAgentStatus, saveDisabledAgents, setAgentStatus } from '../agents'
+import AgentSetupCard from './AgentSetupCard'
 import { api } from '../api'
 import { PROVIDERS, PROVIDER_IDS } from '../../../shared/providers'
 import type { ProviderId } from '../../../shared/types'
+import type { ProviderAvailability } from '../../../shared/agent'
 import {
   agentState, readyAgents, welcomeAgentsOff, welcomePrompt, isBroadFolder, nameFromFolder,
-  AGENT_SETUP, type AgentStatus
+  type AgentStatus
 } from '../../../shared/welcome'
 
 export interface WelcomeRun { text: string; provider: ProviderId }
@@ -20,17 +22,6 @@ interface Props {
   createProject: (name: string, folder: string | null) => Promise<string>
   /** Close the welcome and open the project; `run` sends the first prompt read-only. */
   onFinish: (projectId: string | null, run?: WelcomeRun) => void
-}
-
-function CopyCmd({ cmd }: { cmd: string }) {
-  const [done, setDone] = useState(false)
-  const copy = async () => { try { await navigator.clipboard.writeText(cmd); setDone(true); setTimeout(() => setDone(false), 1200) } catch { /* ignore */ } }
-  return (
-    <div className="welcome-cmd">
-      <code>{cmd}</code>
-      <button className="btn btn-sm" onClick={copy}>{done ? 'Copied' : 'Copy'}</button>
-    </div>
-  )
 }
 
 export default function Welcome({ createProject, onFinish }: Props) {
@@ -43,8 +34,27 @@ export default function Welcome({ createProject, onFinish }: Props) {
   const [projectId, setProjectId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  const recheck = async () => { setChecking(true); setStatus(await refreshAgentStatus()); setChecking(false) }
-  useEffect(() => { void recheck() }, [])
+  const [sel, setSel] = useState<ProviderId>('claude-code')
+  useEffect(() => {
+    void (async () => {
+      const st = await refreshAgentStatus()
+      setStatus(st); setChecking(false)
+      // Open on the agent most worth setting up: Claude unless it's ready, then the first not ready.
+      if (agentState(st['claude-code']) === 'ready') setSel(PROVIDER_IDS.find((id) => agentState(st[id]) !== 'ready') ?? 'claude-code')
+    })()
+  }, [])
+  // Back from a browser or Terminal: re-check the agents that aren't ready yet, one by one.
+  useEffect(() => {
+    if (step !== 1) return
+    const onFocus = () => {
+      for (const id of PROVIDER_IDS) {
+        if (agentState(status[id]) === 'ready') continue
+        void api.agents.check(id).then((a: ProviderAvailability) => { setAgentStatus(id, a); setStatus((s) => ({ ...s, [id]: a })) }).catch(() => {})
+      }
+    }
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [step, status])
 
   const ready = readyAgents(status)
   const canContinue1 = !checking && ready.length > 0
@@ -85,34 +95,28 @@ export default function Welcome({ createProject, onFinish }: Props) {
           <div className="welcome-body">
             <div className="welcome-head">
               <div className="welcome-eyebrow">Welcome to Troupe</div>
-              <h2>Which agents can Troupe use?</h2>
-              <p>Troupe drives the agent tools you install and sign in to yourself. It has no AI of its own.</p>
+              <h2>Set up your agents</h2>
+              <p>Troupe works with the AI agents you already use. Set up at least one to start.</p>
             </div>
-            <div className="welcome-agents">
-              {PROVIDER_IDS.map((id) => {
-                const st = agentState(status[id])
-                const setup = AGENT_SETUP[id]
-                return (
-                  <div key={id} className="welcome-agent">
-                    <ProviderAvatar id={id} size={28} />
-                    <div className="welcome-agent-text">
-                      <div className="welcome-agent-name">{PROVIDERS[id].label}{setup.recommended && <span className="welcome-tag">Recommended</span>}</div>
-                      <div className="welcome-agent-state">
-                        <span className={`welcome-dot ${st}`} />
-                        {st === 'checking' && 'Checking…'}
-                        {st === 'ready' && (id === 'grok' || id === 'gemini' ? 'Installed · sign-in is checked on first use' : 'Ready · signed in')}
-                        {st === 'signin' && 'Installed, not signed in — run this in Terminal:'}
-                        {st === 'missing' && (setup.recommended ? 'Not installed' : 'Not installed · optional')}
-                      </div>
-                      {st === 'signin' && <CopyCmd cmd={setup.signIn} />}
-                      {st === 'missing' && setup.install && <CopyCmd cmd={setup.install} />}
-                      {st === 'missing' && setup.link && (
-                        <a className="btn btn-sm welcome-link" href={setup.link} target="_blank" rel="noreferrer">Install instructions ↗</a>
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
+            <div className="welcome-setup">
+              <div className="welcome-rail" role="listbox" aria-label="Agents">
+                {PROVIDER_IDS.map((id) => {
+                  const st = agentState(status[id])
+                  return (
+                    <button key={id} role="option" aria-selected={sel === id} className={`welcome-rail-row${sel === id ? ' on' : ''}`} onClick={() => setSel(id)}>
+                      <ProviderAvatar id={id} size={24} />
+                      <span className="welcome-rail-name">{PROVIDERS[id].label}</span>
+                      <span className={`welcome-dot ${st}`} title={st} />
+                    </button>
+                  )
+                })}
+              </div>
+              {/* One card per agent, all mounted: an install keeps its progress while you look at another agent. */}
+              {PROVIDER_IDS.map((id) => (
+                <div key={id} hidden={sel !== id}>
+                  <AgentSetupCard id={id} status={status[id]} onStatus={(aid, a) => setStatus((s) => ({ ...s, [aid]: a }))} />
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -177,7 +181,6 @@ export default function Welcome({ createProject, onFinish }: Props) {
           {step > 1 && <button className="btn btn-ghost" onClick={() => setStep((step - 1) as 1 | 2)}>Back</button>}
           <span className="welcome-meta">{step === 1 && (checking ? 'Checking your agents…' : ready.length ? `${ready.length} of ${PROVIDER_IDS.length} ready` : 'Install and sign in to at least one agent to continue')}</span>
           {step < 3 && <button className="btn btn-ghost" onClick={() => onFinish(projectId)}>Skip setup</button>}
-          {step === 1 && <button className="btn" onClick={recheck} disabled={checking}>Re-check</button>}
           {step === 1 && <button className="btn btn-primary" disabled={!canContinue1} onClick={next1}>Continue</button>}
           {step === 2 && <button className="btn btn-primary" disabled={busy || (!folder && !scratch)} onClick={next2}>{busy ? 'Creating…' : 'Continue'}</button>}
           {step === 3 && <button className="btn" onClick={() => onFinish(projectId)}>Skip, open project</button>}

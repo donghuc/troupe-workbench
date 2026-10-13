@@ -1,0 +1,10 @@
+{
+  "id": "claude-code",
+  "label": "Claude",
+  "recommended": true,
+  "detect": ["claude"],
+  "needs": "Needs a Claude Pro or Max plan, or an Anthropic API account",
+  "install": { "cmd": "curl -fsSL https://claude.ai/install.sh | bash", "host": "claude.ai" },
+  "signIn": { "cmd": "claude auth login" },
+  "docs": "https://docs.claude.com/en/docs/claude-code"
+}

@@ -2,7 +2,8 @@ import type { TurnState, TurnDelta, StartTurnInput, RegenerateInput } from './tu
 import type {
   Project, NewProjectInput, ProjectPatch, FileNode, FileChange,
   Conversation, RecentConversation, SearchHit, Message, NewMessageInput, ProviderId, AgentTools, McpAddInput, McpMutationResult, Note, NewNoteInput, MemoryOverview, MirrorResult, ConnectFolderResult, Schedule, NewScheduleInput, SchedulePatch, FileSearchResult } from './types'
-import type { ProviderDescriptor, ContextInspection, PermissionMode } from './agent'
+import type { ProviderDescriptor, ProviderAvailability, ContextInspection, PermissionMode } from './agent'
+import type { SetupEvent } from './agentSetup'
 import type { Skill, SkillInput, SkillScope } from './types'
 import type { CollabRun, CollabStartInput, CollabTaskDraft } from './types'
 import type { ModelLists } from './models'
@@ -96,6 +97,13 @@ export interface WorkbenchApi {
   }
   providers: {
     list(): Promise<ProviderDescriptor[]>
+  }
+  // Agent setup (2.3, Part A): the window names an agent; the command comes from its bundled recipe.
+  agents: {
+    setupStart(id: ProviderId, kind: 'install' | 'signIn', terminal?: boolean): Promise<{ runId: string | null; mode: 'run' | 'terminal' | 'none' }>
+    setupCancel(runId: string): Promise<void>
+    check(id: ProviderId, fresh?: boolean): Promise<ProviderAvailability>
+    onEvent(cb: (e: SetupEvent) => void): () => void
   }
   turns: {
     start(input: StartTurnInput): Promise<TurnState>

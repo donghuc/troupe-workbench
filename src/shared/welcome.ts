@@ -38,14 +38,6 @@ export function welcomeAgentsOff(status: AgentStatus): ProviderId[] {
   return ready.length ? PROVIDER_IDS.filter((id) => !ready.includes(id)) : []
 }
 
-/** Copyable commands and links per agent. Commands are shown, never run by Troupe. */
-export const AGENT_SETUP: Record<ProviderId, { install?: string; signIn: string; link?: string; recommended?: boolean }> = {
-  'claude-code': { install: 'curl -fsSL https://claude.ai/install.sh | bash', signIn: 'claude auth login', recommended: true },
-  codex: { install: 'npm install -g @openai/codex', signIn: 'codex login' },
-  gemini: { install: 'curl -fsSL https://antigravity.google/cli/install.sh | bash', signIn: 'agy' },
-  grok: { signIn: 'grok', link: 'https://github.com/donghuc/troupe-workbench/blob/main/INSTALL.md' }
-}
-
 /**
  * Picking a whole home, Desktop, Documents or Downloads folder lets agents edit everything
  * in it — warn (not block) and suggest a subfolder.

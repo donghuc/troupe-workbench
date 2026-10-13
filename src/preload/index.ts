@@ -26,7 +26,8 @@ const subscriptions: Record<string, Record<string, unknown>> = {
   turns: { onChanged: on(IPC.turnsChanged), onDelta: on(IPC.turnsDelta) },
   skills: { onChanged: on(IPC.skillsChanged, false) },
   image: { onEvent: on(IPC.imageEvent), onDone: on(IPC.imageDone) },
-  collab: { onChanged: on(IPC.collabChanged, false) }
+  collab: { onChanged: on(IPC.collabChanged, false) },
+  agents: { onEvent: on(IPC.agentSetup) }
 }
 for (const [ns, fns] of Object.entries(subscriptions)) Object.assign((api[ns] ??= {}), fns)
 
