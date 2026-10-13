@@ -113,6 +113,7 @@ export const INVOKE_PATHS = [
   'system.importOutside',
   'system.openItem',
   'system.appInfo',
+  'system.diagnostics',
   'system.autoModels',
   'system.openLogs',
   'system.logRendererError',

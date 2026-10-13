@@ -72,7 +72,7 @@ export default function SaveOutcomeModal({ conversationId, projectId, messageId,
           <GrowingArea value={draft.considered ?? ''} onChange={(v) => set({ considered: v })} />
           <label className="field-label">Open <span className="field-optional">(still unsettled)</span></label>
           <GrowingArea value={draft.open ?? ''} onChange={(v) => set({ open: v })} />
-          <p className="field-hint">Will be saved as an entry dated {draft.date} in the project’s DECISIONS.md, from the chat “{draft.source}”. Every agent gets the log with each message.</p>
+          <p className="field-hint">Will be saved as an entry dated {draft.date} in the project’s TROUPE-DECISIONS.md, from the chat “{draft.source}”. Every agent gets the log with each message.</p>
         </>
       )}
     </Modal>

@@ -81,6 +81,9 @@ export function workFolderRules(cwd: string | undefined, addDirs: string[] = [])
   return [
     `Working folder rules: the project folder is ${cwd}${extra}.`,
     'Save everything you create — screenshots, exports, generated files — inside the project folder (a subfolder such as screenshots/ or generated/ is fine) and link it by a path relative to the project folder; files saved anywhere else cannot be opened from your reply.',
+    // D-103: "save everything inside the project" made agents point Xcode's DerivedData and
+    // other build caches into the project (3 GB in one project). Deliverables only.
+    'This is for things you make for the user. Build output, dependency installs and caches — Xcode DerivedData, Gradle or npm build folders, simulator data, package caches — stay at the tool\'s default location outside the project; never point them into the project (for example, no -derivedDataPath inside it).',
     'Search and read only inside the project folder' + (addDirs.length ? ' and the additional folders' : '') + '. Do not scan the home folder, Desktop, Documents or Downloads, and do not use AppleScript or open other apps to look for files.'
   ].join(' ')
 }

@@ -131,6 +131,7 @@ export interface WorkbenchApi {
     appInfo(): Promise<AppInfo>
     autoModels(): Promise<ModelLists>   // each agent's own model list: Codex (models_cache.json, D-076), Gemini (`agy models`, D-079)
     openLogs(): Promise<boolean>
+    diagnostics(): Promise<string>   // D-103: scrubbed text for a bug report
     logRendererError(where: string, message: string, detail?: string): Promise<void>
     copyImage(root: string, relPath: string): Promise<boolean>
   }

@@ -1,20 +1,30 @@
-# Troupe (code name: AI Workbench)
+# Troupe
+
+**Ask several AI agents, see where they agree, and keep what you decide.**
+
+Troupe is a local-first Mac app for thinking with AI agents — Claude Code, Codex, Grok and Gemini — over your own folders. Ask one question to all of them and get a Compare card: where they agree, where they disagree, what only one of them noticed. Make them debate, critique each other or research together. Save the outcome to a decision log that every agent reads from then on. It's a thinking workspace, not a code editor: it drives the agent CLIs you already pay for, keeps everything on your Mac, and shows exactly what each agent is told.
 
 > **Status:** macOS on Apple silicon only · single maintainer · built for one designer's daily workflow and shared as-is. Issues and PRs are welcome; response times are best-effort. Licensed under [Apache-2.0](LICENSE).
 
-A local-first macOS desktop app that runs several AI coding agents — **Claude Code**, **Codex**, **Grok** and **Gemini** (Antigravity `agy`) CLIs — headless against one shared conversation per project. A thinking workspace and orchestrator, not an IDE: projects map to real folders, agents read and edit those files directly, and every piece of state lives in a local SQLite database. Nothing is hosted.
-
-> **Naming.** "AI Workbench" is the code name (package `ai-workbench`, the docs, and the data folder `~/Library/Application Support/AI Workbench`). **Troupe** is the user-facing name (icon, dock, installer) since 1.0.4.
-
 ## What it does
 
-- **Projects = folders.** One primary folder per project (owns memory, skills, MCP config, the file browser) plus optional additional folders the agents may read and edit (`--add-dir`).
-- **One conversation, several agents.** `@claude` / `@codex` / `@grok` / `@gemini` route a turn; `@all` runs every agent on the same prompt independently and ends with a Compare card; `@debate` / `@critique` / `@research` run a fixed cast of agents through a thinking mode. Outcomes are saved to the project's `DECISIONS.md` and sent to every agent. Workbench owns continuity: no provider-native resume — the transcript (or a compressed snapshot) is injected every turn.
-- **Memory that both CLIs load natively.** Project memory is the folder's `CLAUDE.md`, mirrored to `AGENTS.md`; a provider loads it natively only when its file is a faithful copy, otherwise Workbench injects it. The Context Inspector shows exactly what each provider receives.
-- **Collab mode.** Planner → Maker → Reviewer loops over a task list with budgets, retries and a human confirmation step.
-- **Image Creation.** A node canvas (Prompt · Media · Processor · Output cards) for making images with the same agents — Codex, Grok, Gemini, or Claude drawing SVG. Several canvases as tabs; everything lives in one folder chosen in Settings ▸ Image.
-- **Scheduled tasks, skills, notes, artifacts** (Markdown, HTML, images, video, CSV, JSON, PDF viewer), per-thread permission modes (Read-only / Auto / Full).
-- **Tools.** MCP servers and built-in tools are switched on or off globally in Settings ▸ Tools; Claude can browse in your own Chrome through the Claude in Chrome extension.
+**Think across agents**
+- **`@all` + Compare.** Every ready agent answers the same prompt independently, then a Compare card summarises the verdict, the agreements, the disagreements and what only one agent raised.
+- **Thinking modes.** `@debate` (for / against + a judge), `@critique` (produce → attack → respond) and `@research` (gather → check) run a fixed cast of agents through a structured exchange.
+- **A decision log every agent reads.** Save a reply or a Compare card as a dated decision, insight or open question in the project's `TROUPE-DECISIONS.md`; every agent gets its index with each message, and contradictions are flagged.
+- **See what each agent is told.** The Context Inspector shows the exact context each agent receives, in order and with sizes; Check context quizzes a fresh chat on what the project decided.
+
+**Work on real files**
+- **Projects are folders.** Agents read and edit the files in a project's folder (plus any additional folders you add). Memory is the folder's `CLAUDE.md`, mirrored to `AGENTS.md` and delivered to each agent the way it can load it.
+- **One conversation, several agents.** `@claude` / `@codex` / `@grok` / `@gemini` route a turn; Troupe owns continuity, so agents can be switched or combined in one thread.
+- **Collab mode.** A lead agent drafts a task plan; agents carry out each task with a read-only reviewer gate, budgets and retries.
+- **Artifacts in place.** Markdown, HTML, images, video, CSV, JSON and PDF open in the app; files outside the project offer *Copy into project*.
+
+**Around it**
+- **Image Creation** — a node canvas (Prompt · Media · Processor · Output) for making images with Codex, Grok, Gemini, or Claude drawing SVG.
+- **Scheduled tasks, skills, notes**, per-chat permission modes (Read-only / Auto / Full access), MCP servers and Claude in Chrome, all switched on or off in Settings.
+
+> **Naming.** "AI Workbench" is the code name (package `ai-workbench` and the data folder `~/Library/Application Support/AI Workbench`). **Troupe** is the app's name.
 
 ## Stack
 

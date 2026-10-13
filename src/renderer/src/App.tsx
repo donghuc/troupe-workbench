@@ -4,6 +4,8 @@ import WindowNav from './components/WindowNav'
 import ProjectHome from './components/ProjectHome'
 import ProjectsOverview from './components/ProjectsOverview'
 import NewProjectModal from './components/NewProjectModal'
+import Welcome, { type WelcomeRun } from './components/Welcome'
+import { WELCOME_DONE_SETTING, shouldShowWelcome, SHOW_WELCOME_EVENT } from '../../shared/welcome'
 import InstructionsEditor from './components/InstructionsEditor'
 import ProvidersModal from './components/ProvidersModal'
 import ContextManager from './components/ContextManager'
@@ -74,6 +76,18 @@ export default function App() {
   const [showProviders, setShowProviders] = useState(false)
   const [showContextMgr, setShowContextMgr] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
+  // First-run welcome (D-103): new users only — no projects and never finished. An existing
+  // user is marked done on first sight, so deleting every project later never brings it back.
+  const [showWelcome, setShowWelcome] = useState(false)
+  useEffect(() => {
+    Promise.all([api.settings.get(WELCOME_DONE_SETTING), api.projects.list()]).then(([done, list]) => {
+      if (shouldShowWelcome(done, list.length)) setShowWelcome(true)
+      else if (!done) void api.settings.set(WELCOME_DONE_SETTING, '1')
+    }).catch(() => {})
+    const reopen = () => { setShowSettings(false); setShowWelcome(true) }
+    window.addEventListener(SHOW_WELCOME_EVENT, reopen)
+    return () => window.removeEventListener(SHOW_WELCOME_EVENT, reopen)
+  }, [])
   const [showNotes, setShowNotes] = useState(false)
   const [showMemory, setShowMemory] = useState(false)
   const [showSchedules, setShowSchedules] = useState(false)
@@ -167,6 +181,26 @@ export default function App() {
     const p = await create(input)
     setShowNew(false)
     openProject(p.id)
+  }
+
+  // Welcome screen 2: the project is created as soon as the user continues, so quitting
+  // halfway still leaves a usable project.
+  const welcomeCreateProject = async (name: string, folder: string | null): Promise<string> => {
+    const p = await create({ name })
+    if (folder) await connectProjectFolder(p.id, folder)
+    return p.id
+  }
+  // Finish (or skip): mark done, open the project, and optionally send the first prompt
+  // read-only in a new chat — the same path as Notes' "Turn into chat".
+  const finishWelcome = async (projectId: string | null, run?: WelcomeRun) => {
+    void api.settings.set(WELCOME_DONE_SETTING, '1')
+    setShowWelcome(false)
+    if (!projectId) return
+    if (!run) { openProject(projectId); return }
+    const conv = await api.conversations.create(projectId, titleFrom(run.text.replace(/^@all\s+/i, '')), run.provider)
+    refreshConvList()
+    openConversation(projectId, conv.id)
+    setPendingSend({ text: run.text, provider: run.provider, permMode: 'read' })
   }
 
   const patchActive = (patch: ProjectPatch) => { if (project) update(project.id, patch) }
@@ -385,6 +419,7 @@ export default function App() {
       {showSettings && <Suspense fallback={null}><SettingsModal initialTab={settingsTab} onClose={() => setShowSettings(false)} /></Suspense>}
       {showProviders && <ProvidersModal onClose={() => setShowProviders(false)} />}
       {showContextMgr && project && <ContextManager projectId={project.id} folderPath={project.folderPath} onClose={() => setShowContextMgr(false)} />}
+      {showWelcome && <Welcome createProject={welcomeCreateProject} onFinish={finishWelcome} />}
       {showNew && <NewProjectModal onCreate={handleCreateProject} onClose={() => setShowNew(false)} />}
       {showSearch && <SearchPalette onClose={() => setShowSearch(false)} onOpen={(pid, cid) => { setShowSearch(false); openConversation(pid, cid) }} />}
       {editingInstructions && project && (

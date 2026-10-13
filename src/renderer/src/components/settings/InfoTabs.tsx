@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../../api'
 import logo from '../../assets/logo.png'
 import type { AppInfo } from '../../../../shared/api'
+import { SHOW_WELCOME_EVENT } from '../../../../shared/welcome'
 
 const COMMANDS: { k: string; d: string }[] = [
   { k: '@claude / @codex', d: 'Route this message to one specific agent.' },
@@ -35,6 +36,13 @@ export function CommandsTab() {
 export function AboutTab() {
   const [info, setInfo] = useState<AppInfo | null>(null)
   useEffect(() => { api.system.appInfo().then(setInfo).catch(() => {}) }, [])
+  // D-103: one paste for a bug report (versions, agent states, recent log; paths and keys scrubbed).
+  const [diag, setDiag] = useState<'idle' | 'busy' | 'done'>('idle')
+  const copyDiagnostics = async () => {
+    setDiag('busy')
+    try { await navigator.clipboard.writeText(await api.system.diagnostics()); setDiag('done'); setTimeout(() => setDiag('idle'), 1500) }
+    catch { setDiag('idle') }
+  }
   return (
     <div className="about-pane">
       <div className="about-head">
@@ -52,8 +60,10 @@ export function AboutTab() {
       </dl>
       <div className="about-actions">
         <button className="btn btn-sm" onClick={() => api.system.openLogs()}>Reveal logs in Finder</button>
+        <button className="btn btn-sm" onClick={copyDiagnostics} disabled={diag === 'busy'}>{diag === 'busy' ? 'Collecting…' : diag === 'done' ? 'Copied' : 'Copy diagnostics'}</button>
+        <button className="btn btn-sm" onClick={() => window.dispatchEvent(new Event(SHOW_WELCOME_EVENT))}>Show welcome</button>
       </div>
-      <p className="about-note">Logs record app activity, tool calls and errors (not your full message text) — attach <code>main.log</code> when reporting a bug.</p>
+      <p className="about-note">Logs record app activity, tool calls and errors (not your message text). When reporting a bug, paste <b>Copy diagnostics</b> into the issue — your home folder and anything that looks like a key are removed.</p>
     </div>
   )
 }

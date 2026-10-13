@@ -2,7 +2,8 @@ import { app, shell, clipboard, nativeImage, ClipboardItem } from 'electron'
 import { handle } from './handle'
 import { openArtifactWindow } from '../window/artifactWindow'
 import { ensureInside } from '../filesystem/fsService'
-import { existsSync, copyFileSync, mkdirSync } from 'fs'
+import { existsSync, copyFileSync, mkdirSync, readFileSync } from 'fs'
+import { homedir, arch } from 'os'
 import { dirname, basename, join, isAbsolute, resolve } from 'path'
 import { listAgentTools, addMcpServer, removeMcpServer, refreshLiveMcpNames } from '../tools/toolsService'
 import { logPath, logError } from '../util/logger'
@@ -11,6 +12,10 @@ import { expectString } from '../security/pathGuard'
 import type { ProviderId, McpAddInput } from '../../shared/types'
 import { codexAutoModels } from '../tools/codexModels'
 import { refreshGeminiModels } from '../tools/geminiModels'
+import { describeProviders } from '../providers/registry'
+import { getSetting } from '../database/settingsRepo'
+import { enabledProviderIds, DISABLED_AGENTS_SETTING } from '../../shared/providers'
+import { buildDiagnostics, tailLines } from '../../shared/diagnostics'
 
 export function registerSystemIpc(): void {
   // Open the native macOS Lookup/dictionary panel for the current text selection.
@@ -81,6 +86,21 @@ export function registerSystemIpc(): void {
     node: process.versions.node,
     platform: process.platform
   }))
+  // Copy diagnostics (D-103): versions, each agent's state, the last 200 log lines — scrubbed.
+  handle('system.diagnostics', async () => {
+    const providers = await describeProviders()
+    const enabled = enabledProviderIds(getSetting(DISABLED_AGENTS_SETTING))
+    let log = ''
+    try { log = readFileSync(logPath(), 'utf8') } catch { /* no log yet */ }
+    let os = `macOS ${process.getSystemVersion?.() ?? ''}`.trim()
+    if (process.platform !== 'darwin') os = process.platform
+    return buildDiagnostics({
+      app: { version: app.getVersion(), electron: process.versions.electron, node: process.versions.node, platform: process.platform, arch: arch(), os },
+      agents: providers.map((p) => ({ name: p.name, installed: !!p.availability.installed, authenticated: !!p.availability.authenticated, detail: p.availability.detail, enabled: enabled.includes(p.id) })),
+      logTail: tailLines(log, 200),
+      home: homedir()
+    })
+  })
   // Reveal the app's log file (userData/logs/main.log) in Finder for bug reports.
   handle('system.openLogs', () => { try { shell.showItemInFolder(logPath()); return true } catch { return false } })
   // Renderer errors (render crashes, failed IPC calls, unhandled rejections) land

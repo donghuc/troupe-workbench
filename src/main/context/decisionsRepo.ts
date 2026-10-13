@@ -1,17 +1,31 @@
-import { readFileSync, writeFileSync, existsSync } from 'fs'
+import { readFileSync, writeFileSync, existsSync, renameSync } from 'fs'
 import { join } from 'path'
 import { getDb } from '../database/db'
 import { getProject } from '../projects/projectsRepo'
 import { ensureInside } from '../filesystem/fsService'
-import { parseDecisions, appendOutcome, nextOutcomeId, DECISIONS_FILE, type Outcome } from '../../shared/decisions'
+import { parseDecisions, appendOutcome, nextOutcomeId, isTroupeDecisionsLog, DECISIONS_FILE, LEGACY_DECISIONS_FILE, type Outcome } from '../../shared/decisions'
 import type { Project } from '../../shared/types'
-import { logInfo } from '../util/logger'
+import { logInfo, logError } from '../util/logger'
 
 // The decisions log per project (D-081 step 5): <folder>/DECISIONS.md when the project
 // has a folder (visible, editable, readable by agents), else the projects.decisions
 // column. Read on every turn (small file), written only by Save outcome.
 
-function fileFor(p: Project): string | null { return p.folderPath ? ensureInside(p.folderPath, DECISIONS_FILE) : null }
+// D-103: the log moved from DECISIONS.md to TROUPE-DECISIONS.md. On first use, a DECISIONS.md
+// that Troupe wrote is renamed; a user's own DECISIONS.md (not in Troupe's format) is left alone.
+function fileFor(p: Project): string | null {
+  if (!p.folderPath) return null
+  const f = ensureInside(p.folderPath, DECISIONS_FILE)
+  if (existsSync(f)) return f
+  const legacy = ensureInside(p.folderPath, LEGACY_DECISIONS_FILE)
+  try {
+    if (existsSync(legacy) && isTroupeDecisionsLog(readFileSync(legacy, 'utf8'))) {
+      renameSync(legacy, f)
+      logInfo('decisions log renamed', { project: p.id, from: LEGACY_DECISIONS_FILE, to: DECISIONS_FILE })
+    }
+  } catch (e) { logError('decisions log rename failed', String(e)) }
+  return f
+}
 
 function readDecisionsText(p: Project): string {
   const f = fileFor(p)

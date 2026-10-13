@@ -24,6 +24,9 @@ function resolveLoginPath(): string | null {
   return loginPath
 }
 
+/** Forget the cached login-shell PATH, so a CLI installed while the app runs is found on the next check (D-103 Re-check). */
+export function resetLoginPath(): void { loginPath = undefined }
+
 // Common CLI install locations, so Finder-launched apps (minimal PATH) still find binaries.
 export function buildEnv(): NodeJS.ProcessEnv {
   const extra = [

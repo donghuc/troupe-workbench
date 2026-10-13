@@ -1,11 +1,13 @@
 import { handle } from './handle'
 import { describeProviders } from '../providers/registry'
+import { resetLoginPath } from '../providers/env'
 import { maybeCompress } from '../agent/snapshotService'
 import { startTurn, regenerateTurn, cancelTurn, getTurnState, snapshotTurns, compareTurn } from '../agent/turns'
 import type { StartTurnInput, RegenerateInput } from '../../shared/turns'
 
 export function registerAgentIpc(): void {
-  handle('providers.list', () => describeProviders())
+  // Re-read the login-shell PATH on every check, so a CLI installed while Troupe is open is found (D-103 Re-check).
+  handle('providers.list', () => { resetLoginPath(); return describeProviders() })
   handle('conversations.compressNow', (e, conversationId: string) => maybeCompress(conversationId, e.sender, true))
   // Turn orchestration (D-061): the renderer sends messages here; there is no direct run request (D-099).
   handle('turns.start', (e, input: StartTurnInput) => startTurn(e.sender, input))

@@ -59,6 +59,9 @@ describe('work folder rules (D-086)', () => {
     expect(r).toContain('/Users/x/Proj')
     expect(r).toContain('/Users/x/Shared')
     expect(r).toMatch(/inside the project folder/)
+    // D-103: build caches stay at the tool's default location, not in the project
+    expect(r).toMatch(/DerivedData/)
+    expect(r).toMatch(/default location outside the project/)
     expect(workFolderRules('/Users/x/Proj')).not.toContain('additional folders')
   })
 })

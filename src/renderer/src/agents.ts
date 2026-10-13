@@ -12,6 +12,7 @@ import { parseDisabledModels, serializeDisabledModels, DISABLED_MODELS_SETTING }
 import { setDisabledModelsState } from './models'
 import { api } from './api'
 import { notify } from './notices'
+import { WELCOME_DONE_SETTING, shouldShowWelcome } from '../../shared/welcome'
 
 type Status = Partial<Record<ProviderId, { installed: boolean; authenticated: boolean }>>
 let status: Status = {}
@@ -55,7 +56,11 @@ async function firstRun(st: Status, agentsRaw: string | null): Promise<void> {
     const projects = await api.projects.list()
     if (projects.length === 0 && agentsRaw === null) {
       const off = firstRunAgentsOff(st)
-      if (off.length) {
+      // A brand-new user gets the welcome (D-103), which shows each agent's state itself —
+      // switch the missing ones off quietly instead of adding a notice on top of it.
+      const welcoming = shouldShowWelcome(await api.settings.get(WELCOME_DONE_SETTING), projects.length)
+      if (off.length && welcoming) await saveDisabledAgents(off)
+      else if (off.length) {
         await saveDisabledAgents(off)
         const names = (ids: ProviderId[]) => { const n = ids.map((id) => PROVIDERS[id].label); return n.length > 1 ? `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}` : n[0] }
         const on = enabledProviderIds(serializeDisabledAgents(off))

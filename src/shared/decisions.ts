@@ -22,7 +22,16 @@ export interface Outcome {
   conflicts?: string    // set on a draft when it contradicts memory or an earlier entry; not stored
 }
 
-export const DECISIONS_FILE = 'DECISIONS.md'
+// D-103: Troupe's own name, so it never appends to a project's existing DECISIONS.md.
+// Projects that already have Troupe's log under the old name are moved over on first use.
+export const DECISIONS_FILE = 'TROUPE-DECISIONS.md'
+export const LEGACY_DECISIONS_FILE = 'DECISIONS.md'
+
+/** True when a DECISIONS.md was written by Troupe (its header, or entries in Troupe's format) — not the user's own file. */
+export function isTroupeDecisionsLog(md: string | null | undefined): boolean {
+  if (!md?.trim()) return false
+  return /Kept by Troupe/.test(md) || parseDecisions(md).length > 0
+}
 const DECISIONS_INDEX_MAX = 50   // D-080 item 3: latest 50 in the index
 const DECISIONS_FULL_N = 3       // and the latest 3 in full
 

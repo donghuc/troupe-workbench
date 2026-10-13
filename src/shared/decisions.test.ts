@@ -1,8 +1,18 @@
 import { describe, it, expect } from 'vitest'
-import { parseDecisions, formatOutcome, appendOutcome, nextOutcomeId, decisionsContext, parseOutcomeDraft, buildOutcomePrompt, type Outcome } from './decisions'
+import { parseDecisions, formatOutcome, appendOutcome, nextOutcomeId, decisionsContext, parseOutcomeDraft, buildOutcomePrompt, isTroupeDecisionsLog, DECISIONS_FILE, type Outcome } from './decisions'
 
 const a: Outcome = { id: 'D-001', kind: 'decision', date: '2026-09-20', title: 'Cut the goals survey first', why: 'Pure deletion, lower risk.', considered: 'Move bank linking later (Claude, Grok).', open: 'Test link-later on 7-day retention.', source: 'Which sign-up step to cut?' }
 const b: Outcome = { id: 'D-002', kind: 'insight', date: '2026-09-21', title: 'Users distrust bank linking in the first minute', why: '5 of 8 hesitated.' }
+
+describe('decisions file name (D-103)', () => {
+  it('uses a Troupe-specific name', () => { expect(DECISIONS_FILE).toBe('TROUPE-DECISIONS.md') })
+  it('recognises Troupe\'s own log but not a user\'s DECISIONS.md', () => {
+    expect(isTroupeDecisionsLog('# Decisions · X\n\nDated outcomes with their reasons, newest first. Kept by Troupe; edit freely.\n')).toBe(true)
+    expect(isTroupeDecisionsLog('## D-001 · Decision · 2026-09-25 · Use SQLite\n**Why:** local')).toBe(true)
+    expect(isTroupeDecisionsLog('# Our decisions\n\n## D-080 — Product direction (2026-09-25)\nWe decided...')).toBe(false)
+    expect(isTroupeDecisionsLog('')).toBe(false)
+  })
+})
 
 describe('decisions log (D-081)', () => {
   it('round-trips entries through the file format, newest first', () => {

@@ -14,7 +14,7 @@ import { PROVIDERS, isProviderId } from '../../shared/providers'
 import { mcpOffFor, MCP_OFF_SETTING } from '../../shared/projectMcp'
 import { renderPinnedFile, memoryWarning, staleMemoryNote, renderScheduledTask, SINCE_SUMMARY_TRANSCRIPT } from '../../shared/contextBudget'
 import { getScheduleByConv } from '../schedules/schedulesRepo'
-import { decisionsContext } from '../../shared/decisions'
+import { decisionsContext, DECISIONS_FILE } from '../../shared/decisions'
 import { listOutcomes } from './decisionsRepo'
 
 const approxTokens = (s: string) => Math.ceil(s.length / 4)
@@ -145,7 +145,7 @@ export function inspectContext(conversationId: string, providerId: ProviderId = 
       note: staleMemoryNote(memory)
     },
     { name: 'Persistent Context', text: persistent, note: pc.referenced.length ? `Sent as references, not inlined (over 8 KB): ${pc.referenced.join(', ')}` : undefined },
-    { name: 'Decisions log', text: decisions, delivery: sent(decisions), source: project?.folderPath ? 'DECISIONS.md' : 'Workbench database (no project folder)', always: true, note: outcomes.length ? `${outcomes.length} entries · index of the latest ${Math.min(50, outcomes.length)} + the latest ${Math.min(3, outcomes.length)} in full` : 'Nothing saved yet — use Save outcome on a reply.' },
+    { name: 'Decisions log', text: decisions, delivery: sent(decisions), source: project?.folderPath ? DECISIONS_FILE : 'Workbench database (no project folder)', always: true, note: outcomes.length ? `${outcomes.length} entries · index of the latest ${Math.min(50, outcomes.length)} + the latest ${Math.min(3, outcomes.length)} in full` : 'Nothing saved yet — use Save outcome on a reply.' },
     { name: 'Conversation (summary + recent)', text: convo, note: pinnedTask ? 'Starts with the scheduled task, pinned so repeat runs keep it without re-sending the prompt.' : undefined }
   ]
 

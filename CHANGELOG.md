@@ -18,6 +18,20 @@ Each version here matches a packaged build — the dmg is named
 > - Bumping rules: PATCH = fixes/small tweaks, MINOR = new features (backward-compatible),
 >   MAJOR = breaking changes or a data format users can't roll back from.
 
+## [2.2.0] - 2026-10-13
+
+Ready for new users: a welcome that sets you up, Copy diagnostics for bug reports, and the decision log under its own name. No database change.
+
+### Added
+- **Welcome for new users.** The first launch walks through three short screens: which agents are ready (with the install or sign-in command to copy for any that aren't, and a Re-check button), your first project (a folder or scratch mode), and how permission modes work, ending with a one-click first question that runs read-only — with two or more agents it asks them all and shows a Compare card. Existing users never see it; Settings ▸ About ▸ Show welcome opens it again.
+
+- **Copy diagnostics** in Settings ▸ About: versions, each agent's state and the recent log in one paste for a bug report. Your home folder and anything that looks like a key or token are removed first.
+
+### Changed
+- **The decision log is now `TROUPE-DECISIONS.md`.** Troupe used to write `DECISIONS.md`, which could collide with a project's own file of that name. A `DECISIONS.md` that Troupe wrote is renamed the first time the project is used; a `DECISIONS.md` of your own is left untouched and no longer read as the log.
+- Agents keep build output and caches (Xcode DerivedData, Gradle or npm build folders, package caches) at the tool's default location instead of inside your project folder, where they could add gigabytes.
+- Checking your agents (Settings, the welcome's Re-check) now finds a CLI you installed while Troupe was open.
+
 ## [2.1.0] - 2026-10-12
 
 Image Creation gets multiple canvases, an Add card panel and multi-select; videos play in the file viewer.
