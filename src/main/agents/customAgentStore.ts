@@ -7,13 +7,13 @@ import { join } from 'path'
 import { getSetting, setSetting } from '../database/settingsRepo'
 import { setCustomAgents } from '../../shared/providers'
 import {
-  CUSTOM_AGENTS_SETTING, parseCustomAgents, serializeCustomAgents, validateDraft, catalogEntry,
+  CUSTOM_AGENTS_SETTING, parseCustomAgents, parseCommandLine, serializeCustomAgents, validateDraft, catalogEntry,
   TEST_PROMPT, TEST_TIMEOUT_MS, type CustomAgent, type CustomAgentDraft, type TestResult
 } from '../../shared/customAgents'
 import type { CustomAgentId } from '../../shared/types'
 import { IPC } from '../../shared/ipc'
-import { CustomCliProvider, whichBin } from '../providers/CustomCliProvider'
-import { PRESET_RECIPES } from '../../shared/agentRecipes'
+import { CustomCliProvider, findPresetBin } from '../providers/CustomCliProvider'
+import { PRESET_RECIPES, presetRecipe } from '../../shared/agentRecipes'
 import { resetLoginPath, buildEnv } from '../providers/env'
 import { removeTempDir } from '../util/tempFiles'
 import { logInfo } from '../util/logger'
@@ -22,9 +22,31 @@ let agents: CustomAgent[] = []
 
 /** Read the setting and register the agents with the catalog. Call once at startup, after the DB opens. */
 export function loadCustomAgents(): CustomAgent[] {
-  agents = parseCustomAgents(getSetting(CUSTOM_AGENTS_SETTING))
+  const saved = parseCustomAgents(getSetting(CUSTOM_AGENTS_SETTING))
+  agents = saved.map(withPresetUpdate)
+  // A newer Troupe fixed a preset's command (e.g. Cursor needs --trust): store it once.
+  if (agents.some((a, i) => a !== saved[i])) setSetting(CUSTOM_AGENTS_SETTING, serializeCustomAgents(agents))
   setCustomAgents(agents.map(catalogEntry))
   return agents
+}
+
+/** An agent added from a preset and never edited follows the preset's current command. */
+function withPresetUpdate(a: CustomAgent): CustomAgent {
+  const r = a.presetId && !a.edited ? presetRecipe(a.presetId) : undefined
+  if (!r?.agent) return a
+  // Keep the command name that was found on this Mac (Cursor: `agent` or `cursor-agent`).
+  const parsed = parseCommandLine(r.agent.command)
+  if (!parsed.ok) return a
+  const [bin0, ...args] = parsed.argv
+  const bin = r.detect.includes(a.bin) ? a.bin : bin0
+  const command = bin === bin0 ? r.agent.command : r.agent.command.replace(/^\S+/, bin)
+  const ro = r.agent.readOnlyArgs ? parseCommandLine(r.agent.readOnlyArgs) : null
+  const next: CustomAgent = {
+    ...a, command, bin, args, output: r.agent.output,
+    ...(r.agent.modelFlag ? { modelFlag: r.agent.modelFlag } : {}),
+    ...(ro?.ok ? { readOnlyArgs: ro.argv } : {})
+  }
+  return JSON.stringify(next) === JSON.stringify(a) ? a : next
 }
 
 export const listCustomAgents = (): CustomAgent[] => agents
@@ -83,5 +105,5 @@ export async function testCustomAgent(draft: CustomAgentDraft, id?: CustomAgentI
 export function detectPresets(): { id: string; found: string | null }[] {
   resetLoginPath()   // pick up a CLI installed while Troupe is open
   const env = buildEnv()
-  return PRESET_RECIPES.map((r) => ({ id: r.id, found: r.detect.find((b) => whichBin(b, env)) ?? null }))
+  return PRESET_RECIPES.map((r) => ({ id: r.id, found: findPresetBin(r.id, r.detect, env) }))
 }

@@ -53,4 +53,9 @@ describe('setup process (fake installers)', () => {
     setTimeout(() => c.cancel(), 200)
     expect(await c.done).toMatchObject({ ok: false, cancelled: true, error: 'Cancelled.' })
   }, 10000)
+  it('puts Troupe\'s PATH in the Terminal file, quoted', () => {
+    const f = commandFileContents('cursor-agent login', '/bin/zsh', "/Users/a/.local/bin:/opt/it's")
+    expect(f.split('\n')[2]).toBe("export PATH='/Users/a/.local/bin:/opt/it'\\''s'")
+    expect(commandFileContents('x', '/bin/zsh')).not.toContain('export PATH')
+  })
 })

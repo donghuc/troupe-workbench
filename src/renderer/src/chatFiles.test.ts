@@ -34,6 +34,7 @@ describe('chat files (D-098, moved from ConversationView)', () => {
     expect(usageMain(a)).toBe('13.0k in · 12.0k cached · 300 out · $0.0123 · m-1')
     expect(usageBreakdown(a)).toBe('1,000 new · 12.0k cache-read')
     expect(usageMain(msg('user', 'abcdefgh'))).toBe('~2 tokens')
+    expect(usageMain({ role: 'assistant', content: 'abcdefgh', metadata: { modelUsed: 'deepseek/deepseek-flash' } })).toBe('~2 tokens · deepseek/deepseek-flash')
   })
 
   it('user display text uses the typed part only when selections were attached', () => {

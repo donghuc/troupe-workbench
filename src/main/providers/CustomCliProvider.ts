@@ -1,4 +1,4 @@
-import { accessSync, constants } from 'fs'
+import { accessSync, constants, realpathSync } from 'fs'
 import { join, isAbsolute } from 'path'
 import { workFolderRules } from '../../shared/contextBudget'
 import { buildRun, type CustomAgent } from '../../shared/customAgents'
@@ -20,6 +20,22 @@ export function whichBin(bin: string, env: NodeJS.ProcessEnv = buildEnv()): stri
   const ok = (p: string) => { try { accessSync(p, constants.X_OK); return true } catch { return false } }
   if (bin.includes('/')) return isAbsolute(bin) && ok(bin) ? bin : null
   for (const dir of (env.PATH ?? '').split(':')) if (dir && ok(join(dir, bin))) return join(dir, bin)
+  return null
+}
+
+/**
+ * A preset's binary, found on PATH and really that agent: its name or the file it links to
+ * mentions the preset (Cursor's `agent` → ~/.local/share/cursor-agent/…). Generic names like
+ * `agent` are common, so a lookup alone isn't enough.
+ */
+export function findPresetBin(presetId: string, bins: string[], env: NodeJS.ProcessEnv = buildEnv()): string | null {
+  for (const b of bins) {
+    const p = whichBin(b, env)
+    if (!p) continue
+    let real = p
+    try { real = realpathSync(p) } catch { /* keep p */ }
+    if (b.includes(presetId) || real.toLowerCase().includes(presetId)) return b
+  }
   return null
 }
 
@@ -67,6 +83,9 @@ export class CustomCliProvider implements AgentProvider {
       yield { type: 'error', message: (err as Error).message, fatal: true }
       return
     }
+    // There's no session to report, but the reply footer shows which model answered (as for Codex).
+    // With no model picked, the agent uses its own default, which Troupe can't see.
+    yield { type: 'session_started', providerSessionId: '', model: req.model || 'default model' }
     logInfo(`[custom:${this.id}] run`, JSON.stringify({ bin: this.agent.bin, args: run.args.length, viaStdin: !!run.stdin, model: req.model || 'default', readOnly }))
 
     if (this.agent.output === 'claude-stream-json') {

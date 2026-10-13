@@ -14,6 +14,7 @@ import type { SetupEvent } from '../../shared/agentSetup'
 import type { ProviderId } from '../../shared/types'
 import { buildEnv, resetLoginPath } from '../providers/env'
 import { createProvider } from '../providers/registry'
+import { findPresetBin } from '../providers/CustomCliProvider'
 import { logInfo, logError } from '../util/logger'
 import { setupPlan, commandFileContents, SETUP_TIMEOUT_MS, type SetupKind } from './setupRules'
 import { runSetupCommand, type SetupHandle } from './setupProcess'
@@ -26,7 +27,7 @@ function send(sender: WebContents, ev: SetupEvent) { if (!sender.isDestroyed()) 
 function openInTerminal(cmd: string): void {
   const shell = process.env.SHELL || '/bin/zsh'
   const file = join(tmpdir(), `troupe-setup-${randomBytes(4).toString('hex')}.command`)
-  writeFileSync(file, commandFileContents(cmd, shell), { mode: 0o700 })
+  writeFileSync(file, commandFileContents(cmd, shell, buildEnv().PATH), { mode: 0o700 })
   chmodSync(file, 0o700)
   spawn('open', [file], { detached: true, stdio: 'ignore' }).unref()
   setTimeout(() => unlink(file, () => {}), 10 * 60_000).unref()   // Terminal has read it long before
@@ -42,6 +43,13 @@ export function startSetup(sender: WebContents, id: unknown, kind: unknown, term
   const plan = setupPlan(recipe, kind as SetupKind)
   // "Open in Terminal" after a failed background step (or a sign-in that needs a terminal).
   if ((terminal === true || preset) && plan.mode === 'run') plan.mode = 'terminal'
+  // A preset may install under another of its names (Cursor: `agent` or `cursor-agent`):
+  // sign in with the one that's actually on this Mac.
+  if (preset && kind === 'signIn') {
+    const first = plan.cmd.split(' ')[0]
+    const found = preset.detect.includes(first) ? findPresetBin(preset.id, preset.detect) : null
+    if (found && found !== first) plan.cmd = found + plan.cmd.slice(first.length)
+  }
   logInfo('agent setup', { agent: id, kind, mode: plan.mode })
   if (plan.mode === 'none') return { runId: null, mode: 'none' }
   if (plan.mode === 'terminal') { openInTerminal(plan.cmd); return { runId: null, mode: 'terminal' } }

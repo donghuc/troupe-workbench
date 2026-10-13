@@ -18,6 +18,16 @@ Each version here matches a packaged build — the dmg is named
 > - Bumping rules: PATCH = fixes/small tweaks, MINOR = new features (backward-compatible),
 >   MAJOR = breaking changes or a data format users can't roll back from.
 
+## [2.4.1] - 2026-10-13
+
+### Changed
+- Replies from added agents (OpenCode, Cursor CLI…) now say which model answered, like Codex and Claude do; "default model" when none was picked.
+
+### Fixed
+- Sign in / Install in Terminal for OpenCode and Cursor CLI could say "command not found" even though Troupe had found the agent: the Terminal window now searches the same folders Troupe does, and Cursor signs in with whichever of its command names is installed.
+- Cursor CLI showed "Found on your Mac" when it wasn't installed: another tool's `agent` command (Grok's) was taken for Cursor's. A preset now counts as found only if the command really belongs to it.
+- Cursor CLI wouldn't answer ("Pass --trust…"): its ready-made command now trusts the project folder and lets Cursor make changes outside Read-only (`--trust --force`). Added agents made from a ready-made command pick up fixes like this automatically unless you've edited them.
+
 ## [2.4.0] - 2026-10-13
 
 Add your own agents. No database change.

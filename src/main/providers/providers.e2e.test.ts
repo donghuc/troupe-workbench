@@ -143,9 +143,9 @@ describe('providers through CliProcess (D-096)', () => {
     const { CustomCliProvider } = await import('./CustomCliProvider')
     const agent = { id: 'x-jsontool' as const, name: 'JSON Tool', handle: 'jsontool', command: 'jsontool', bin: 'jsontool', args: [], output: 'claude-stream-json' as const }
     const evs = await collect(new CustomCliProvider(agent).run(req()))
-    expect(evs.map((e) => e.type)).toEqual(['text_delta', 'complete'])
+    expect(evs.map((e) => e.type)).toEqual(['session_started', 'text_delta', 'complete'])
     fake('jsontool', [], 1, 'Error: not logged in')
-    expect(await collect(new CustomCliProvider(agent).run(req()))).toEqual([{ type: 'error', message: 'not logged in', fatal: true }])
+    expect((await collect(new CustomCliProvider(agent).run(req()))).slice(1)).toEqual([{ type: 'error', message: 'not logged in', fatal: true }])
   })
 
   it('Custom: availability is a PATH lookup', async () => {
@@ -153,5 +153,12 @@ describe('providers through CliProcess (D-096)', () => {
     expect(whichBin('mytool', process.env)).toBe(join(bin, 'mytool'))
     const missing = { id: 'x-nope' as const, name: 'Nope', handle: 'nope', command: 'nope', bin: 'nope-not-here', args: [], output: 'text' as const }
     expect((await new CustomCliProvider(missing).isAvailable()).installed).toBe(false)
+  })
+  it('Custom: a preset binary must really be that agent', async () => {
+    const { findPresetBin } = await import('./CustomCliProvider')
+    fake('agent', [])   // a generic name, not linked to anything that says "cursor"
+    expect(findPresetBin('cursor', ['cursor-agent', 'agent'], process.env)).toBeNull()
+    fake('cursor-agent', [])
+    expect(findPresetBin('cursor', ['cursor-agent', 'agent'], process.env)).toBe('cursor-agent')
   })
 })

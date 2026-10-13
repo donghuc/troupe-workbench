@@ -38,10 +38,15 @@ export function lastErrorLine(lines: string[]): string {
 }
 
 /** A `.command` file Terminal runs when opened — no AppleScript, so no "control Terminal" prompt. */
-export function commandFileContents(cmd: string, shell: string): string {
+// `path` is the PATH Troupe itself searches (login shell + common install folders). A login
+// shell doesn't read ~/.zshrc, where installers like Cursor's add ~/.local/bin, so without it
+// an agent Troupe found could be "command not found" here.
+export function commandFileContents(cmd: string, shell: string, path?: string): string {
+  const q = (v: string) => `'${v.replace(/'/g, `'\\''`)}'`
   return [
     `#!${shell} -l`,
     '# Opened by Troupe to finish setting up an agent. You can read every line before it runs.',
+    ...(path ? [`export PATH=${q(path)}`] : []),
     'clear',
     `echo '$ ${cmd.replace(/'/g, `'\\''`)}'`,
     cmd,

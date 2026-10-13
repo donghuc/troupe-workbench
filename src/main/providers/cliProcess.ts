@@ -207,7 +207,7 @@ export class CliProcess {
 export function stderrLine(stderr: string): string {
   const lines = stripAnsi(stderr).split('\n').map((l) => l.trim()).filter(Boolean)
   // A JSON fragment such as `"message": "Unexpected server error",` reads as its value.
-  const tidy = (l: string) => (l.match(/^"?(?:message|error)"?\s*:\s*"(.*?)"\s*,?$/i)?.[1] ?? l).replace(/^Error:\s*/i, '').slice(0, 400)
+  const tidy = (l: string) => (l.replace(/^[•*·-]\s+/, '').match(/^"?(?:message|error)"?\s*:\s*"(.*?)"\s*,?$/i)?.[1] ?? l).replace(/^Error:\s*/i, '').slice(0, 400)
   for (let i = lines.length - 1; i >= 0; i--) if (/error|fail|denied|not found|unauthor|invalid|login|sign in|api key|quota|limit/i.test(lines[i])) return tidy(lines[i])
   return tidy(lines[lines.length - 1] ?? '')
 }

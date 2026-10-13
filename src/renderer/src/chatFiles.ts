@@ -28,7 +28,9 @@ export const usageMain = (m: { role: string; content: string; metadata: Record<s
     if (typeof mu === 'string' && mu) parts.push(mu)   // the model the CLI reported at session start (ground truth)
     return parts.join(' · ')
   }
-  return `~${approxTokens(m.content).toLocaleString()} tokens`
+  // No usage reported (user-added agents): still say which model answered.
+  const mu = m.role === 'assistant' ? m.metadata?.modelUsed : undefined
+  return `~${approxTokens(m.content).toLocaleString()} tokens${typeof mu === 'string' && mu ? ` · ${mu}` : ''}`
 }
 
 export const usageBreakdown = (m: { role: string; metadata: Record<string, unknown> | null }): string | null => {
