@@ -54,6 +54,8 @@ You only do this once. If you prefer Terminal, this does the same thing:
 xattr -dr com.apple.quarantine /Applications/Troupe.app
 ```
 
+**"Troupe is damaged and can't be opened"?** That was a packaging bug in 2.2.0 (fixed in 2.2.1) — the app isn't damaged. Install 2.2.1 or later, or run the `xattr` command above and open it again.
+
 ## 3. First launch
 
 Troupe checks which agents are installed. Any that aren't are switched off, and a note tells you so. After you install one later, turn it on in **Settings ▸ Agents**.

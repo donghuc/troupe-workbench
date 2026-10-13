@@ -2,6 +2,8 @@ appId: com.troupe.app
 productName: Troupe
 copyright: © 2026 Hien Do
 
+afterPack: scripts/adhoc-sign.cjs
+
 directories:
   buildResources: build
   output: dist
@@ -52,7 +54,9 @@ mac:
       to: Assets.car
   extendInfo:
     CFBundleIconName: Troupe
-  # Unsigned personal build. First launch: right-click the app → Open (Gatekeeper).
+  # No Apple Developer ID: electron-builder doesn't sign (identity: null); the afterPack hook
+  # ad-hoc signs instead, so a downloaded copy isn't reported as "damaged" (2.2.1).
+  # First launch still needs Privacy & Security ▸ Open Anyway (see INSTALL.md).
   identity: null
   artifactName: ${productName}-${version}-${arch}.${ext}
 

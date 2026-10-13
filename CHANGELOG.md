@@ -18,6 +18,11 @@ Each version here matches a packaged build — the dmg is named
 > - Bumping rules: PATCH = fixes/small tweaks, MINOR = new features (backward-compatible),
 >   MAJOR = breaking changes or a data format users can't roll back from.
 
+## [2.2.1] - 2026-10-13
+
+### Fixed
+- **"Troupe is damaged and can't be opened"** when installing the dmg downloaded from GitHub. The release build is now ad-hoc signed, so macOS shows the usual first-launch prompt instead (Privacy & Security ▸ Open Anyway). Already installed 2.2.0? Run `xattr -dr com.apple.quarantine /Applications/Troupe.app`, or install 2.2.1.
+
 ## [2.2.0] - 2026-10-13
 
 Ready for new users: a welcome that sets you up, Copy diagnostics for bug reports, and the decision log under its own name. No database change.

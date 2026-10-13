@@ -38,7 +38,7 @@ Electron (main / preload / renderer) built with electron-vite · React + TypeScr
 
 ## Install the app
 
-Download the latest `Troupe-<version>-arm64.dmg` from [Releases](../../releases), drag Troupe to Applications, then on first launch use **right-click ▸ Open** (or Privacy & Security ▸ *Open Anyway*). The build is not notarised, so Gatekeeper shows a warning once. Step-by-step, including installing and signing in to each CLI: [INSTALL.md](INSTALL.md).
+Download the latest `Troupe-<version>-arm64.dmg` from [Releases](../../releases) and drag Troupe to Applications. The app isn't notarised (no Apple Developer ID), so the first launch is blocked once: open **System Settings ▸ Privacy & Security** and click **Open Anyway**. Step-by-step, including installing and signing in to each CLI: [INSTALL.md](INSTALL.md).
 
 ## Run from source
 
