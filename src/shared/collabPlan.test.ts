@@ -6,7 +6,7 @@ import type { CollabTask } from './types'
 const task = (seq: number, patch: Partial<CollabTask> = {}): CollabTask => ({
   id: `t${seq}`, runId: 'r', seq, title: `T${seq}`, kind: 'work', provider: null, model: null,
   scope: '', acceptance: '', dependsOn: [], status: 'pending', attempts: 0,
-  lastVerdict: null, handoff: null, makerRunId: null, reviewerRunId: null, ...patch
+  lastVerdict: null, handoff: null, makerRunId: null, reviewerRunId: null, meta: {}, ...patch
 })
 
 describe('resolveTaskModel', () => {

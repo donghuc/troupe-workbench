@@ -1,7 +1,7 @@
 import type { TurnState, TurnDelta, StartTurnInput, RegenerateInput } from './turns'
 import type {
   Project, NewProjectInput, ProjectPatch, FileNode, FileChange,
-  Conversation, RecentConversation, SearchHit, Message, NewMessageInput, ProviderId, CustomAgentId, AgentTools, McpAddInput, McpMutationResult, Note, NewNoteInput, MemoryOverview, MirrorResult, ConnectFolderResult, Schedule, NewScheduleInput, SchedulePatch, FileSearchResult } from './types'
+  Conversation, RecentConversation, SearchHit, Message, NewMessageInput, ProviderId, CustomAgentId, AgentTools, McpAddInput, McpMutationResult, Note, NewNoteInput, MemoryOverview, MirrorResult, ConnectFolderResult, Schedule, NewScheduleInput, SchedulePatch, FileSearchResult, CollabRecoverAction } from './types'
 import type { ProviderDescriptor, ProviderAvailability, ContextInspection, PermissionMode } from './agent'
 import type { SetupEvent } from './agentSetup'
 import type { CustomAgent, CustomAgentDraft, TestResult } from './customAgents'
@@ -196,6 +196,10 @@ export interface WorkbenchApi {
     confirmPlan(runId: string, editedTasks?: CollabTaskDraft[]): Promise<CollabRun | null>
     stop(runId: string): Promise<CollabRun | null>
     resume(runId: string, opts?: { raiseBudget?: boolean }): Promise<CollabRun | null>
+    /** D-109: fix a failed task on a paused run — retry with a note, reassign, skip, or ask the Planner. */
+    recover(runId: string, taskId: string, action: CollabRecoverAction): Promise<CollabRun | null>
+    /** D-109: apply one of the Planner's repair options (index into run.repair.options). */
+    applyRepair(runId: string, index: number): Promise<CollabRun | null>
     get(runId: string): Promise<CollabRun | null>
     list(conversationId: string): Promise<CollabRun[]>
     onChanged(cb: () => void): () => void

@@ -38,3 +38,11 @@ describe('findingToText', () => {
     expect(findingToText(42)).toBe('42')
   })
 })
+
+describe('findingToText numbering', () => {
+  it('drops the model\'s own "1." so the app\'s numbering isn\'t doubled', () => {
+    expect(findingToText('1. README.md does not exist')).toBe('README.md does not exist')
+    expect(findingToText({ finding: '2) word count is 5' })).toBe('word count is 5')
+    expect(findingToText('2026 plan is fine')).toBe('2026 plan is fine')
+  })
+})

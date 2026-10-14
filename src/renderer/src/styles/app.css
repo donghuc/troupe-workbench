@@ -1894,3 +1894,26 @@ select.field-input {
 .file-unsupported-name { max-width: 100%; font-size: var(--fs-md); font-weight: var(--fw-medium); color: var(--text-primary); }
 .file-unsupported-why { margin: 0; font-size: var(--fs-sm); }
 .file-unsupported-actions { display: flex; gap: var(--sp-2); margin-top: var(--sp-2); }
+
+/* Collab: a run stuck on a task (D-109/D-110) — one panel: why, then every way forward as a choice */
+.collab-attn { margin: var(--sp-1) 0 var(--sp-3); padding: var(--sp-3); border: 1px solid var(--border-default); border-radius: var(--r-md); background: var(--bg-sunken); }
+.collab-attn-title { font-size: var(--fs-sm); font-weight: var(--fw-semibold); color: var(--text-primary); }
+.collab-attn-why { margin: var(--sp-1) 0 0; font-size: var(--fs-sm); line-height: var(--lh-normal); color: var(--text-secondary); }
+.collab-attn-by { font-weight: var(--fw-medium); color: var(--text-primary); }
+.collab-attn-more { margin-top: var(--sp-1); font-size: var(--fs-xs); }
+.collab-attn .collab-findings { margin-top: var(--sp-1-5); }
+.collab-choice-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-2); }
+.collab-attn-why.clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.collab-attn-main { display: flex; align-items: center; gap: var(--sp-3); margin-top: var(--sp-3); padding: var(--sp-2-5) var(--sp-3); border: 1px solid var(--accent); border-radius: var(--r-sm); background: var(--bg-panel); }
+.collab-attn-best { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.collab-attn-best-label { font-size: var(--fs-sm); font-weight: var(--fw-medium); color: var(--text-primary); }
+.collab-attn-alt { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--sp-1) var(--sp-3); margin-top: var(--sp-2); font-size: var(--fs-sm); }
+.collab-attn-or { color: var(--text-tertiary); }
+.collab-attn-form { margin-top: var(--sp-2); padding: var(--sp-2) var(--sp-2-5); border: 1px solid var(--border-subtle); border-radius: var(--r-sm); background: var(--bg-panel); display: flex; flex-direction: column; gap: var(--sp-2); }
+.collab-attn-form .collab-choice-actions .collab-kind-sel { flex: 1; min-width: 0; }
+.collab-attn-now { font-size: var(--fs-xs); color: var(--text-tertiary); }
+.collab-attn-extra { display: flex; align-items: center; gap: var(--sp-3); }
+.collab-choice-step.muted { color: var(--text-tertiary); }
+.collab-task-note { display: block; margin-top: var(--sp-0-5); font-size: var(--fs-xs); color: var(--text-tertiary); }
+.collab-task.stuck .collab-task-title { font-weight: var(--fw-medium); }
+.collab-choice-step { display: block; margin-top: var(--sp-0-5); font-size: var(--fs-xs); color: var(--warning); }

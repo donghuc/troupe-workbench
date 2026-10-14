@@ -162,6 +162,8 @@ export const INVOKE_PATHS = [
   'collab.confirmPlan',
   'collab.stop',
   'collab.resume',
+  'collab.recover',
+  'collab.applyRepair',
   'collab.get',
   'collab.list',
 ] as const

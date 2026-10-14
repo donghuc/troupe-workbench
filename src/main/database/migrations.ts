@@ -294,6 +294,15 @@ const migrations: Array<(db: Database.Database) => void> = [
       END;
       INSERT INTO messages_fts(messages_fts) VALUES ('rebuild');
     `)
+  },
+  // v24 — Collab recovery (D-109): per-task recovery state (note for the next attempt,
+  // failure signature, repairs, skip note, plan-change history) and a Planner repair
+  // proposal waiting on the run for the user's choice.
+  (db) => {
+    db.exec(`
+      ALTER TABLE collab_tasks ADD COLUMN meta TEXT;
+      ALTER TABLE collab_runs ADD COLUMN repair_json TEXT;
+    `)
   }
 ]
 

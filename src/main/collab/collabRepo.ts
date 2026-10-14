@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto'
 import { getDb } from '../database/db'
 import type {
   CollabRun, CollabTask, CollabBudget, CollabSpent, CollabVerdict, CollabHandoff,
-  CollabStatus, CollabTaskStatus, CollabTaskKind, CollabTaskDraft, CollabStartInput, ProviderId
+  CollabStatus, CollabTaskStatus, CollabTaskKind, CollabTaskDraft, CollabStartInput, ProviderId, CollabTaskMeta, CollabRepair
 } from '../../shared/types'
 import { DEFAULT_COLLAB_BUDGET } from '../../shared/types'
 import type { PermissionMode } from '../../shared/agent'
@@ -13,11 +13,13 @@ interface RunRow {
   permission_mode: string; model: string; goal: string; status: string; budget_json: string
   spent_json: string; reason: string; summary: string; created_at: number; updated_at: number
   output_dir?: string
+  repair_json?: string | null
 }
 interface TaskRow {
   id: string; run_id: string; seq: number; title: string; kind: string; provider: string | null; model: string | null; scope: string
   acceptance: string; depends_on: string; status: string; attempts: number
   last_verdict: string | null; handoff: string | null; maker_run_id: string | null; reviewer_run_id: string | null
+  meta?: string | null
 }
 
 const parse = <T,>(raw: string | null, fallback: T): T => {
@@ -38,6 +40,7 @@ const toRun = (r: RunRow): CollabRun => ({
   budget: { ...DEFAULT_COLLAB_BUDGET, ...parse<Partial<CollabBudget>>(r.budget_json, {}) },
   spent: parse<CollabSpent>(r.spent_json, { runs: 0 }),
   reason: r.reason,
+  repair: parse<CollabRepair | null>(r.repair_json ?? null, null),
   summary: r.summary,
   createdAt: r.created_at,
   updatedAt: r.updated_at
@@ -59,7 +62,8 @@ const toTask = (r: TaskRow): CollabTask => ({
   lastVerdict: parse<CollabVerdict | null>(r.last_verdict, null),
   handoff: parse<CollabHandoff | null>(r.handoff, null),
   makerRunId: r.maker_run_id,
-  reviewerRunId: r.reviewer_run_id
+  reviewerRunId: r.reviewer_run_id,
+  meta: parse<CollabTaskMeta>(r.meta ?? null, {})
 })
 
 export function createCollabRun(input: CollabStartInput): CollabRun {
@@ -96,22 +100,23 @@ export interface CollabRunPatch {
   summary?: string
   spent?: CollabSpent
   outputDir?: string
+  repair?: CollabRepair | null
 }
 export function updateCollabRun(id: string, patch: CollabRunPatch): CollabRun | null {
   const cur = getCollabRunBare(id)
   if (!cur) return null
   const next = { ...cur, ...patch }
   getDb().prepare(
-    `UPDATE collab_runs SET status = ?, reason = ?, summary = ?, spent_json = ?, output_dir = ?, updated_at = ? WHERE id = ?`
-  ).run(next.status, next.reason, next.summary, JSON.stringify(next.spent), next.outputDir ?? '', Date.now(), id)
+    `UPDATE collab_runs SET status = ?, reason = ?, summary = ?, spent_json = ?, output_dir = ?, repair_json = ?, updated_at = ? WHERE id = ?`
+  ).run(next.status, next.reason, next.summary, JSON.stringify(next.spent), next.outputDir ?? '', next.repair ? JSON.stringify(next.repair) : null, Date.now(), id)
   return getCollabRun(id)
 }
 
 // Add one to the run's spent-runs tally (called before each agent run).
-export function bumpRuns(id: string, tokens?: number): CollabRun | null {
+export function bumpRuns(id: string, opts?: { tokens?: number; retry?: boolean }): CollabRun | null {
   const cur = getCollabRunBare(id)
   if (!cur) return null
-  const spent: CollabSpent = { runs: cur.spent.runs + 1, tokens: (cur.spent.tokens ?? 0) + (tokens ?? 0) }
+  const spent: CollabSpent = { runs: cur.spent.runs + 1, tokens: (cur.spent.tokens ?? 0) + (opts?.tokens ?? 0), retryRuns: (cur.spent.retryRuns ?? 0) + (opts?.retry ? 1 : 0) }
   return updateCollabRun(id, { spent })
 }
 
@@ -160,15 +165,22 @@ export interface CollabTaskPatch {
   handoff?: CollabHandoff | null
   makerRunId?: string | null
   reviewerRunId?: string | null
+  meta?: CollabTaskMeta
+  provider?: ProviderId | null
+  model?: string | null
+  title?: string
+  scope?: string
+  acceptance?: string
 }
 export function updateTask(id: string, patch: CollabTaskPatch): CollabTask | null {
   const cur = getTask(id)
   if (!cur) return null
   const next = { ...cur, ...patch }
   getDb().prepare(
-    `UPDATE collab_tasks SET status = ?, attempts = ?, last_verdict = ?, handoff = ?, maker_run_id = ?, reviewer_run_id = ? WHERE id = ?`
+    `UPDATE collab_tasks SET status = ?, attempts = ?, last_verdict = ?, handoff = ?, maker_run_id = ?, reviewer_run_id = ?, meta = ?, provider = ?, model = ?, title = ?, scope = ?, acceptance = ? WHERE id = ?`
   ).run(next.status, next.attempts, next.lastVerdict ? JSON.stringify(next.lastVerdict) : null,
-        next.handoff ? JSON.stringify(next.handoff) : null, next.makerRunId, next.reviewerRunId, id)
+        next.handoff ? JSON.stringify(next.handoff) : null, next.makerRunId, next.reviewerRunId,
+        JSON.stringify(next.meta ?? {}), next.provider, next.model, next.title, next.scope, next.acceptance, id)
   return getTask(id)
 }
 

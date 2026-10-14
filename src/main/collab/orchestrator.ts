@@ -1,5 +1,6 @@
 import { BrowserWindow, type WebContents } from 'electron'
 import { join } from 'path'
+import { createHash } from 'crypto'
 import { mkdirSync, writeFileSync, appendFileSync, statSync, readdirSync, readFileSync } from 'fs'
 import { IPC } from '../../shared/ipc'
 import { startRun, cancelRun, runTimeoutMs } from '../agent/runner'
@@ -7,7 +8,8 @@ import { acquireLock, releaseLock } from '../agent/turns'
 import { getMessage } from '../conversations/messagesRepo'
 import { logInfo, logError } from '../util/logger'
 import { getDb } from '../database/db'
-import type { CollabRun, CollabTask, CollabTaskDraft, CollabStartInput, CollabVerdict, CollabHandoff, ProviderId } from '../../shared/types'
+import type { CollabRun, CollabTask, CollabTaskDraft, CollabStartInput, CollabVerdict, CollabHandoff, ProviderId, CollabRecoverAction, CollabRepairOption, CollabTaskMeta } from '../../shared/types'
+import { failSig, nextSameFails, parseRepair, STALL_AFTER } from '../../shared/collabRecovery'
 import {
   createCollabRun, getCollabRun, getCollabRunBare, updateCollabRun, bumpRuns,
   replaceTasks, getTask, updateTask, listCollabRuns
@@ -128,7 +130,10 @@ function writePlanMd(run: CollabRun, tasks: CollabTask[]): void {
         return [
           `## ${i + 1}. ${t.title} — ${t.kind}${deps}`,
           t.scope ? `- **Scope:** ${t.scope}` : '',
-          t.acceptance ? `- **Acceptance:** ${t.acceptance}` : ''
+          t.acceptance ? `- **Acceptance:** ${t.acceptance}` : '',
+          t.provider ? `- **Agent:** ${providerLabelOf(t.provider)}` : '',
+          t.status === 'skipped' ? `- **Skipped**${t.meta.skipNote ? `: ${t.meta.skipNote}` : ''}` : '',
+          ...(t.meta.history ?? []).map((h) => `- **Changed:** ${h}`)
         ].filter(Boolean).join('\n')
       })
     ]
@@ -308,6 +313,7 @@ export function resumeCollab(sender: WebContents, runId: string, opts?: { raiseB
   const run = getCollabRunBare(runId); if (!run) return null
   senderFor.set(runId, sender)
   if (run.status !== 'needs_attention') return run
+  if (run.repair) updateCollabRun(runId, { repair: null })
   // Resume retries what failed (D-064): a crashed run (bad model, CLI error) or a task
   // that failed review goes back in the queue with a fresh retry budget. The last
   // reviewer findings are kept, so the Maker's retry prompt still carries them.
@@ -351,7 +357,7 @@ function step(runId: string): void {
     // Everything left waits on work that did not pass (explicit dependency, or a
     // review waiting on earlier tasks). Resume retries the failed tasks.
     const failed = tasks.filter((t) => t.status === 'failed').map((t) => `“${t.title}”`)
-    pause(runId, `Waiting on ${failed.length ? failed.join(', ') : 'a task that did not pass'}. Resume retries ${failed.length === 1 ? 'it' : 'them'}.`)
+    pause(runId, `Waiting on ${failed.length ? failed.join(', ') : 'a task that did not pass'}. Fix it from the task below, or Resume to retry ${failed.length === 1 ? 'it' : 'them'}.`)
     return
   }
   if (runnable.kind === 'review') runReviewer(runId, runnable.id, false)
@@ -377,12 +383,14 @@ function runMaker(runId: string, taskId: string): void {
     task.acceptance ? `**Acceptance criteria:** ${task.acceptance}` : '',
     run.outputDir && !textOnly ? `**Deliverables folder:** \`${run.outputDir}/\` — put what you produce there (create it if missing), never under \`.workbench/\`.` : '',
     textOnly ? inlineInputs(run, task) : completedContext(run),
+    planChangesContext(run, task.id),
+    task.meta.note ? `\n**Note from the user — follow it, it overrides earlier instructions:** ${task.meta.note}` : '',
     retry ? `\nThis is a retry. The reviewer's findings to address:\n${(task.lastVerdict?.findings ?? []).map((f, i) => `${i + 1}. ${f}`).join('\n')}` : '',
     textOnly ? textMakerContract(outputs.filter((p) => !p.endsWith('/'))) : makerContract(relRunDir(run))
   ].filter(Boolean).join('\n')
   // D-064: the run model only applies to the run's own provider (Codex was handed "opus").
   const makerModel = resolveTaskModel(run.providerId, run.model, makerProvider, makerProvider === task.provider ? task.model : null, modelLists(), parseDisabledModels(getSetting(DISABLED_MODELS_SETTING)))
-  bumpRuns(runId)
+  bumpRuns(runId, { retry })
   const rid = startRun(sender, {
     conversationId: run.conversationId, providerId: makerProvider, model: makerModel || undefined, prompt,
     cwd: run.projectCwd, timeoutMs: runTimeoutMs() * 3, permissionMode: run.permissionMode, skillIds: [SK_PROTOCOL, SK_MAKER], noConversationContext: true,
@@ -401,7 +409,27 @@ function onMakerDone(runId: string, taskId: string, messageId: string | null, er
     const h = extractJson<CollabHandoff>(reply)
     if (h) updateTask(taskId, { handoff: { status: h.status || 'done', filesChanged: Array.isArray(h.filesChanged) ? h.filesChanged : [], verify: h.verify || '' } })
   }
-  if (deliverablesGate(run, taskId, reply)) runReviewer(runId, taskId, false)
+  if (!deliverablesGate(run, taskId, reply)) return
+  // D-111: a Maker that says it is blocked won't be helped by a review or a plain retry —
+  // go straight to the Planner (no Reviewer run spent).
+  const t = getTask(taskId)
+  if (t?.kind === 'work' && t.handoff?.status?.toLowerCase() === 'blocked') {
+    const why = t.handoff.verify || 'no reason given'
+    appendStatus(run, `## ${today()} · App · ${t.title} — the Maker reported it is blocked: ${why}\n\n---`)
+    onTaskFailed(runId, taskId, { verdict: 'FAIL', findings: [`The Maker reported it is blocked: ${why}`] }, `“${t.title}” is blocked.`, { stuck: 'the Maker reported it is blocked' })
+    return
+  }
+  runReviewer(runId, taskId, false)
+}
+
+// D-111: fingerprint of a task's output files, to tell "nothing changed since the last failure".
+function outputsHash(run: CollabRun, task: CollabTask): string {
+  const h = createHash('sha1')
+  for (const p of scopePaths(task.scope).outputs) {
+    h.update(p + '\0')
+    try { const abs = ensureInside(run.projectCwd, p); const st = statSync(abs); h.update(st.isDirectory() ? readdirSync(abs).sort().join('|') : readFileSync(abs)) } catch { h.update('∅') }
+  }
+  return h.digest('hex').slice(0, 16)
 }
 
 // D-108: before a Reviewer run, check the task's output files exist. A text-only Maker's
@@ -432,14 +460,204 @@ function deliverablesGate(run: CollabRun, taskId: string, reply: string): boolea
   }
   if (!missing.length) return true
   const findings = missing.map((p) => `Deliverable missing: \`${p}\` ${p.endsWith('/') ? 'has no files' : 'was not written'} (checked by the app before review). Write it${canWriteFiles(maker) ? '' : ` — reply with it in a "=== FILE: ${p} ===" block`}.`)
-  updateTask(taskId, { lastVerdict: { verdict: 'FAIL', findings } })
   appendStatus(run, `## ${today()} · App check · task ${task.seq + 1} — ${task.title} · FAIL\n\n${findings.map((f, i) => `${i + 1}. ${f}`).join('\n')}\n\n---`)
-  const fresh = getCollabRunBare(run.id)!
-  if (task.attempts <= fresh.budget.maxRetriesPerTask) { runMaker(run.id, taskId); return false }
-  updateTask(taskId, { status: 'failed' })
-  const other = providerLabelOf(run.providerId)
-  pause(run.id, `${who} didn't produce ${missing.map((p) => `“${p}”`).join(', ')} after ${task.attempts} tries on “${task.title}”. ${maker !== run.providerId ? `To give it to ${other}, turn ${who} off in Settings › Agents, then Resume.` : 'Resume retries it; Stop ends the run.'}`)
+  onTaskFailed(run.id, taskId, { verdict: 'FAIL', findings }, `${who} didn't produce ${missing.map((p) => `“${p}”`).join(', ')} after ${task.attempts} tries on “${task.title}”.`)
   return false
+}
+
+// ── failure handling, stall detection, recovery (D-109) ─────────────────────
+// Every FAIL (app check or Reviewer) comes here. A work task with retries left goes
+// back to its Maker — unless it failed the same way again, which means retrying
+// unchanged won't help: then the Planner is asked for a repair. Otherwise the run
+// pauses and the card offers: retry with a note, reassign, skip, or ask the Planner.
+function onTaskFailed(runId: string, taskId: string, verdict: CollabVerdict, pausedWhy: string, opts?: { stuck?: string }): void {
+  const task = getTask(taskId); if (!task) return
+  const run0 = getCollabRunBare(runId); if (!run0) return
+  // "Stuck" (D-111): the Maker says it's blocked, or the same failure came back (findings
+  // compared by overlap, not exact words), or the output files didn't change since the
+  // last failure. Retrying unchanged won't help any of these.
+  const sig = failSig(verdict.findings)
+  const sameFails = nextSameFails(task.meta.sig, task.meta.sameFails, sig)
+  const outHash = task.kind === 'work' ? outputsHash(run0, task) : undefined
+  const unchanged = !!outHash && !!task.meta.outHash && outHash === task.meta.outHash
+  updateTask(taskId, { lastVerdict: verdict, meta: { ...task.meta, sig, sameFails, outHash } })
+  const stuck = task.kind === 'work'
+    ? (opts?.stuck ?? (sameFails >= STALL_AFTER ? `failed the same way ${sameFails} times in a row` : unchanged ? 'failed again with its files unchanged' : null))
+    : null
+  if (stuck) {
+    updateTask(taskId, { status: 'failed' })
+    appendStatus(run0, `## ${today()} · App · ${task.title} — stuck: ${stuck}. Asking the Planner for a fix instead of retrying unchanged.\n\n---`)
+    startRepair(runId, taskId, { auto: true })
+    return
+  }
+  const fresh = getCollabRunBare(runId)!
+  if (task.kind === 'work' && task.attempts <= fresh.budget.maxRetriesPerTask) { runMaker(runId, taskId); return }
+  updateTask(taskId, { status: 'failed' })
+  pause(runId, `${pausedWhy} Fix it from the task below — retry with a note, give it to another agent, skip it, or ask the Planner — or Stop the run.`)
+}
+
+const TASK_NUM = (t: CollabTask) => `T${t.seq + 1}`
+// What changed in the plan since it was confirmed (skips, reassignments, rewrites),
+// so Makers and Reviewers work from the current plan, not the original one.
+function planChangesContext(run: CollabRun, forTaskId: string | null): string {
+  const tasks = run.tasks ?? []
+  const lines: string[] = []
+  for (const t of tasks) {
+    if (t.status === 'skipped') lines.push(`- ${TASK_NUM(t)} “${t.title}” was SKIPPED${t.meta.skipNote ? `: ${t.meta.skipNote}` : ''}. Do not expect its output; work without it.`)
+    else if (t.meta.history?.length && (forTaskId === null || t.id === forTaskId || tasks.find((x) => x.id === forTaskId)?.dependsOn.includes(t.id))) {
+      lines.push(...t.meta.history.map((h) => `- ${TASK_NUM(t)} “${t.title}”: ${h}`))
+    }
+  }
+  return lines.length ? ['## Plan changes since it was confirmed (decided by the user or the Planner)', ...lines,
+    'Judge the work against the plan as changed — not against requirements that were dropped here.'].join('\n') : ''
+}
+
+function addHistory(meta: CollabTaskMeta, line: string): CollabTaskMeta {
+  return { ...meta, history: [...(meta.history ?? []), `${today()} · ${line}`].slice(-6) }
+}
+
+function resumeAfterChange(runId: string): void {
+  const run = getCollabRun(runId); if (!run) return
+  writePlanMd(run, run.tasks ?? [])
+  updateCollabRun(runId, { status: 'running', reason: '', repair: null })
+  emitChanged()
+  step(runId)
+}
+
+/** The user's fix for a failed task on a paused run (card buttons). */
+export function recoverTask(sender: WebContents, runId: string, taskId: string, action: CollabRecoverAction): CollabRun | null {
+  const run = getCollabRun(runId); if (!run) return null
+  senderFor.set(runId, sender)
+  if (run.status !== 'needs_attention') return run
+  const task = getTask(taskId); if (!task || task.runId !== runId) return run
+  const note = action.note?.trim() || undefined
+  if (action.type === 'repair') { startRepair(runId, taskId, { auto: false, note }); return getCollabRun(runId) }
+  if (action.type === 'skip') {
+    updateTask(taskId, { status: 'skipped', meta: addHistory({ ...task.meta, skipNote: note }, `skipped by the user${note ? ` — ${note}` : ''}`) })
+    appendStatus(run, `## ${today()} · You · ${task.title} — skipped${note ? `: ${note}` : ''}\n\n---`)
+  } else if (action.type === 'reassign') {
+    if (!enabledProviderIds(getSetting(DISABLED_AGENTS_SETTING)).includes(action.provider)) return run
+    const who = providerLabel(action.provider, action.provider)
+    updateTask(taskId, { status: 'pending', attempts: 0, provider: action.provider, model: null,
+      meta: addHistory({ ...task.meta, note, sig: undefined, sameFails: 0, outHash: undefined }, `reassigned to ${who} by you`) })
+    appendStatus(run, `## ${today()} · You · ${task.title} — given to ${who}${note ? `, with a note: ${note}` : ''}\n\n---`)
+  } else {
+    // retry — with a note it counts as new information, so the stall count restarts
+    updateTask(taskId, { status: 'pending', attempts: 0, meta: note ? { ...task.meta, note, sig: undefined, sameFails: 0, outHash: undefined } : task.meta })
+    appendStatus(run, `## ${today()} · You · ${task.title} — retry${note ? ` with a note: ${note}` : ''}\n\n---`)
+  }
+  resumeAfterChange(runId)
+  return getCollabRun(runId)
+}
+
+// ── Planner repair ────────────────────────────────────────────────────────────
+function repairContract(): string {
+  return [
+    '', '---',
+    'Do not edit any files. End your reply with ONLY a fenced ```json block, no prose after it:',
+    '```json',
+    '{ "summary": "one sentence: why it keeps failing", "recommended": 0, "options": [',
+    '  { "label": "short button text, e.g. Give T4 to Codex", "action": "reassign", "provider": "codex", "changesGoal": false, "note": "instruction for the Maker" },',
+    '  { "label": "…", "action": "rewrite", "title": "…", "scope": "…", "acceptance": "…", "provider": "optional", "changesGoal": false, "note": "…" },',
+    '  { "label": "…", "action": "retry", "changesGoal": false, "note": "what to do differently", "userStep": "optional: what the user must do first" },',
+    '  { "label": "…", "action": "skip", "changesGoal": true, "note": "what later tasks should do without it" }',
+    '] }',
+    '```',
+    'Options can only change THIS task: who does it (reassign), its title/scope/acceptance (rewrite), an instruction for its Maker (retry + note), or skipping it. They cannot create files, add tasks or change other tasks — Troupe has no way to do that. If the real fix needs the user to act outside Troupe first (add a missing file, sign in to an agent, install something), say so in "userStep" on a retry/reassign option (e.g. "userStep": "Add README.md to the project folder") — never write a label that promises Troupe will do it.',
+    'Keep it short — the user reads this on a small card. "summary": ONE sentence, at most 25 words, plain language. Give 1–3 options; usually one clear best fix is enough, put it first or set "recommended". Labels at most 6 words ("Give T1 to Claude"). "userStep": one short sentence. Do not repeat the same fix with different agents — offer the single best agent. Prefer fixes that keep the goal intact: a different agent that can do the task (see abilities), clearer scope/acceptance, or a concrete instruction. Never offer to retry unchanged.',
+    '"changesGoal": true ONLY when what gets delivered changes (different content, a dropped output, weaker acceptance). Giving the task to another agent is NOT a goal change, even if the user named the agent.'
+  ].join('\n')
+}
+
+function startRepair(runId: string, taskId: string, opts: { auto: boolean; note?: string }): void {
+  const run = getCollabRun(runId); if (!run) return
+  const task = getTask(taskId); if (!task) return
+  if (!lockFor(run)) { pause(runId, 'This conversation is busy with another turn. Resume when it finishes.'); return }
+  const sender = wc(runId); if (!sender) { unlockFor(run); pause(runId, 'No app window to run in.'); return }
+  if (run.spent.runs >= run.budget.maxRuns) { unlockFor(run); pause(runId, `Budget reached (${run.budget.maxRuns} agent runs) while “${task.title}” needs a fix. Raise the budget, or fix the task yourself below.`); return }
+  updateCollabRun(runId, { status: 'running', reason: `Asking the Planner how to fix “${task.title}”…`, repair: null })
+  emitChanged()
+  const tasks = run.tasks ?? []
+  const maker = makerProviderOf(run, task)
+  const dependents = tasks.filter((t) => t.dependsOn.includes(task.id)).map((t) => `${TASK_NUM(t)} “${t.title}”`)
+  const prompt = [
+    `You are the Planner for a Collab run, asked to REPAIR one task that keeps failing. Goal:`, '', run.goal, '',
+    `The plan is in \`${relRunDir(run)}/PLAN.md\`; recent history is at the end of \`${relRunDir(run)}/STATUS.md\` (read only the last entries).`,
+    '', '## Plan status',
+    ...tasks.map((t) => `- ${TASK_NUM(t)} “${t.title}” — ${t.status}${t.provider ? ` · ${t.provider}` : ''}`),
+    '', `## The failing task: ${TASK_NUM(task)} “${task.title}”`,
+    `- Agent: "${maker}" (${abilitiesOf(maker)})`,
+    task.scope ? `- Scope: ${task.scope}` : '',
+    task.acceptance ? `- Acceptance: ${task.acceptance}` : '',
+    `- Attempts: ${task.attempts}${task.meta.sameFails ? ` · same failure ${task.meta.sameFails} times in a row` : ''}`,
+    dependents.length ? `- Later tasks that need it: ${dependents.join(', ')}` : '- No later task depends on it directly.',
+    '', '## Latest findings', ...(task.lastVerdict?.findings ?? ['(none)']).map((f, i) => `${i + 1}. ${f}`),
+    opts.note ? `\n## The user says\n${opts.note}` : '',
+    '', agentsForPlanner(),
+    repairContract()
+  ].filter((l) => l !== '').join('\n')
+  bumpRuns(runId, { retry: true })
+  const rid = startRun(sender, {
+    conversationId: run.conversationId, providerId: run.providerId, prompt,
+    cwd: run.projectCwd, timeoutMs: runTimeoutMs() * 2, permissionMode: 'read', model: strongModel(run.providerId) || undefined,
+    skillIds: [SK_PROTOCOL, SK_PLANNER], noConversationContext: true,
+    parallelGroup: `collab:${runId}:planner`,
+    onDone: (mid, err) => onRepairDone(runId, taskId, mid, err, opts.auto)
+  })
+  activeRunId.set(runId, rid)
+}
+
+function onRepairDone(runId: string, taskId: string, messageId: string | null, err: string | undefined, auto: boolean): void {
+  const run = getCollabRunBare(runId); if (!run || run.status !== 'running') return
+  const task = getTask(taskId); if (!task) return
+  const enabled = enabledProviderIds(getSetting(DISABLED_AGENTS_SETTING))
+  const repair = err || !messageId ? null : parseRepair(extractJson<unknown>(getMessage(messageId)?.content ?? ''), taskId, (id) => enabled.includes(id as ProviderId))
+  if (!repair) {
+    pause(runId, `The Planner couldn't suggest a fix for “${task.title}”${err ? ` (${err})` : ''}. Fix it from the task below, or Stop the run.`)
+    return
+  }
+  appendStatus(run, `## ${today()} · Planner · repair for ${task.title}\n\n${repair.summary}\n\n${repair.options.map((o, i) => `${i + 1}. ${o.label}${o.changesGoal ? ' (changes the goal)' : ''}`).join('\n')}\n\n---`)
+  const best = repair.options[repair.recommended]
+  // Applied without asking only when it keeps the goal intact, and only once per task.
+  // Never when the user has to do something first (userStep).
+  if (auto && best && !best.changesGoal && !best.userStep && (task.meta.repairs ?? 0) < 1) {
+    applyRepairOption(runId, taskId, best, 'the Planner')
+    return
+  }
+  updateCollabRun(runId, { repair })
+  pause(runId, `“${task.title}” keeps failing the same way. Pick one of the Planner’s fixes, or fix it yourself from the task below.`)
+}
+
+function applyRepairOption(runId: string, taskId: string, o: CollabRepairOption, by: string): void {
+  const task = getTask(taskId); if (!task) return
+  const run = getCollabRunBare(runId); if (!run) return
+  const meta: CollabTaskMeta = { ...task.meta, repairs: (task.meta.repairs ?? 0) + (by === 'the Planner' ? 1 : 0), sig: undefined, sameFails: 0, outHash: undefined, note: o.note ?? task.meta.note }
+  if (o.action === 'skip') {
+    updateTask(taskId, { status: 'skipped', meta: addHistory({ ...meta, skipNote: o.note }, `skipped (${by}): ${o.label}`) })
+  } else if (o.action === 'reassign' && o.provider) {
+    updateTask(taskId, { status: 'pending', attempts: 0, provider: o.provider, model: null, meta: addHistory(meta, `${o.label} (${by})`) })
+  } else if (o.action === 'rewrite') {
+    updateTask(taskId, {
+      status: 'pending', attempts: 0, lastVerdict: null,
+      ...(o.title ? { title: o.title } : {}), ...(o.scope ? { scope: o.scope } : {}), ...(o.acceptance ? { acceptance: o.acceptance } : {}),
+      ...(o.provider ? { provider: o.provider, model: null } : {}),
+      meta: addHistory(meta, `rewritten (${by}): ${o.label}`)
+    })
+  } else {
+    updateTask(taskId, { status: 'pending', attempts: 0, meta: addHistory(meta, `retry with a new instruction (${by}): ${o.label}`) })
+  }
+  appendStatus(run, `## ${today()} · Plan change · ${task.title} — ${o.label} (${by})${o.userStep ? `\n\nDone by the user first: ${o.userStep}` : ''}\n\n---`)
+  resumeAfterChange(runId)
+}
+
+/** The user picked one of the Planner's repair options on the card. */
+export function applyRepair(sender: WebContents, runId: string, index: number): CollabRun | null {
+  const run = getCollabRun(runId); if (!run) return null
+  senderFor.set(runId, sender)
+  if (run.status !== 'needs_attention' || !run.repair) return run
+  const o = run.repair.options[index]; if (!o) return run
+  applyRepairOption(runId, run.repair.taskId, o, 'you')
+  return getCollabRun(runId)
 }
 
 function runReviewer(runId: string, taskId: string, _isFinal: boolean): void {
@@ -461,10 +679,11 @@ function runReviewer(runId: string, taskId: string, _isFinal: boolean): void {
       : `**Task:** ${task.title}`,
     !isWholeGoal && task.acceptance ? `**Acceptance criteria:** ${task.acceptance}` : '',
     isWholeGoal ? completedContext(run) : handoffLine,
+    planChangesContext(run, isWholeGoal ? null : task.id),
     'Open the files named above and verify against the acceptance criteria. Do not read the full status log.',
     reviewerContract(relRunDir(run))
   ].filter(Boolean).join('\n')
-  bumpRuns(runId)
+  bumpRuns(runId, { retry: task.kind === 'work' && task.attempts > 1 })
   const rid = startRun(sender, {
     conversationId: run.conversationId, providerId: run.providerId, prompt,
     // Read-only on files, but allowed to search and fetch the web so it can verify
@@ -499,17 +718,13 @@ function onReviewerDone(runId: string, taskId: string, messageId: string | null,
     }
   }
   if (verdict.verdict === 'PASS') {
-    updateTask(taskId, { status: 'passed' })
+    updateTask(taskId, { status: 'passed', meta: { ...task.meta, note: undefined, sig: undefined, sameFails: 0 } })
     emitChanged()
     step(runId)
     return
   }
-  // FAIL — retry the Maker if this is a work task with retries left.
-  const fresh = getCollabRunBare(runId)!
-  const canRetry = task.kind === 'work' && task.attempts <= fresh.budget.maxRetriesPerTask
-  if (canRetry) { runMaker(runId, taskId); return }
-  updateTask(taskId, { status: 'failed' })
-  pause(runId, `Task failed review after retries: “${task.title}”. Review the findings; Resume retries it with them, Stop ends the run.`)
+  // FAIL — retry, ask the Planner for a repair, or pause for the user (D-109).
+  onTaskFailed(runId, taskId, verdict, task.kind === 'review' ? `The final review didn't pass.` : `“${task.title}” failed review after retries.`)
 }
 
 function pause(runId: string, reason: string): void {

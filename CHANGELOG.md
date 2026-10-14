@@ -18,6 +18,20 @@ Each version here matches a packaged build — the dmg is named
 > - Bumping rules: PATCH = fixes/small tweaks, MINOR = new features (backward-compatible),
 >   MAJOR = breaking changes or a data format users can't roll back from.
 
+## [2.6.0] - 2026-10-14
+
+### Added
+- Fix a stuck Collab task without starting over. When a run pauses, one panel shows what's stuck and why, a recommended fix you apply with one click, and the alternatives: retry with instructions to the agent, use another agent, or skip the task.
+- When a Collab task keeps failing for the same reason, Troupe stops retrying it and asks the planner for a fix. Fixes that keep your goal intact are applied automatically; anything that changes the goal, or needs you to do something first (like adding a missing file), waits for you.
+- The Collab card shows how many agent runs went to retries.
+
+### Changed
+- An agent that reports it's blocked now goes straight to the planner instead of another review.
+- Collab tasks that skipped or changed hands are noted in the plan and the status log, and later tasks and the final review are told about it.
+
+### Fixed
+- Review findings in the Collab status log were numbered twice ("1. 1.").
+
 ## [2.5.0] - 2026-10-14
 
 ### Added

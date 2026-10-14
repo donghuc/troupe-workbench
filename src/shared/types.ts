@@ -265,7 +265,7 @@ export interface CollabBudget {
   maxRetriesPerTask: number
   maxTokens?: number
 }
-export interface CollabSpent { runs: number; tokens?: number }
+export interface CollabSpent { runs: number; tokens?: number; retryRuns?: number /* runs spent re-doing a task that failed */ }
 export interface CollabVerdict { verdict: 'PASS' | 'FAIL'; findings: string[] }
 export interface CollabHandoff { status: string; filesChanged: string[]; verify: string }
 
@@ -286,7 +286,36 @@ export interface CollabTask {
   handoff: CollabHandoff | null
   makerRunId: string | null
   reviewerRunId: string | null
+  meta: CollabTaskMeta
 }
+
+// D-109: per-task recovery state.
+export interface CollabTaskMeta {
+  note?: string          // the user's (or a repair's) instruction for the next Maker attempt
+  sig?: string           // signature of the last failure, to spot the same failure repeating
+  outHash?: string       // hash of the task's output files at the last failure (unchanged → same failure)
+  sameFails?: number     // how many failures in a row had that signature
+  repairs?: number       // automatic Planner repairs applied to this task
+  skipNote?: string      // why it was skipped, for tasks that build on it
+  history?: string[]     // plan changes made to this task (reassign, rewrite, skip…)
+}
+export type CollabRecoverAction =
+  | { type: 'retry'; note?: string }
+  | { type: 'reassign'; provider: ProviderId; note?: string }
+  | { type: 'skip'; note?: string }
+  | { type: 'repair'; note?: string }
+export interface CollabRepairOption {
+  label: string
+  action: 'retry' | 'reassign' | 'rewrite' | 'skip'
+  changesGoal: boolean
+  provider?: ProviderId
+  title?: string
+  scope?: string
+  acceptance?: string
+  note?: string
+  userStep?: string   // something the user must do first, outside Troupe (e.g. add README.md)
+}
+export interface CollabRepair { taskId: string; summary: string; options: CollabRepairOption[]; recommended: number }
 
 export interface CollabRun {
   id: string
@@ -301,6 +330,7 @@ export interface CollabRun {
   budget: CollabBudget
   spent: CollabSpent
   reason: string           // needs_attention / failed / stopped reason
+  repair: CollabRepair | null  // a Planner fix waiting for the user's choice (D-109)
   summary: string
   createdAt: number
   updatedAt: number
