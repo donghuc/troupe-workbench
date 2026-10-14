@@ -1,12 +1,18 @@
 import type { Card, CardKind } from '../../../../shared/imageCanvas'
 
+import { dim } from '../../styles/tokens'
+
 // Fixed card geometry, so ports and edges are computed, never measured (D-088).
-// The CSS in app.css (.img-card-head height, .img-slot height, .img-slots padding)
-// must match these numbers.
-const HEAD_H = 40
-const SLOTS_PAD = 8
-const SLOT_H = 28
-export const CARD_W: Record<CardKind, number> = { prompt: 280, media: 300, processor: 300, output: 340 }
+// One source: the Figma tokens (tokens.ts here, the same names as CSS vars in app.css).
+const HEAD_H = dim['layout/img-card-head-height']
+const SLOTS_PAD = dim['space/2']
+const SLOT_H = dim['layout/img-slot-height']
+export const CARD_W: Record<CardKind, number> = {
+  prompt: dim['layout/img-card-prompt-width'],
+  media: dim['layout/img-card-media-width'],
+  processor: dim['layout/img-card-processor-width'],
+  output: dim['layout/img-card-output-width']
+}
 
 export interface Pt { x: number; y: number }
 

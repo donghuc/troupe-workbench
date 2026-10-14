@@ -27,6 +27,7 @@ import { api } from '../api'
 import type { ProviderInfo, ProviderId, Conversation, Message, CollabRun } from '../../../shared/types'
 import type { ModeId } from '../../../shared/modes'
 import { stampLine } from '../../../shared/contextBudget'
+import { Button } from './ui/Button'
 
 // What the project page hands a brand-new chat to send as its first message.
 export interface PendingSend {
@@ -334,22 +335,22 @@ export default function ConversationView({ conversation, providers, pendingSend,
             {(() => {
               const renderCard = (m: Message) => (
                 <div key={m.id} className="synthesis-card" data-quote-label="the comparison">
-                  <div className="synthesis-head"><Icon name="flash" size={12} /> Compare · {providerName(providers, (m.metadata?.synthesisAgent as ProviderId | undefined) ?? m.provider)}</div>
+                  <div className="synthesis-head"><Icon name="flash" size="xs" /> Compare · {providerName(providers, (m.metadata?.synthesisAgent as ProviderId | undefined) ?? m.provider)}</div>
                   <div className="msg-body markdown-body synthesis-body"><MessageMarkdown onOpenArtifact={openArtifactFn} onOpenMedia={openMedia} root={cwd}>{m.content}</MessageMarkdown></div>
                   <div className="synthesis-foot">
                     <span className="msg-tokens" title={usageBreakdown(m) ?? undefined}>{usageMain(m)}</span>
-                    <button type="button" className="link-btn synthesis-save" onClick={() => setSaveOutcomeFor(m.id)}>Save outcome</button>
+                    <Button type="button" variant="link" className="synthesis-save" onClick={() => setSaveOutcomeFor(m.id)}>Save outcome</Button>
                   </div>
                 </div>
               )
               const renderCollapsed = (m: Message) => (
                 <button key={m.id} type="button" className="reply-collapsed" onClick={() => toggleExpanded(m.id)} title="Show the full reply">
-                  <ProviderAvatar id={m.provider} size={18} />
+                  <ProviderAvatar id={m.provider} size="sm" />
                   <span className="reply-collapsed-name">{providerName(providers, m.provider)}</span>
                   {typeof m.metadata?.modelUsed === 'string' && <span className="reply-collapsed-model">{m.metadata.modelUsed as string}</span>}
                   <span className="reply-collapsed-line truncate">{firstLine(m.content)}</span>
                   <span className="reply-collapsed-tokens">{usageMain(m).split(' · ').slice(0, 1)[0]}</span>
-                  <Icon name="chevron-down" size={12} />
+                  <Icon name="chevron-down" size="xs" />
                 </button>
               )
               const renderRow = (row: Message | Message[]) => {
@@ -359,7 +360,7 @@ export default function ConversationView({ conversation, providers, pendingSend,
                 if (!card) {
                   return (
                     <div key={row[0].id} className="parallel-stack">
-                      <div className="parallel-header"><Icon name="flash" size={12} /> {replies.length} agents · answered independently</div>
+                      <div className="parallel-header"><Icon name="flash" size="xs" /> {replies.length} agents · answered independently</div>
                       {replies.map((m) => renderMessage(m))}
                     </div>
                   )
@@ -373,7 +374,7 @@ export default function ConversationView({ conversation, providers, pendingSend,
                       <div className="replies-folded-head">{replies.length} replies · answered independently · click one to read it</div>
                       {replies.map((m) => !expanded.has(m.id) ? renderCollapsed(m) : (
                         <div key={m.id} className="reply-expanded">
-                          <button type="button" className="reply-collapse-btn link-btn" onClick={() => toggleExpanded(m.id)}>Collapse</button>
+                          <Button type="button" variant="link" className="reply-collapse-btn" onClick={() => toggleExpanded(m.id)}>Collapse</Button>
                           {renderMessage(m)}
                         </div>
                       ))}
@@ -394,13 +395,13 @@ export default function ConversationView({ conversation, providers, pendingSend,
                 const cut = i === -1 ? rows.length : i
                 return <>{rows.slice(0, cut).map(renderRow)}<CollabCard key="collab-card" run={collabRun} providers={providers} onOpenFile={cwd ? (rel) => setOpenArtifact(rel) : undefined} />{rows.slice(cut).map(renderRow)}</>
               }
-              return <>{rows.map(renderRow)}{canCompare && <div className="compare-row"><button className="btn btn-sm" onClick={() => compareReplies(conversation.id).catch(failed('Compare replies'))}><Icon name="flash" size={12} /> Compare replies</button></div>}</>
+              return <>{rows.map(renderRow)}{canCompare && <div className="compare-row"><Button size="sm" onClick={() => compareReplies(conversation.id).catch(failed('Compare replies'))}><Icon name="flash" size="xs" /> Compare replies</Button></div>}</>
             })()}
             {shownLanes.length > 0 && (
               shownParallel
                 ? (
                   <div className="parallel-stack">
-                    <div className="parallel-header"><Icon name="flash" size={12} /> {shownLanes.length} agents · {run.phase === 'compare' ? <><span className="activity-spinner spinner-xs" /> comparing the answers…</> : shownLanes.every((l) => l.done) ? 'answered independently' : 'answering independently…'}</div>
+                    <div className="parallel-header"><Icon name="flash" size="xs" /> {shownLanes.length} agents · {run.phase === 'compare' ? <><span className="activity-spinner spinner-xs" /> comparing the answers…</> : shownLanes.every((l) => l.done) ? 'answered independently' : 'answering independently…'}</div>
                     {shownLanes.map((lane) => <div key={lane.provider} className="parallel-item">{renderLane(lane)}</div>)}
                   </div>
                 )
@@ -412,7 +413,7 @@ export default function ConversationView({ conversation, providers, pendingSend,
           </div>
         </div>
         <div className="conv-composer">
-          {!atBottom && <button className="scroll-latest" onClick={scrollToBottom} title="Scroll to latest"><Icon name="chevron-down" size={18} /></button>}
+          {!atBottom && <button className="scroll-latest" onClick={scrollToBottom} title="Scroll to latest"><Icon name="chevron-down" size="nav" /></button>}
           <div className="conv-composer-inner">
             {compressing && <div className="compressing-note"><span className="activity-spinner" /> Compressing conversation…</div>}
             {memSaved && <div className="mem-saved-note">Saved to project memory</div>}
@@ -436,7 +437,7 @@ export default function ConversationView({ conversation, providers, pendingSend,
               onPermissionModeChange={(m) => { api.conversations.setPermissionMode(conversation.id, m).catch(failed('Remember permission mode')) }}
               draftKey={conversation.id}
             />
-            <button className="inspect-link link-btn" onClick={() => setShowInspect(true)}>Inspect context</button>
+            <Button variant="link" className="inspect-link" onClick={() => setShowInspect(true)}>Inspect context</Button>
           </div>
         </div>
       </div>

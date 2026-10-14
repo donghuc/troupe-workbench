@@ -1,8 +1,10 @@
+import { Badge } from './ui/Badge'
 import { useEffect, useState } from 'react'
 import Modal from './Modal'
 import { api } from '../api'
 import type { ProviderDescriptor } from '../../../shared/agent'
 import ProviderAvatar from './ProviderAvatar'
+import { Button } from './ui/Button'
 
 export default function ProvidersModal({ onClose }: { onClose: () => void }) {
   const [providers, setProviders] = useState<ProviderDescriptor[] | null>(null)
@@ -10,19 +12,19 @@ export default function ProvidersModal({ onClose }: { onClose: () => void }) {
   useEffect(() => { api.providers.list().then(setProviders) }, [])
 
   return (
-    <Modal title="Providers" onClose={onClose} footer={<button className="btn" onClick={onClose}>Close</button>}>
+    <Modal title="Providers" onClose={onClose} footer={<Button onClick={onClose}>Close</Button>}>
       {!providers && <p className="field-hint">Detecting…</p>}
       {providers?.map((p) => (
         <div key={p.id} className="provider-row">
           <div className="provider-row-head">
-            <span className="provider-name"><ProviderAvatar id={p.id} size={20} /> {p.name}</span>
-            <span className={`provider-badge ${p.availability.installed ? 'ok' : 'bad'}`}>
+            <span className="provider-name"><ProviderAvatar id={p.id} size="md" /> {p.name}</span>
+            <Badge appearance="soft" tone={p.availability.installed ? 'success' : 'danger'}>
               {p.availability.installed ? '✓ Installed' : '✗ Not found'}
-            </span>
+            </Badge>
             {p.availability.installed && (
-              <span className={`provider-badge ${p.availability.authenticated ? 'ok' : 'bad'}`}>
+              <Badge appearance="soft" tone={p.availability.authenticated ? 'success' : 'danger'}>
                 {p.availability.authenticated ? '✓ Signed in' : '✗ Signed out'}
-              </span>
+              </Badge>
             )}
           </div>
           {p.availability.detail && <div className="provider-detail">{p.availability.detail}</div>}

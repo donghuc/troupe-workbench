@@ -1,6 +1,7 @@
 import { useEffect, useState, type DragEvent } from 'react'
 import Icon, { type IconName } from '../Icon'
 import { CARD_LABEL, type CardKind } from '../../../../shared/imageCanvas'
+import { IconButton } from '../ui/Button'
 
 // The "Add card" panel pinned to the canvas's top-left (Hien, 2026-10-12): moves card
 // creation out of the header, which is kept free for canvas tabs. Styled as a card itself.
@@ -30,9 +31,9 @@ export default function CardPalette({ onAdd }: { onAdd: (kind: CardKind) => void
       <div className="img-card-head img-palette-head">
         <span className="img-kind">Add card</span>
         <span className="img-card-head-extra" />
-        <button className="icon-btn img-card-x" title={collapsed ? 'Show cards' : 'Hide cards'} aria-expanded={!collapsed} onClick={() => setCollapsed((v) => !v)}>
-          <Icon name="chevron-down" size={14} className={collapsed ? 'rot-90' : ''} />
-        </button>
+        <IconButton className="img-card-x" title={collapsed ? 'Show cards' : 'Hide cards'} aria-expanded={!collapsed} onClick={() => setCollapsed((v) => !v)}>
+          <Icon name="chevron-down" size="sm" className={collapsed ? 'rot-90' : ''} />
+        </IconButton>
       </div>
       {!collapsed && (
         <div className="img-palette-grid">
@@ -41,7 +42,7 @@ export default function CardPalette({ onAdd }: { onAdd: (kind: CardKind) => void
               title={`${hint} — click or press ${KEY_OF[kind]} to add, or drag onto the canvas`}
               onDragStart={(e) => onDragStart(e, kind)} onClick={() => onAdd(kind)}>
               <kbd className="img-palette-key">{KEY_OF[kind]}</kbd>
-              <Icon name={icon} size={18} />
+              <Icon name={icon} size="nav" />
               <span>{CARD_LABEL[kind]}</span>
             </button>
           ))}

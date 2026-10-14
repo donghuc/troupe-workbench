@@ -4,6 +4,7 @@ import Icon from './Icon'
 import { api } from '../api'
 import type { McpAddInput, McpKeyVal, McpScope } from '../../../shared/types'
 import { notify } from '../notices'
+import { Button, IconButton } from './ui/Button'
 
 interface Props {
   cwd?: string
@@ -56,22 +57,22 @@ export default function McpAddModal({ cwd, globalOnly, onClose, onAdded }: Props
   return (
     <Modal title="Add MCP server" onClose={onClose} footer={
       <>
-        <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
-        <button className="btn btn-primary" onClick={submit} disabled={!canSubmit}>{busy ? <><span className="activity-spinner spinner-xs" />Adding…</> : 'Add server'}</button>
+        <Button onClick={onClose} disabled={busy}>Cancel</Button>
+        <Button variant="primary" onClick={submit} disabled={!canSubmit}>{busy ? <><span className="activity-spinner spinner-xs" />Adding…</> : 'Add server'}</Button>
       </>
     }>
       <label className="field-label">Quick add</label>
       <div className="mcp-presets">
-        <button className="btn btn-sm" onClick={() => preset('playwright', 'npx', '-y @playwright/mcp@latest')}>🌐 Browser (Playwright)</button>
-        <button className="btn btn-sm" onClick={() => preset('chrome-devtools', 'npx', '-y chrome-devtools-mcp@latest')}>🌐 Browser (Chrome DevTools)</button>
-        <button className="btn btn-sm" onClick={() => preset('browser-cdp', 'npx', '-y @playwright/mcp@latest --cdp-endpoint http://127.0.0.1:9222')} title="Reuses your logged-in Chrome. Start Chrome with --remote-debugging-port=9222 first.">🌐 Browser (my Chrome · CDP 9222)</button>
+        <Button size="sm" onClick={() => preset('playwright', 'npx', '-y @playwright/mcp@latest')}>🌐 Browser (Playwright)</Button>
+        <Button size="sm" onClick={() => preset('chrome-devtools', 'npx', '-y chrome-devtools-mcp@latest')}>🌐 Browser (Chrome DevTools)</Button>
+        <Button size="sm" onClick={() => preset('browser-cdp', 'npx', '-y @playwright/mcp@latest --cdp-endpoint http://127.0.0.1:9222')} title="Reuses your logged-in Chrome. Start Chrome with --remote-debugging-port=9222 first.">🌐 Browser (my Chrome · CDP 9222)</Button>
       </div>
 
       <label className="field-label">Name</label>
       <input className="field-input" value={name} placeholder="e.g. sequential-thinking" onChange={(e) => setName(e.target.value)} />
       {badName && (
         <div className="field-hint">
-          No spaces — agents use this as an identifier. <button type="button" className="link-btn" onClick={() => setName(suggested)}>Use “{suggested}”</button>
+          No spaces — agents use this as an identifier. <Button type="button" variant="link" onClick={() => setName(suggested)}>Use “{suggested}”</Button>
         </div>
       )}
 
@@ -98,10 +99,10 @@ export default function McpAddModal({ cwd, globalOnly, onClose, onAdded }: Props
         <div key={i} className="kv-row">
           <input className="field-input" value={p.key} placeholder={transport === 'http' ? 'Authorization' : 'API_KEY'} onChange={(e) => setPair(i, { key: e.target.value })} />
           <input className="field-input" value={p.value} placeholder={transport === 'http' ? 'Bearer …' : 'value'} onChange={(e) => setPair(i, { value: e.target.value })} />
-          <button className="icon-btn" title="Remove" onClick={() => removePair(i)}><Icon name="close" size={14} /></button>
+          <IconButton title="Remove" onClick={() => removePair(i)}><Icon name="close" size="sm" /></IconButton>
         </div>
       ))}
-      <button className="link-btn" onClick={addPair}>+ Add {transport === 'http' ? 'header' : 'variable'}</button>
+      <Button variant="link" onClick={addPair}>+ Add {transport === 'http' ? 'header' : 'variable'}</Button>
 
       {!globalOnly && <><label className="field-label">Scope</label>
       <select className="field-input" value={scope} onChange={(e) => setScope(e.target.value as McpScope)}>

@@ -1,14 +1,18 @@
 {
   "name": "ai-workbench",
-  "version": "2.4.1",
+  "version": "2.5.0",
   "description": "Local-first workspace for multiple AI agent runtimes",
   "author": "Hien Do",
   "license": "Apache-2.0",
-  "repository": { "type": "git", "url": "https://github.com/donghuc/troupe-workbench.git" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/donghuc/troupe-workbench.git"
+  },
   "homepage": "https://github.com/donghuc/troupe-workbench#readme",
   "main": "./out/main/index.js",
   "private": true,
   "scripts": {
+    "tokens": "node scripts/build-tokens.mjs",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json",

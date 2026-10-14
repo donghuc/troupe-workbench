@@ -142,7 +142,7 @@ export default function ImageCanvas({ canvas, onChange, renderCard, onConnect, o
 
   return (
     <div ref={ref} className={`img-canvas${shift ? ' shift-select' : ''}`} onPointerDown={panStart} onWheel={onWheel}
-      style={{ backgroundPosition: `${view.x}px ${view.y}px`, backgroundSize: `${24 * view.zoom}px ${24 * view.zoom}px` }}>
+      style={{ backgroundPosition: `${view.x}px ${view.y}px`, backgroundSize: `calc(var(--canvas-grid) * ${view.zoom}) calc(var(--canvas-grid) * ${view.zoom})` }}>
       {!canvas.cards.length && empty}
       <div className="img-layer" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.zoom})` }}>
         <svg className="img-edges" width="1" height="1">

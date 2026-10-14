@@ -1,3 +1,5 @@
+import { confirmDialog } from '../ui/ConfirmDialog'
+import { Button, IconButton } from '../ui/Button'
 import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import Icon from '../Icon'
 import MediaViewer from '../MediaViewer'
@@ -243,11 +245,11 @@ export default function ImageView({ active = true }: { active?: boolean }) {
     addMedia, addMediaRefs, importing,
     canvas, root: folder || '', agents, running,
     patch: (id, fn) => change((c) => updateCard(c, id, fn)),
-    remove: (id) => {
+    remove: async (id) => {
       const k = canvasRef.current.cards.find((x) => x.id === id)
       if (!k) return
       if (running[id]) { notify('Stop the run before removing this card.'); return }
-      if (hasContent(k) && !confirm(`Remove this ${CARD_LABEL[k.kind]} card? Image files stay in the folder.`)) return
+      if (hasContent(k) && !(await confirmDialog({ title: `Remove this ${CARD_LABEL[k.kind]} card?`, message: 'Image files stay in the folder.', confirmLabel: 'Remove' }))) return
       change((c) => removeCard(c, id))
     },
     addSlot: (id) => change((c) => updateCard(c, id, (k) => (k.kind === 'processor' ? { ...k, data: { ...k.data, slots: [...k.data.slots, newId('s')] } } : k))),
@@ -293,7 +295,7 @@ export default function ImageView({ active = true }: { active?: boolean }) {
       const c = canvasRef.current
       const owners = c.cards.filter((k) => k.kind === 'output' && k.data.runs.some((r) => r.id === runId))
       const savedCount = owners.reduce((n, k) => n + (k.kind === 'output' ? (k.data.runs.find((r) => r.id === runId)?.files ?? []).filter((f) => k.data.saved[f]).length : 0), 0)
-      if (!confirm(`Delete this version? Its images are removed from outputs/.${savedCount ? ` ${savedCount} saved cop${savedCount > 1 ? 'ies stay' : 'y stays'} in saved/.` : ''}`)) return
+      if (!(await confirmDialog({ title: 'Delete this version?', message: `Its images are removed from outputs/.${savedCount ? ` ${savedCount} saved cop${savedCount > 1 ? 'ies stay' : 'y stays'} in saved/.` : ''}`, confirmLabel: 'Delete' }))) return
       try {
         await api.image.deleteRun(runId, canvasIdRef.current ?? '')
         change((cur) => ({ ...cur, cards: cur.cards.map((k) => withoutRun(k, runId)) }))
@@ -305,10 +307,10 @@ export default function ImageView({ active = true }: { active?: boolean }) {
   // Escape deselects. Ignored while typing in a field or when a dialog/lightbox is open.
   const removeRef = useRef(ctx.remove); removeRef.current = ctx.remove
   // Several selected cards go in one step, with one confirm if any of them has content.
-  const removeMany = (ids: string[]) => {
+  const removeMany = async (ids: string[]) => {
     const ks = canvasRef.current.cards.filter((k) => ids.includes(k.id))
     if (ks.some((k) => running[k.id])) { notify('Stop the run before removing these cards.'); return }
-    if (ks.some(hasContent) && !confirm(`Remove ${ks.length} cards? Image files stay in the folder.`)) return
+    if (ks.some(hasContent) && !(await confirmDialog({ title: `Remove ${ks.length} cards?`, message: 'Image files stay in the folder.', confirmLabel: 'Remove' }))) return
     change((c) => ks.reduce((acc, k) => removeCard(acc, k.id), c))
   }
   const removeManyRef = useRef(removeMany); removeManyRef.current = removeMany
@@ -369,7 +371,7 @@ export default function ImageView({ active = true }: { active?: boolean }) {
   const nameOf = (id: string) => index?.tabs.find((t) => t.id === id)?.name ?? 'this canvas'
   const clearCanvas = async (id: string) => {
     if (busyCanvases.has(id)) { notify('Stop the running images on that canvas before clearing it.'); return }
-    if (!confirm(`Clear “${nameOf(id)}”? Every card is removed. Your images stay in the folder, and the old canvas is kept in .history/.`)) return
+    if (!(await confirmDialog({ title: `Clear “${nameOf(id)}”?`, message: 'Every card is removed. Your images stay in the folder, and the old canvas is kept in .history/.', confirmLabel: 'Clear' }))) return
     if (id === canvasIdRef.current) {
       pending.current = null
       const c: Canvas | undefined = await api.image.clear(id).catch(failed('Clear canvas'))
@@ -378,7 +380,7 @@ export default function ImageView({ active = true }: { active?: boolean }) {
   }
   const deleteCanvas = async (id: string) => {
     if (busyCanvases.has(id)) { notify('Stop the running images on that canvas before deleting it.'); return }
-    if (!confirm(`Delete “${nameOf(id)}”? Its images stay in the folder, and the canvas is kept in .history/.`)) return
+    if (!(await confirmDialog({ title: `Delete “${nameOf(id)}”?`, message: 'Its images stay in the folder, and the canvas is kept in .history/.', confirmLabel: 'Delete' }))) return
     if (id === canvasIdRef.current) pending.current = null   // don't write it back after deleting
     await afterIndexChange(await api.image.deleteCanvas(id).catch(failed('Delete canvas')))
   }
@@ -405,7 +407,7 @@ export default function ImageView({ active = true }: { active?: boolean }) {
             <CanvasTabs index={index} busy={busyCanvases} onSelect={(id) => void switchTo(id)} onCreate={() => void createCanvas()}
               onRename={(id, n) => void renameCanvas(id, n)} onDuplicate={(id) => void duplicateCanvas(id)}
               onClear={(id) => void clearCanvas(id)} onDelete={(id) => void deleteCanvas(id)} />
-            <button className={`icon-btn img-saved-toggle${savedOpen ? ' on' : ''}`} aria-pressed={savedOpen} title={savedOpen ? 'Hide saved images' : 'Show saved images'} onClick={() => setSavedOpen((v) => !v)}><Icon name="sidebar" size={18} /></button>
+            <IconButton className={`img-saved-toggle${savedOpen ? ' on' : ''}`} aria-pressed={savedOpen} title={savedOpen ? 'Hide saved images' : 'Show saved images'} onClick={() => setSavedOpen((v) => !v)}><Icon name="sidebar" size="nav" /></IconButton>
           </>
         )}
       </div>
@@ -414,10 +416,10 @@ export default function ImageView({ active = true }: { active?: boolean }) {
 
       {folder === null && (
         <div className="img-gate">
-          <div className="img-gate-icon"><Icon name="image" size={28} /></div>
+          <div className="img-gate-icon"><Icon name="image" size="xl" /></div>
           <h2>Connect a folder to use Image</h2>
           <p>Image keeps the canvas, your reference images and every generated image in one folder on your Mac, so nothing is lost when you clear the canvas. Choose it in Settings ▸ Image.</p>
-          <button className="btn btn-primary" onClick={() => openSettings('image')}><Icon name="settings" size={15} /> Open Settings ▸ Image</button>
+          <Button variant="primary" onClick={() => openSettings('image')}><Icon name="settings" size="md" /> Open Settings ▸ Image</Button>
         </div>
       )}
 
@@ -436,15 +438,15 @@ export default function ImageView({ active = true }: { active?: boolean }) {
             empty={
               <div className="img-empty">
                 <p>Add a Prompt and Media, feed them into a Processor, and see the result in an Output.</p>
-                <button className="btn btn-primary" onClick={addTemplate}><Icon name="plus" size={14} /> Start with Prompt → Processor → Output</button>
+                <Button variant="primary" onClick={addTemplate}><Icon name="plus" size="sm" /> Start with Prompt → Processor → Output</Button>
                 {!agents.length && <p className="img-empty-warn">No agent that can make images is on. Turn on Codex, Grok, Gemini or Claude in Settings ▸ Agents.</p>}
               </div>
             }
           />
           <div className="img-zoombar" role="group" aria-label="Zoom">
-            <button title="Zoom out" onClick={zoomOut} disabled={canvas.view.zoom <= 0.25}><Icon name="minus" size={15} /></button>
+            <button title="Zoom out" onClick={zoomOut} disabled={canvas.view.zoom <= 0.25}><Icon name="minus" size="md" /></button>
             <button className="img-zoom-level" title="Zoom to 100% (⌘/ctrl + scroll to zoom)" onClick={resetZoom}>{Math.round(canvas.view.zoom * 100)}%</button>
-            <button title="Zoom in" onClick={zoomIn} disabled={canvas.view.zoom >= 2}><Icon name="plus" size={15} /></button>
+            <button title="Zoom in" onClick={zoomIn} disabled={canvas.view.zoom >= 2}><Icon name="plus" size="md" /></button>
           </div>
         </div>
         {savedOpen && <SavedPanel root={folder} version={savedVersion} onOpen={setViewing} onClose={() => setSavedOpen(false)} />}

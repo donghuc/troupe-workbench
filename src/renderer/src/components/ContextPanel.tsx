@@ -5,6 +5,7 @@ import Icon from './Icon'
 import ResizeHandle from './ResizeHandle'
 import ContextCheckModal from './ContextCheckModal'
 import type { Outcome } from '../../../shared/decisions'
+import { Button } from './ui/Button'
 
 interface Props {
   project: Project
@@ -65,7 +66,7 @@ export default function ContextPanel({
         <span className="card-meta">{outcomes.length ? `${outcomes.length} · latest: ${outcomes[0].title}` : 'None yet · Save outcome on a reply'}</span>
         {outcomes.length > 0 && (
           <div className="context-folder-actions">
-            <button className="link-btn" onClick={() => setChecking(true)} title="Ask a fresh chat what this project has decided, and see what it gets wrong">Check context</button>
+            <Button variant="link" onClick={() => setChecking(true)} title="Ask a fresh chat what this project has decided, and see what it gets wrong">Check context</Button>
           </div>
         )}
       </div>
@@ -75,12 +76,12 @@ export default function ContextPanel({
         <div className="context-folder-head">
           <span className="card-title">Folder</span>
           {project.folderPath && (
-            <button className="folder-browse-icon" title="Browse files" onClick={onBrowseFiles}><Icon name="folder-open" size={16} /></button>
+            <button className="folder-browse-icon" title="Browse files" onClick={onBrowseFiles}><Icon name="folder-open" size="md" /></button>
           )}
         </div>
         <span className="card-meta truncate">{project.folderPath ?? 'No folder connected'}</span>
         <div className="context-folder-actions">
-          <button className="link-btn" onClick={onConnectFolder}>{project.folderPath ? 'Change' : 'Connect a folder'}</button>
+          <Button variant="link" onClick={onConnectFolder}>{project.folderPath ? 'Change' : 'Connect a folder'}</Button>
         </div>
 
         {/* Additional folders (D-054): places the agent may read AND edit, not second
@@ -104,7 +105,7 @@ export default function ContextPanel({
               </div>
             ))}
             <div className="context-folder-actions">
-              <button className="link-btn" title="Folders the agent may also read and edit. Memory, skills and the file browser stay with the main folder." onClick={onAddFolder}>Add a folder</button>
+              <Button variant="link" title="Folders the agent may also read and edit. Memory, skills and the file browser stay with the main folder." onClick={onAddFolder}>Add a folder</Button>
             </div>
             {project.extraFolders.length > 0 && (
               <span className="card-meta extra-folders-note">Read and edit access. Memory and skills stay with the main folder.</span>

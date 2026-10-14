@@ -26,6 +26,7 @@ import { useConversations } from './hooks/useConversations'
 import { api } from './api'
 import ErrorBoundary from './components/ErrorBoundary'
 import Notices from './components/Notices'
+import { ConfirmHost } from './components/ui/ConfirmDialog'
 import { notify, failed } from './notices'
 import { loadAndApplyAppearance } from './appearance'
 import { restorePanelWidths } from './components/ResizeHandle'
@@ -415,6 +416,7 @@ export default function App() {
       </div>
 
       <Notices />
+      <ConfirmHost />
       <ErrorBoundary label="Dialog" resetKey={`${activeProjectId}|${activeConversationId}`}>
       {showSettings && <Suspense fallback={null}><SettingsModal initialTab={settingsTab} onClose={() => setShowSettings(false)} /></Suspense>}
       {showProviders && <ProvidersModal onClose={() => setShowProviders(false)} />}

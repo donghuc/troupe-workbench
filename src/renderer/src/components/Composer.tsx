@@ -1,5 +1,5 @@
+import { Badge } from './ui/Badge'
 import { useEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import type { ProviderInfo, ProviderId, FileNode, Skill } from '../../../shared/types'
 import type { PermissionMode } from '../../../shared/agent'
 import { matchSkill } from '../skillMatch'
@@ -15,6 +15,8 @@ import { agentHandles } from '../../../shared/mentions'
 import { getDraft, setDraft, getDraftSelections, setDraftSelections, getDraftAttachments, setDraftAttachments } from '../drafts'
 import { type SelectionItem, sourceLabel, snippet, composeWithSelections } from '../../../shared/selections'
 import { type PendingAttachment, attachmentName, attachmentIsImage } from '../attachments'
+import { Menu } from './ui/Menu'
+import { Button, IconButton } from './ui/Button'
 
 interface Props {
   providers: ProviderInfo[]
@@ -279,7 +281,7 @@ export default function Composer({ providers, onSend, disabled, placeholder = 'H
           {selections.length > 0 && !memoryMode && (
             <span className="attach-chip sel-chip">
               <button className="sel-chip-btn" onClick={() => setSelOpen((v) => !v)} aria-expanded={selOpen} title="Show the selected passages">
-                <Icon name="copy" size={12} /> {selections.length === 1 ? sourceLabel(selections[0].source) : `${selections.length} selections`}
+                <Icon name="copy" size="xs" /> {selections.length === 1 ? sourceLabel(selections[0].source) : `${selections.length} selections`}
               </button>
               <button onClick={() => setSelections([])} aria-label="Remove all selections">✕</button>
               {selOpen && (
@@ -290,22 +292,22 @@ export default function Composer({ providers, onSend, disabled, placeholder = 'H
                         <span className="sel-pop-src">{sourceLabel(s.source)}</span>
                         <span className="sel-pop-snip">“{snippet(s.text)}”</span>
                       </div>
-                      <button className="icon-btn" onClick={() => setSelections((cur) => cur.filter((x) => x.id !== s.id))} aria-label="Remove this selection">✕</button>
+                      <IconButton title="Remove this selection" onClick={() => setSelections((cur) => cur.filter((x) => x.id !== s.id))}>✕</IconButton>
                     </div>
                   ))}
-                  <button className="link-btn sel-pop-clear" onClick={() => setSelections([])}>Clear all</button>
+                  <Button variant="link" className="sel-pop-clear" onClick={() => setSelections([])}>Clear all</Button>
                 </div>
               )}
             </span>
           )}
-          {memoryMode && <span className="attach-chip mem-chip"><Icon name="memory" size={12} /> Saving to project memory</span>}
+          {memoryMode && <span className="attach-chip mem-chip"><Icon name="memory" size="xs" /> Saving to project memory</span>}
           {activeSkill && (
             <span className="attach-chip skill-chip">⚡ {activeSkill.name}{isAutoSkill && <span className="skill-auto"> · auto</span>}
               <button onClick={() => { if (isAutoSkill) setDismissedAutoId(activeSkill.id); else setManualSkillId(null) }} aria-label="Remove skill">✕</button>
             </span>
           )}
           {attachments.map((a, i) => (
-            <span key={i} className="attach-chip"><Icon name={attachmentIsImage(a) ? 'image' : 'file'} size={12} /> {attachmentName(a)}
+            <span key={i} className="attach-chip"><Icon name={attachmentIsImage(a) ? 'image' : 'file'} size="xs" /> {attachmentName(a)}
               <button onClick={() => removeAt(i)} aria-label="Remove">✕</button>
             </span>
           ))}
@@ -319,7 +321,7 @@ export default function Composer({ providers, onSend, disabled, placeholder = 'H
           <div className="mention-menu">
             {showAllMention && (
               <button className="mention-item" onMouseEnter={() => setMentionIndex(-1)} onClick={() => insertAllMention()}>
-                <span className="mention-all-ico"><Icon name="flash" size={14} /></span>
+                <span className="mention-all-ico"><Icon name="flash" size="sm" /></span>
                 <span className="mention-name">All agents</span>
                 <span className="mention-handle">@all · side-by-side</span>
               </button>
@@ -327,7 +329,7 @@ export default function Composer({ providers, onSend, disabled, placeholder = 'H
             {/* Thinking modes (D-083): one row, a submenu with the three — like the model picker. */}
             {modeMatches.length > 0 && (
               <div className="mention-item mention-modes" onMouseEnter={() => { setMentionIndex(-1); setModesOpen(true) }} onMouseLeave={() => setModesOpen(false)}>
-                <span className="mention-all-ico"><Icon name="flash" size={14} /></span>
+                <span className="mention-all-ico"><Icon name="flash" size="sm" /></span>
                 <span className="mention-name">Thinking mode</span>
                 <span className="mention-handle">{modeMatches.length === 1 ? `@${modeMatches[0]}` : '@debate · @critique · @research'} ›</span>
                 {modesOpen && (
@@ -349,7 +351,7 @@ export default function Composer({ providers, onSend, disabled, placeholder = 'H
                 onMouseEnter={() => setMentionIndex(i)}
                 onClick={() => insertMention(p.id)}
               >
-                <ProviderAvatar id={p.id} size={18} />
+                <ProviderAvatar id={p.id} size="sm" />
                 <span className="mention-name">{p.name}</span>
                 <span className="mention-handle">@{handleFor(p.id)}</span>
               </button>
@@ -370,16 +372,11 @@ export default function Composer({ providers, onSend, disabled, placeholder = 'H
       <div className="composer-row">
         <div className="composer-left">
           <div className="attach-wrap">
-            <button className="attach-btn" title="Attach files" onClick={() => setAttachOpen((o) => !o)}><Icon name="plus" size={16} /></button>
-            {attachOpen && (
-              <>
-                <div className="menu-backdrop" onClick={() => setAttachOpen(false)} />
-                <div className="attach-menu">
-                  <button onClick={() => { setAttachOpen(false); fileInputRef.current?.click() }}>Upload files…</button>
-                  {folderPath && <button onClick={() => { setAttachOpen(false); setPicking(true) }}>From project folder</button>}
-                </div>
-              </>
-            )}
+            <button className="attach-btn" title="Attach files" onClick={() => setAttachOpen((o) => !o)}><Icon name="plus" size="md" /></button>
+            <Menu open={attachOpen} onClose={() => setAttachOpen(false)} className="attach-menu">
+                <button onClick={() => { setAttachOpen(false); fileInputRef.current?.click() }}>Upload files…</button>
+                {folderPath && <button onClick={() => { setAttachOpen(false); setPicking(true) }}>From project folder</button>}
+            </Menu>
           </div>
           {onStartCollab && (
             <div className="composer-mode" role="tablist" aria-label="Send mode">
@@ -389,47 +386,39 @@ export default function Composer({ providers, onSend, disabled, placeholder = 'H
           )}
           <input
             ref={fileInputRef} type="file" multiple
-            style={{ position: 'absolute', width: 1, height: 1, opacity: 0, overflow: 'hidden', pointerEvents: 'none' }}
+            className="visually-hidden"
             onChange={(e) => { const files = Array.from(e.target.files ?? []); e.target.value = ''; if (files.length) addFiles(files) }}
           />
         </div>
         <div className="composer-actions">
           <div className="perm-wrap">
             <button className="perm-select" onClick={() => setPermOpen((o) => !o)} title="Permission mode">
-              {PERM_OPTS.find((o) => o.v === permMode)?.l ?? 'Auto'} <Icon name="chevron-down" size={13} />
+              {PERM_OPTS.find((o) => o.v === permMode)?.l ?? 'Auto'} <Icon name="chevron-down" size="sm" />
             </button>
-            {permOpen && (
-              <>
-                <div className="menu-backdrop" onClick={() => setPermOpen(false)} />
-                <div className="perm-menu">
-                  {PERM_OPTS.map((o) => (
-                    <button key={o.v} className={`perm-opt ${permMode === o.v ? 'active' : ''}`} onClick={() => { setPermMode(o.v); setPermOpen(false) }}>
-                      <span className="perm-opt-l">{o.l}</span>
-                      <span className="perm-opt-d">{o.v === 'read' && customAgentFor(providerId) && !customAgentFor(providerId)!.readOnlyArgs?.length ? `Read-only can't be enforced for ${customAgentFor(providerId)!.name}` : o.d}</span>
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
+            <Menu open={permOpen} onClose={() => setPermOpen(false)} className="perm-menu">
+                {PERM_OPTS.map((o) => (
+                  <button key={o.v} className={`perm-opt ${permMode === o.v ? 'active' : ''}`} onClick={() => { setPermMode(o.v); setPermOpen(false) }}>
+                    <span className="perm-opt-l">{o.l}</span>
+                    <span className="perm-opt-d">{o.v === 'read' && customAgentFor(providerId) && !customAgentFor(providerId)!.readOnlyArgs?.length ? `Read-only can't be enforced for ${customAgentFor(providerId)!.name}` : o.d}</span>
+                  </button>
+                ))}
+            </Menu>
           </div>
           <div className="pm-wrap">
             <button ref={pmBtnRef} className="provider-select" onClick={togglePm} title="Provider & model">
-              <ProviderAvatar id={providerId} size={18} /> {provider?.name ?? 'Provider'}{model ? ` · ${modelLabel}` : ''} <Icon name="chevron-down" size={14} />
+              <ProviderAvatar id={providerId} size="sm" /> {provider?.name ?? 'Provider'}{model ? ` · ${modelLabel}` : ''} <Icon name="chevron-down" size="sm" />
             </button>
-            {pmOpen && pmPos && createPortal(
-              <>
-                <div className="menu-backdrop pm-backdrop" onClick={() => { setPmOpen(false); setHovered(null) }} />
-                <div className="pm-menu pm-menu-floating" style={{ right: pmPos.right, bottom: pmPos.bottom }}>
+            <Menu portal open={pmOpen && !!pmPos} onClose={() => { setPmOpen(false); setHovered(null) }} className="pm-menu pm-menu-floating" style={pmPos ? { right: pmPos.right, bottom: pmPos.bottom } : undefined}>
                   {providers.map((p) => {
                     const ms = presetsFor(p.id)
                     return (
                       <div key={p.id} className="pm-prov" onMouseEnter={() => setHovered(p.id)}>
                         <button className="pm-prov-row" onClick={() => choose(p.id, '')}>
-                          <ProviderAvatar id={p.id} size={18} />
+                          <ProviderAvatar id={p.id} size="sm" />
                           <span className="pm-prov-name">{p.name}</span>
                           {!p.installed
-                            ? <span className="pm-status bad" title={`The ${p.name} CLI wasn't found on this Mac`}>Not installed</span>
-                            : !p.authenticated && <span className="pm-status warn" title={`Sign in to the ${p.name} CLI first (see Providers)`}>Signed out</span>}
+                            ? <Badge tone="danger" title={`The ${p.name} CLI wasn't found on this Mac`}>Not installed</Badge>
+                            : !p.authenticated && <Badge tone="warning" title={`Sign in to the ${p.name} CLI first (see Providers)`}>Signed out</Badge>}
                           {ms.length > 1 && <span className="pm-caret">›</span>}
                         </button>
                         {hovered === p.id && ms.length > 1 && (
@@ -442,19 +431,16 @@ export default function Composer({ providers, onSend, disabled, placeholder = 'H
                       </div>
                     )
                   })}
-                </div>
-              </>,
-              document.body
-            )}
+            </Menu>
           </div>
           {busy && onStop
-            ? <button className="send-btn stop-btn" onClick={onStop} title="Stop"><Icon name="stop" size={15} /></button>
-            : <button className="send-btn" disabled={(!text.trim() && !(selections.length && !memoryMode)) || disabled || (mode === 'collab' && collabBusy)} onClick={submit} title={mode === 'collab' && collabBusy ? 'A Collab run is already active' : 'Send'}><Icon name="send" size={16} /></button>}
+            ? <button className="send-btn stop-btn" onClick={onStop} title="Stop"><Icon name="stop" size="md" /></button>
+            : <button className="send-btn" disabled={(!text.trim() && !(selections.length && !memoryMode)) || disabled || (mode === 'collab' && collabBusy)} onClick={submit} title={mode === 'collab' && collabBusy ? 'A Collab run is already active' : 'Send'}><Icon name="send" size="md" /></button>}
         </div>
       </div>
 
       {picking && folderPath && (
-        <Modal title="Attach files to this message" onClose={() => setPicking(false)} footer={<button className="btn" onClick={() => setPicking(false)}>Done</button>}>
+        <Modal title="Attach files to this message" onClose={() => setPicking(false)} footer={<Button onClick={() => setPicking(false)}>Done</Button>}>
           {tree && <FileTree node={tree} activePath={null} onOpenFile={toggleFolder} loadRoot={folderPath} />}
           {attachments.length > 0 && <div className="field-hint">Attached: {attachments.map(attachmentName).join(', ')}</div>}
         </Modal>

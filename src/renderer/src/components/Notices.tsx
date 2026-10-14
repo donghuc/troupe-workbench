@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNotices, dismissNotice, type Notice } from '../notices'
+import { Button } from './ui/Button'
 
 function NoticeRow({ n }: { n: Notice }) {
   const [copied, setCopied] = useState(false)
@@ -7,8 +8,8 @@ function NoticeRow({ n }: { n: Notice }) {
   return (
     <div className={`toast${n.kind === 'error' ? ' toast-error' : ''}`} role={n.kind === 'error' ? 'alert' : 'status'}>
       <span>{n.text}</span>
-      {n.details && <button className="link-btn" onClick={copy}>{copied ? 'Copied' : 'Copy details'}</button>}
-      <button className="link-btn" onClick={() => dismissNotice(n.id)}>Dismiss</button>
+      {n.details && <Button variant="link" onClick={copy}>{copied ? 'Copied' : 'Copy details'}</Button>}
+      <Button variant="link" onClick={() => dismissNotice(n.id)}>Dismiss</Button>
     </div>
   )
 }

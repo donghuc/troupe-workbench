@@ -3,6 +3,7 @@ import { api } from '../../api'
 import logo from '../../assets/logo.png'
 import type { AppInfo } from '../../../../shared/api'
 import { SHOW_WELCOME_EVENT } from '../../../../shared/welcome'
+import { Button } from '../ui/Button'
 
 const COMMANDS: { k: string; d: string }[] = [
   { k: '@claude / @codex', d: 'Route this message to one specific agent.' },
@@ -59,9 +60,9 @@ export function AboutTab() {
         <div><dt>Platform</dt><dd>{info?.platform ?? '—'}</dd></div>
       </dl>
       <div className="about-actions">
-        <button className="btn btn-sm" onClick={() => api.system.openLogs()}>Reveal logs in Finder</button>
-        <button className="btn btn-sm" onClick={copyDiagnostics} disabled={diag === 'busy'}>{diag === 'busy' ? 'Collecting…' : diag === 'done' ? 'Copied' : 'Copy diagnostics'}</button>
-        <button className="btn btn-sm" onClick={() => window.dispatchEvent(new Event(SHOW_WELCOME_EVENT))}>Show welcome</button>
+        <Button size="sm" onClick={() => api.system.openLogs()}>Reveal logs in Finder</Button>
+        <Button size="sm" onClick={copyDiagnostics} disabled={diag === 'busy'}>{diag === 'busy' ? 'Collecting…' : diag === 'done' ? 'Copied' : 'Copy diagnostics'}</Button>
+        <Button size="sm" onClick={() => window.dispatchEvent(new Event(SHOW_WELCOME_EVENT))}>Show welcome</Button>
       </div>
       <p className="about-note">Logs record app activity, tool calls and errors (not your message text). When reporting a bug, paste <b>Copy diagnostics</b> into the issue — your home folder and anything that looks like a key are removed.</p>
     </div>

@@ -7,7 +7,7 @@ export default function ArtifactWindow({ root, relPath }: { root: string; relPat
   // A pop-out is its own renderer: apply the saved theme and font sizes here too.
   useEffect(() => { void loadAndApplyAppearance().catch(() => {}) }, [])
   return (
-    <div className="artifact-window">
+    <div className="artifact-window" data-surface="paper">
       <ArtifactViewer root={root} relPath={relPath} onClose={() => window.close()} />
     </div>
   )

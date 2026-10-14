@@ -5,6 +5,7 @@ import Icon from './Icon'
 import { api } from '../api'
 import { fileCardMeta } from '../../../shared/fileCards'
 import { FILE_THUMBS } from '../fileThumbs'
+import { IconButton } from './ui/Button'
 
 export default function FileCard({ root, rel, name, onOpen }: { root?: string; rel: string; name?: string; onOpen?: (rel: string) => void }) {
   const meta = fileCardMeta(name ?? rel)
@@ -14,7 +15,7 @@ export default function FileCard({ root, rel, name, onOpen }: { root?: string; r
       <button className="file-card-main" onClick={() => canOpen && onOpen!(rel)} disabled={!canOpen}>
         {meta.thumb
           ? <img className="file-card-thumb" src={FILE_THUMBS[meta.thumb]} alt="" aria-hidden="true" draggable={false} />
-          : <span className="file-card-icon"><Icon name={meta.icon} size={16} /></span>}
+          : <span className="file-card-icon"><Icon name={meta.icon} size="md" /></span>}
         <span className="file-card-text">
           <span className="file-card-title">{meta.title}</span>
           <span className="file-card-sub">{meta.subtitle}</span>
@@ -22,8 +23,8 @@ export default function FileCard({ root, rel, name, onOpen }: { root?: string; r
       </button>
       {root && (
         <span className="file-card-actions">
-          <button className="icon-btn" title="Open in new window" onClick={() => { void api.system.openArtifactWindow(root, rel) }}><Icon name="popout" size={14} /></button>
-          <button className="icon-btn" title="Show in Finder" onClick={() => { void api.system.revealItem(root, rel) }}><Icon name="folder-open" size={15} /></button>
+          <IconButton title="Open in new window" onClick={() => { void api.system.openArtifactWindow(root, rel) }}><Icon name="popout" size="sm" /></IconButton>
+          <IconButton title="Show in Finder" onClick={() => { void api.system.revealItem(root, rel) }}><Icon name="folder-open" size="md" /></IconButton>
         </span>
       )}
     </div>

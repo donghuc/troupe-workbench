@@ -1,3 +1,5 @@
+import { Badge } from './ui/Badge'
+import { confirmDialog } from './ui/ConfirmDialog'
 import { useState } from 'react'
 import type { CollabRun, CollabTaskKind, CollabTaskStatus, ProviderId, ProviderInfo } from '../../../shared/types'
 import { presetsFor, modelLists, disabledModelSet } from '../models'
@@ -5,6 +7,7 @@ import { rowsFromTasks, draftsFromRows, type PlanRow } from '../../../shared/col
 import { resolveTaskModel } from '../../../shared/models'
 import Icon from './Icon'
 import { api } from '../api'
+import { Button } from './ui/Button'
 
 const statusIcon = (s: CollabTaskStatus): JSX.Element => {
   if (s === 'in_progress') return <span className="activity-spinner spinner-xs" />
@@ -56,7 +59,7 @@ export default function CollabCard({ run, providers, onOpenFile }: { run: Collab
 
   const confirm = async () => { setBusy(true); try { await api.collab.confirmPlan(run.id, draft ? draftsFromRows(draft) : undefined) } finally { setBusy(false) } }
   const stop = async () => { setBusy(true); try { await api.collab.stop(run.id) } finally { setBusy(false) } }
-  const confirmStop = async () => { if (!window.confirm("Stop this Collab run? It can't be resumed — you'd start over.")) return; await stop() }
+  const confirmStop = async () => { if (!(await confirmDialog({ title: 'Stop this Collab run?', message: "It can't be resumed — you'd start over.", confirmLabel: 'Stop run' }))) return; await stop() }
   const resume = async (raiseBudget?: boolean) => { setBusy(true); try { await api.collab.resume(run.id, raiseBudget ? { raiseBudget: true } : undefined) } finally { setBusy(false) } }
 
   const spent = run.spent?.runs ?? 0
@@ -65,7 +68,7 @@ export default function CollabCard({ run, providers, onOpenFile }: { run: Collab
   return (
     <div className={`collab-card status-${run.status}`}>
       <div className="collab-card-head">
-        <Icon name="flash" size={14} />
+        <Icon name="flash" size="sm" />
         <span className="collab-card-title">Collab · {RUN_LABEL[run.status] ?? run.status}</span>
         {(run.status === 'running' || run.status === 'planning') && <span className="activity-spinner spinner-xs" />}
         <span className="collab-card-spacer" />
@@ -73,7 +76,7 @@ export default function CollabCard({ run, providers, onOpenFile }: { run: Collab
           <span className="collab-budget" title="Agent runs used vs. budget">{spent}/{cap} runs</span>
         )}
         {(run.status === 'running' || run.status === 'planning') && (
-          <button className="btn btn-sm" onClick={confirmStop} disabled={busy}>Stop</button>
+          <Button size="sm" onClick={confirmStop} disabled={busy}>Stop</Button>
         )}
       </div>
 
@@ -83,12 +86,12 @@ export default function CollabCard({ run, providers, onOpenFile }: { run: Collab
           deliverables are in a visible folder the file browser shows. */}
       {run.status !== 'planning' && (
         <div className="collab-links">
-          {onOpenFile && <button className="link-btn" onClick={() => onOpenFile(`.workbench/collab/${run.id}/PLAN.md`)}>Plan</button>}
-          {onOpenFile && <button className="link-btn" onClick={() => onOpenFile(`.workbench/collab/${run.id}/STATUS.md`)}>Status log</button>}
+          {onOpenFile && <Button variant="link" onClick={() => onOpenFile(`.workbench/collab/${run.id}/PLAN.md`)}>Plan</Button>}
+          {onOpenFile && <Button variant="link" onClick={() => onOpenFile(`.workbench/collab/${run.id}/STATUS.md`)}>Status log</Button>}
           {run.outputDir && (
-            <button className="link-btn" title="Show in Finder" onClick={() => { void api.system.revealItem(run.projectCwd, run.outputDir) }}>
+            <Button variant="link" title="Show in Finder" onClick={() => { void api.system.revealItem(run.projectCwd, run.outputDir) }}>
               Deliverables: {run.outputDir}/
-            </button>
+            </Button>
           )}
         </div>
       )}
@@ -114,7 +117,7 @@ export default function CollabCard({ run, providers, onOpenFile }: { run: Collab
                   const pname = providers.find((p) => p.id === pid)?.name ?? pid
                   const mv = resolveTaskModel(run.providerId, run.model, t.provider, t.model, modelLists(), disabledModelSet())
                   const mlabel = presetsFor(pid).find((m) => m.v === mv)?.l ?? 'Default'
-                  return <span className="collab-agent-badge">{pname} · {mlabel}</span>
+                  return <Badge className="collab-agent-badge">{pname} · {mlabel}</Badge>
                 })()}</span>
                 {t.status === 'failed' && t.lastVerdict?.findings?.length ? (
                   <ul className="collab-findings">{t.lastVerdict.findings.map((f, i) => <li key={i}>{findingText(f)}</li>)}</ul>
@@ -147,7 +150,7 @@ export default function CollabCard({ run, providers, onOpenFile }: { run: Collab
               {(() => {
                 const waits = (r.dependsOn ?? []).map((k) => rows.findIndex((x) => x.key === k)).filter((n) => n >= 0 && n !== i)
                 return waits.length
-                  ? <div className="collab-flabel collab-agent-note">Waits for {waits.map((n) => `#${n + 1}`).join(', ')} to pass <button className="link-btn" onClick={() => setRow(i, { dependsOn: [] })}>Clear</button></div>
+                  ? <div className="collab-flabel collab-agent-note">Waits for {waits.map((n) => `#${n + 1}`).join(', ')} to pass <Button variant="link" onClick={() => setRow(i, { dependsOn: [] })}>Clear</Button></div>
                   : null
               })()}
               <label className="collab-flabel">Acceptance</label>
@@ -171,22 +174,22 @@ export default function CollabCard({ run, providers, onOpenFile }: { run: Collab
                   </>}
             </div>
           ))}
-          <button className="btn btn-sm collab-add" onClick={addRow}><Icon name="plus" size={13} />Add task</button>
+          <Button size="sm" className="collab-add" onClick={addRow}><Icon name="plus" size="sm" />Add task</Button>
           {draft && <div className="field-hint">Runs top to bottom; the review runs last.</div>}
           <div className="collab-plan-actions">
-            <button className="btn btn-sm" onClick={stop} disabled={busy}>Reject</button>
-            <button className="btn btn-primary btn-sm" onClick={confirm} disabled={busy || rows.length === 0}>
+            <Button size="sm" onClick={stop} disabled={busy}>Reject</Button>
+            <Button variant="primary" size="sm" onClick={confirm} disabled={busy || rows.length === 0}>
               {busy ? <><span className="activity-spinner spinner-xs" />Starting</> : 'Confirm & run'}
-            </button>
+            </Button>
           </div>
         </div>
       )}
 
       {run.status === 'needs_attention' && (
         <div className="collab-plan-actions">
-          <button className="btn btn-sm" onClick={confirmStop} disabled={busy}>Stop</button>
-          <button className="btn btn-sm" onClick={() => resume(true)} disabled={busy}>Raise budget & resume</button>
-          <button className="btn btn-primary btn-sm" onClick={() => resume(false)} disabled={busy}>Resume</button>
+          <Button size="sm" onClick={confirmStop} disabled={busy}>Stop</Button>
+          <Button size="sm" onClick={() => resume(true)} disabled={busy}>Raise budget & resume</Button>
+          <Button variant="primary" size="sm" onClick={() => resume(false)} disabled={busy}>Resume</Button>
         </div>
       )}
 

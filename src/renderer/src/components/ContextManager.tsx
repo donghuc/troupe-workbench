@@ -3,6 +3,7 @@ import Modal from './Modal'
 import FileTree from './FileTree'
 import { api } from '../api'
 import type { FileNode } from '../../../shared/types'
+import { Button } from './ui/Button'
 
 interface Props { projectId: string; folderPath: string | null; onClose: () => void }
 
@@ -50,12 +51,12 @@ export default function ContextManager({ projectId, folderPath, onClose }: Props
   }, [tree, files])
 
   return (
-    <Modal title="Persistent Context" onClose={onClose} footer={<button className="btn" onClick={onClose}>Done</button>}>
+    <Modal title="Persistent Context" onClose={onClose} footer={<Button onClick={onClose}>Done</Button>}>
       {files.length === 0 && <p className="field-hint">No context files yet.</p>}
       {files.map((f) => (
         <div key={f} className="ctx-file-row">
           <span className="truncate">{f}</span>
-          <button className="link-btn" onClick={() => remove(f)}>Remove</button>
+          <Button variant="link" onClick={() => remove(f)}>Remove</Button>
         </div>
       ))}
 
@@ -65,19 +66,19 @@ export default function ContextManager({ projectId, folderPath, onClose }: Props
           {suggestions.map((rel) => (
             <div key={rel} className="ctx-file-row">
               <span className="truncate" title={rel}>{rel}</span>
-              <button className="link-btn" onClick={() => add(rel)}>Add</button>
+              <Button variant="link" onClick={() => add(rel)}>Add</Button>
             </div>
           ))}
         </div>
       )}
 
       {!folderPath && <p className="field-hint">Connect a project folder to add context files.</p>}
-      {folderPath && !adding && <button className="btn btn-sm" onClick={() => setAdding(true)}>+ Add another file</button>}
+      {folderPath && !adding && <Button size="sm" onClick={() => setAdding(true)}>+ Add another file</Button>}
       {folderPath && adding && (
         <div className="ctx-picker">
           <div className="field-hint">Click a file to add it:</div>
           {tree && <FileTree node={tree} activePath={null} onOpenFile={(rel) => add(rel)} loadRoot={folderPath ?? undefined} />}
-          <button className="btn btn-sm" onClick={() => setAdding(false)}>Done adding</button>
+          <Button size="sm" onClick={() => setAdding(false)}>Done adding</Button>
         </div>
       )}
     </Modal>

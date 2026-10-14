@@ -1,18 +1,21 @@
 import { BrowserWindow, type WebContents } from 'electron'
 import { join } from 'path'
-import { mkdirSync, writeFileSync, appendFileSync } from 'fs'
+import { mkdirSync, writeFileSync, appendFileSync, statSync, readdirSync, readFileSync } from 'fs'
 import { IPC } from '../../shared/ipc'
 import { startRun, cancelRun, runTimeoutMs } from '../agent/runner'
 import { acquireLock, releaseLock } from '../agent/turns'
 import { getMessage } from '../conversations/messagesRepo'
 import { logInfo, logError } from '../util/logger'
 import { getDb } from '../database/db'
-import type { CollabRun, CollabTask, CollabTaskDraft, CollabStartInput, CollabVerdict, CollabHandoff } from '../../shared/types'
+import type { CollabRun, CollabTask, CollabTaskDraft, CollabStartInput, CollabVerdict, CollabHandoff, ProviderId } from '../../shared/types'
 import {
   createCollabRun, getCollabRun, getCollabRunBare, updateCollabRun, bumpRuns,
   replaceTasks, getTask, updateTask, listCollabRuns
 } from './collabRepo'
 import { extractJson, findingToText } from './parse'
+import { scopePaths, missingOutputs, filesFromReply, textMakerInstructions } from '../../shared/collabFiles'
+import { createProvider } from '../providers/registry'
+import { ensureInside } from '../filesystem/fsService'
 import { nextRunnable, tasksToRetry, defaultOutputDir, sanitizeOutputDir, retargetScope } from '../../shared/collabPlan'
 import { resolveTaskModel, modelForProvider, parseDisabledModels, DISABLED_MODELS_SETTING } from '../../shared/models'
 import { getSetting } from '../database/settingsRepo'
@@ -55,7 +58,7 @@ function plannerContract(runDir: string, suggestedOut: string): string {
     `{ "outputDir": "${suggestedOut}", "tasks": [ { "title": "...", "kind": "work", "provider": "claude-code", "model": "haiku", "scope": "files or area this task owns", "acceptance": "how anyone can tell it is done and correct", "dependsOn": [] } ] }`,
     '```',
     'Rules: kind is "work" (a Maker builds it, a Reviewer checks it) or "review" (Reviewer-only). dependsOn holds zero-based indices of earlier tasks. Include a final { "kind": "review" } task that checks the whole result against the goal. Keep tasks few and non-overlapping. If a task reads or builds on another task\'s output, it MUST list that task in dependsOn — it will not start until that task has passed review.',
-    'For each WORK task, optionally set provider ("claude-code", "codex", or "grok") and model to fit its difficulty and cost: mechanical or read-heavy work → a cheap, fast Claude model ("haiku"); code-heavy work → "codex"; hard synthesis → a strong Claude model ("opus"); "grok" is an alternative generalist. "model" applies to Claude only — omit it for "codex" and "grok". Omit both to use the run default. Do NOT set provider/model on review tasks — planning and review always run on the run default provider automatically.'
+    'For each WORK task, optionally set provider (one of the agents listed below) and model to fit its difficulty and cost: mechanical or read-heavy work → a cheap, fast Claude model ("haiku"); code-heavy work → "codex"; hard synthesis → a strong Claude model ("opus"); "grok" is an alternative generalist. "model" applies to Claude only — omit it for "codex" and "grok". Omit both to use the run default. Do NOT set provider/model on review tasks — planning and review always run on the run default provider automatically.'
   ].join('\n')
 }
 function makerContract(runDir: string): string {
@@ -63,6 +66,19 @@ function makerContract(runDir: string): string {
     '',
     '---',
     `Append your handoff to \`${runDir}/STATUS.md\`. Then end your reply with ONLY a fenced \`\`\`json block, no prose after it:`,
+    '```json',
+    '{ "status": "done", "filesChanged": ["path", "..."], "verify": "exact steps for the reviewer to verify" }',
+    '```',
+    'Use "status": "blocked" if you could not complete it; put the reason in the verify field.'
+  ].join('\n')
+}
+function textMakerContract(files: string[]): string {
+  return [
+    '',
+    '---',
+    textMakerInstructions(files),
+    '',
+    'Then end your reply with ONLY a fenced ```json block, no prose after it:',
     '```json',
     '{ "status": "done", "filesChanged": ["path", "..."], "verify": "exact steps for the reviewer to verify" }',
     '```',
@@ -176,6 +192,53 @@ function completedContext(run: CollabRun): string {
     '', 'Open those files directly if your task builds on them. Do not read the full status log.'].join('\n')
 }
 
+// ── what each agent can do (D-108) ───────────────────────────────────────────
+// Built-in agents read/write files and use tools; a user-added CLI's abilities are unknown
+// to Troupe, so it is treated as text-only: inputs are pasted into its prompt and its
+// deliverables are saved from its reply.
+function capsOf(id: ProviderId) { try { return createProvider(id)?.getCapabilities() ?? null } catch { return null } }
+const canWriteFiles = (id: ProviderId): boolean => !!capsOf(id)?.fileWrite
+function abilitiesOf(id: ProviderId): string {
+  const c = capsOf(id)
+  if (!c || !c.fileWrite) return 'text replies only: cannot open project files, browse the web or run tools. Troupe pastes the task\'s input files into its prompt and saves its deliverables from the reply'
+  return ['reads and writes files', c.shell ? 'runs shell commands' : '', c.web ? 'can browse the web' : ''].filter(Boolean).join(', ')
+}
+function agentsForPlanner(): string {
+  const ids = enabledProviderIds(getSetting(DISABLED_AGENTS_SETTING))
+  return ['Agents available for work tasks (do not assign any other provider):', ...ids.map((id) => `- "${id}" (${providerLabel(id, id)}): ${abilitiesOf(id)}.`),
+    'Only give a text-only agent a task it can do from the text it is given: no web research, link checking or running anything; one or a few output files named in the scope; inputs named as "(read-only: path, …)" in the scope.'].join('\n')
+}
+const makerProviderOf = (run: CollabRun, task: CollabTask): ProviderId =>
+  task.provider && enabledProviderIds(getSetting(DISABLED_AGENTS_SETTING)).includes(task.provider) ? task.provider : run.providerId
+
+function probeIn(root: string) {
+  return (rel: string) => {
+    try {
+      const abs = ensureInside(root, rel); const st = statSync(abs)
+      if (st.isDirectory()) return { kind: 'dir' as const, size: 0, hasFiles: readdirSync(abs).some((n) => !n.startsWith('.')) }
+      return { kind: 'file' as const, size: st.size }
+    } catch { return { kind: 'none' as const, size: 0 } }
+  }
+}
+
+// Input files for a text-only Maker: the scope's read-only inputs plus what its
+// dependencies produced, pasted in (capped) since it cannot open them itself.
+const INLINE_FILE_MAX = 40_000, INLINE_TOTAL_MAX = 120_000
+function inlineInputs(run: CollabRun, task: CollabTask): string {
+  const deps = (run.tasks ?? []).filter((t) => task.dependsOn.includes(t.id) && t.status === 'passed')
+  const paths = [...scopePaths(task.scope).inputs, ...deps.flatMap((t) => scopePaths(t.scope).outputs)].filter((p, i, a) => a.indexOf(p) === i && !p.endsWith('/'))
+  const parts: string[] = []; let total = 0
+  for (const p of paths) {
+    let text = ''
+    try { text = readFileSync(ensureInside(run.projectCwd, p), 'utf8') } catch { parts.push(`### ${p}\n(could not be read)`); continue }
+    if (text.includes('\u0000')) continue
+    const room = Math.min(INLINE_FILE_MAX, INLINE_TOTAL_MAX - total); if (room <= 0) { parts.push(`### ${p}\n(left out: input limit reached)`); continue }
+    const cut = text.length > room ? text.slice(0, room) + `\n… (truncated, ${text.length - room} more characters)` : text
+    total += cut.length; parts.push(`### ${p}\n\`\`\`\`\n${cut}\n\`\`\`\``)
+  }
+  return parts.length ? ['## Input files (pasted by Troupe — you cannot open files yourself)', ...parts].join('\n\n') : ''
+}
+
 function runPlanner(runId: string): void {
   const run = getCollabRunBare(runId); if (!run) return
   if (!lockFor(run)) { pause(runId, 'This conversation is busy with another turn. Resume when it finishes.'); return }
@@ -184,7 +247,7 @@ function runPlanner(runId: string): void {
     `You are the Planner for a Collab run. Goal:`, '', run.goal, '',
     `Read the shared files under \`${relRunDir(run)}/\` if they exist.`,
     plannerContract(relRunDir(run), defaultOutputDir(run.goal, run.createdAt)),
-    `Agents available for work tasks: ${enabledProviderIds(getSetting(DISABLED_AGENTS_SETTING)).map((id) => `"${id}"`).join(', ')}. Do not assign any other provider.`
+    agentsForPlanner()
   ].join('\n')
   bumpRuns(runId)
   const rid = startRun(sender, {
@@ -303,18 +366,20 @@ function runMaker(runId: string, taskId: string): void {
   updateTask(taskId, { status: 'in_progress', attempts: task.attempts + 1 })
   emitChanged()
   const retry = task.lastVerdict?.verdict === 'FAIL'
+  // A task assigned to an agent that has since been turned off runs on the run's own agent (D-071).
+  const makerProvider = makerProviderOf(run, task)
+  const textOnly = !canWriteFiles(makerProvider)
+  const outputs = scopePaths(task.scope).outputs
   const prompt = [
     `You are the Maker for this Collab task.`, '',
     `**Task:** ${task.title}`,
     task.scope ? `**Scope (only touch this):** ${task.scope}` : '',
     task.acceptance ? `**Acceptance criteria:** ${task.acceptance}` : '',
-    run.outputDir ? `**Deliverables folder:** \`${run.outputDir}/\` — put what you produce there (create it if missing), never under \`.workbench/\`.` : '',
-    completedContext(run),
+    run.outputDir && !textOnly ? `**Deliverables folder:** \`${run.outputDir}/\` — put what you produce there (create it if missing), never under \`.workbench/\`.` : '',
+    textOnly ? inlineInputs(run, task) : completedContext(run),
     retry ? `\nThis is a retry. The reviewer's findings to address:\n${(task.lastVerdict?.findings ?? []).map((f, i) => `${i + 1}. ${f}`).join('\n')}` : '',
-    makerContract(relRunDir(run))
+    textOnly ? textMakerContract(outputs.filter((p) => !p.endsWith('/'))) : makerContract(relRunDir(run))
   ].filter(Boolean).join('\n')
-  // A task assigned to an agent that has since been turned off runs on the run's own agent (D-071).
-  const makerProvider = task.provider && enabledProviderIds(getSetting(DISABLED_AGENTS_SETTING)).includes(task.provider) ? task.provider : run.providerId
   // D-064: the run model only applies to the run's own provider (Codex was handed "opus").
   const makerModel = resolveTaskModel(run.providerId, run.model, makerProvider, makerProvider === task.provider ? task.model : null, modelLists(), parseDisabledModels(getSetting(DISABLED_MODELS_SETTING)))
   bumpRuns(runId)
@@ -331,11 +396,50 @@ function runMaker(runId: string, taskId: string): void {
 function onMakerDone(runId: string, taskId: string, messageId: string | null, err?: string): void {
   const run = getCollabRunBare(runId); if (!run || run.status !== 'running') return
   if (err) { updateTask(taskId, { status: 'failed' }); pause(runId, `A Maker run errored on “${getTask(taskId)?.title ?? 'a task'}”: ${err}. Resume retries it.`); return }
+  const reply = messageId ? getMessage(messageId)?.content ?? '' : ''
   if (messageId) {
-    const h = extractJson<CollabHandoff>(getMessage(messageId)?.content ?? '')
+    const h = extractJson<CollabHandoff>(reply)
     if (h) updateTask(taskId, { handoff: { status: h.status || 'done', filesChanged: Array.isArray(h.filesChanged) ? h.filesChanged : [], verify: h.verify || '' } })
   }
-  runReviewer(runId, taskId, false)
+  if (deliverablesGate(run, taskId, reply)) runReviewer(runId, taskId, false)
+}
+
+// D-108: before a Reviewer run, check the task's output files exist. A text-only Maker's
+// files are saved from its reply first. Missing files go straight back to the Maker (no
+// Reviewer run spent); after the retries, the run pauses with the reason. Returns true to review.
+function deliverablesGate(run: CollabRun, taskId: string, reply: string): boolean {
+  const task = getTask(taskId); if (!task || task.kind !== 'work') return true
+  const outputs = scopePaths(task.scope).outputs
+  if (!outputs.length) return true
+  const probe = probeIn(run.projectCwd)
+  let missing = missingOutputs(outputs, probe)
+  const maker = makerProviderOf(run, task)
+  const who = providerLabel(maker, maker)
+  if (missing.length && !canWriteFiles(maker)) {
+    const saved: string[] = []
+    for (const f of filesFromReply(reply, missing)) {
+      try {
+        const abs = ensureInside(run.projectCwd, f.path)
+        mkdirSync(join(abs, '..'), { recursive: true }); writeFileSync(abs, f.content, 'utf8'); saved.push(f.path)
+      } catch (e) { logError(`[collab] could not save ${f.path} from reply: ${String(e)}`) }
+    }
+    if (saved.length) {
+      const h = task.handoff
+      updateTask(taskId, { handoff: { status: h?.status || 'done', filesChanged: [...new Set([...(h?.filesChanged ?? []), ...saved])], verify: h?.verify || '' } })
+      appendStatus(run, `## ${today()} · App · ${task.title} — saved ${saved.map((p) => `\`${p}\``).join(', ')} from ${who}'s reply (text-only agent)\n\n---`)
+      missing = missingOutputs(outputs, probe)
+    }
+  }
+  if (!missing.length) return true
+  const findings = missing.map((p) => `Deliverable missing: \`${p}\` ${p.endsWith('/') ? 'has no files' : 'was not written'} (checked by the app before review). Write it${canWriteFiles(maker) ? '' : ` — reply with it in a "=== FILE: ${p} ===" block`}.`)
+  updateTask(taskId, { lastVerdict: { verdict: 'FAIL', findings } })
+  appendStatus(run, `## ${today()} · App check · task ${task.seq + 1} — ${task.title} · FAIL\n\n${findings.map((f, i) => `${i + 1}. ${f}`).join('\n')}\n\n---`)
+  const fresh = getCollabRunBare(run.id)!
+  if (task.attempts <= fresh.budget.maxRetriesPerTask) { runMaker(run.id, taskId); return false }
+  updateTask(taskId, { status: 'failed' })
+  const other = providerLabelOf(run.providerId)
+  pause(run.id, `${who} didn't produce ${missing.map((p) => `“${p}”`).join(', ')} after ${task.attempts} tries on “${task.title}”. ${maker !== run.providerId ? `To give it to ${other}, turn ${who} off in Settings › Agents, then Resume.` : 'Resume retries it; Stop ends the run.'}`)
+  return false
 }
 
 function runReviewer(runId: string, taskId: string, _isFinal: boolean): void {

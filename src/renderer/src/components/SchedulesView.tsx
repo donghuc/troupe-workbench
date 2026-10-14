@@ -1,9 +1,12 @@
+import { confirmDialog } from './ui/ConfirmDialog'
 import { useEffect, useState } from 'react'
 import Icon from './Icon'
 import MasterDetail from './MasterDetail'
 import { api } from '../api'
 import type { Project, ProviderInfo, Schedule, ScheduleKind, ScheduleTarget } from '../../../shared/types'
 import type { PermissionMode } from '../../../shared/agent'
+import { Menu, MenuItem } from './ui/Menu'
+import { Button, IconButton } from './ui/Button'
 
 interface Props {
   projects: Project[]
@@ -78,15 +81,14 @@ export default function SchedulesView({ projects, providers, onRun }: Props) {
     else { await api.schedules.create({ projectId, ...fields() }); await load(); setSel({ mode: 'none' }) }
   }
   const toggle = async (s: Schedule) => { await api.schedules.update(s.id, { enabled: !s.enabled }); load() }
-  const remove = async (s: Schedule) => { if (confirm(`Delete “${s.title}”?`)) { await api.schedules.remove(s.id); await load(); setSel({ mode: 'none' }) } }
+  const remove = async (s: Schedule) => { if (await confirmDialog({ title: 'Delete task?', message: `“${s.title}” stops running and is removed.`, confirmLabel: 'Delete' })) { await api.schedules.remove(s.id); await load(); setSel({ mode: 'none' }) } }
 
   const overflow = (s: Schedule) => (
     <span className="md-head-menu">
-      <button className="icon-btn" title="More" aria-expanded={menuOpen} onClick={() => setMenuOpen((v) => !v)}><Icon name="more-vertical" size={16} /></button>
-      {menuOpen && <>
-        <div className="md-menu-backdrop" onClick={() => setMenuOpen(false)} />
-        <div className="conv-menu"><button className="danger" onClick={() => { setMenuOpen(false); remove(s) }}>Delete</button></div>
-      </>}
+      <IconButton title="More" aria-expanded={menuOpen} onClick={() => setMenuOpen((v) => !v)}><Icon name="more-vertical" size="md" /></IconButton>
+      <Menu open={menuOpen} onClose={() => setMenuOpen(false)}>
+        <MenuItem danger onClick={() => { setMenuOpen(false); remove(s) }}>Delete</MenuItem>
+      </Menu>
     </span>
   )
 
@@ -95,19 +97,19 @@ export default function SchedulesView({ projects, providers, onRun }: Props) {
       <>
         <span className="md-head-title truncate">{editing ? title || editing.title : 'New task'}</span>
         <span className="md-head-spacer" />
-        <button className="btn btn-sm" onClick={editing ? cancelEdit : () => setSel({ mode: 'none' })}>Cancel</button>
-        <button className="btn btn-primary btn-sm" disabled={!projectId || !prompt.trim()} onClick={save}>Save</button>
+        <Button size="sm" onClick={editing ? cancelEdit : () => setSel({ mode: 'none' })}>Cancel</Button>
+        <Button variant="primary" size="sm" disabled={!projectId || !prompt.trim()} onClick={save}>Save</Button>
       </>
     )
     if (sel.mode === 'view' && current) return (
       <>
         <span className="md-head-title truncate">{current.title}</span>
         <div className="md-head-ops">
-          <button className="btn btn-sm" onClick={() => onRun(current)}>Run now</button>
-          <button className="btn btn-sm" onClick={() => toggle(current)}>{current.enabled ? 'Pause' : 'Enable'}</button>
+          <Button size="sm" onClick={() => onRun(current)}>Run now</Button>
+          <Button size="sm" onClick={() => toggle(current)}>{current.enabled ? 'Pause' : 'Enable'}</Button>
         </div>
         <span className="md-head-spacer" />
-        <button className="btn btn-sm" onClick={() => openEdit(current)}><Icon name="edit" size={14} />Edit</button>
+        <Button size="sm" onClick={() => openEdit(current)}><Icon name="edit" size="sm" />Edit</Button>
         {overflow(current)}
       </>
     )
@@ -116,7 +118,7 @@ export default function SchedulesView({ projects, providers, onRun }: Props) {
 
   return (
     <MasterDetail
-      listHeader={<button className="btn btn-sm" onClick={openNew} disabled={projects.length === 0}><Icon name="plus" size={14} />New task</button>}
+      listHeader={<Button size="sm" onClick={openNew} disabled={projects.length === 0}><Icon name="plus" size="sm" />New task</Button>}
       list={
         <>
           {schedules.length === 0 && <div className="sidebar-empty">No scheduled tasks yet.</div>}

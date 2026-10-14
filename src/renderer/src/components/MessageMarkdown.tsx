@@ -6,6 +6,7 @@ import { linkUrlTransform, normalizeRel } from '../links'
 import { api } from '../api'
 
 import { ARTIFACT_EXT } from '../chatFiles'
+import { Button } from './ui/Button'
 const isWebUrl = (href?: string) => !!href && /^(https?:|mailto:|tel:)/i.test(href)
 
 // A local link the app should own (open in the viewer, never the OS browser).
@@ -26,8 +27,8 @@ function OutsideFileLink({ abs, root, label, onOpen }: { abs: string; root?: str
     <span className="outside-file" title={`${abs}\nThis file is outside the project folder, so Troupe can't open it here.`}>
       <span className="outside-file-name">{label}</span>
       <span className="outside-file-tag">outside project</span>
-      <button type="button" className="link-btn outside-file-btn" onClick={() => { void api.system.revealOutside(abs) }}>Finder</button>
-      {root && <button type="button" className="link-btn outside-file-btn" disabled={busy} onClick={() => { void importIt() }}>{busy ? 'Copying…' : 'Copy into project'}</button>}
+      <Button type="button" variant="link" className="outside-file-btn" onClick={() => { void api.system.revealOutside(abs) }}>Finder</Button>
+      {root && <Button type="button" variant="link" className="outside-file-btn" disabled={busy} onClick={() => { void importIt() }}>{busy ? 'Copying…' : 'Copy into project'}</Button>}
     </span>
   )
 }
@@ -48,7 +49,7 @@ function MediaThumb({ root, rel, altText, onOpen, onMedia }: { root: string; rel
   if (failed) {
     return (
       <span className="media-item media-missing" title={`${isVideo ? 'Video' : 'Image'} not found: ${rel}`}>
-        <span className="media-missing-box"><Icon name={isVideo ? 'film' : 'image'} size={16} /> {isVideo ? 'Video' : 'Image'} unavailable</span>
+        <span className="media-missing-box"><Icon name={isVideo ? 'film' : 'image'} size="md" /> {isVideo ? 'Video' : 'Image'} unavailable</span>
         <span className="media-missing-path">{name}</span>
       </span>
     )
@@ -58,7 +59,7 @@ function MediaThumb({ root, rel, altText, onOpen, onMedia }: { root: string; rel
     return (
       <span className="media-item">
         <video className="msg-video" src={src} controls preload="metadata" onError={() => setFailed(true)} />
-        <button type="button" className="media-open-btn" onClick={() => onOpen?.(rel)} title={`Open ${rel} in the artifact viewer`}><Icon name="popout" size={11} /> Open as artifact</button>
+        <button type="button" className="media-open-btn" onClick={() => onOpen?.(rel)} title={`Open ${rel} in the artifact viewer`}><Icon name="popout" size="xs" /> Open as artifact</button>
       </span>
     )
   }
@@ -68,7 +69,7 @@ function MediaThumb({ root, rel, altText, onOpen, onMedia }: { root: string; rel
       <button type="button" className="msg-thumb-btn md-thumb-btn" onClick={() => view?.(rel)} title={`View ${rel}`}>
         <img className="msg-thumb" src={src} alt={altText || name} loading="lazy" onError={() => setFailed(true)} />
       </button>
-      <button type="button" className="media-open-btn" onClick={() => onOpen?.(rel)} title={`Open ${rel} in the artifact viewer`}><Icon name="popout" size={11} /> Open as artifact</button>
+      <button type="button" className="media-open-btn" onClick={() => onOpen?.(rel)} title={`Open ${rel} in the artifact viewer`}><Icon name="popout" size="xs" /> Open as artifact</button>
     </span>
   )
 }
@@ -208,7 +209,7 @@ function MessageMarkdown({ children, onOpenArtifact, root, onOpenMedia }: Props)
       if (onOpenRef.current && inlineLike && !className && isOpenable(text) && normalizeRel(text).includes('/')) {
         return (
           <button type="button" className="artifact-chip" onClick={() => onOpenRef.current?.(normalizeRel(text))} title={`Open ${text}`}>
-            <Icon name={fileIcon(text)} size={13} /> {text.split('/').pop()}
+            <Icon name={fileIcon(text)} size="sm" /> {text.split('/').pop()}
           </button>
         )
       }

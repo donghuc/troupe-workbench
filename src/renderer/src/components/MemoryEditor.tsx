@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import Modal from './Modal'
 import { api } from '../api'
 import type { MirrorResult } from '../../../shared/types'
+import { Button } from './ui/Button'
 
 interface Props {
   folderPath: string | null
@@ -62,8 +63,8 @@ export default function MemoryEditor({ folderPath, dbInitial, append, onSaveDb, 
       title="Project Memory"
       onClose={onClose}
       footer={<>
-        <button className="btn" onClick={onClose}>{mirror ? 'Close' : 'Cancel'}</button>
-        <button className="btn btn-primary" onClick={save} disabled={!loaded}>Save</button>
+        <Button onClick={onClose}>{mirror ? 'Close' : 'Cancel'}</Button>
+        <Button variant="primary" onClick={save} disabled={!loaded}>Save</Button>
       </>}
     >
       {mirror && (
@@ -73,9 +74,9 @@ export default function MemoryEditor({ folderPath, dbInitial, append, onSaveDb, 
               ? 'Saved. Workbench could not read the AGENTS.md here, so it will inject this memory for Codex instead of mirroring it.'
               : 'Saved. Codex has its own AGENTS.md here, so Workbench will inject this memory for Codex instead of mirroring it.'}
           </span>
-          <button className="btn btn-sm" onClick={adopt} disabled={adopting}>
+          <Button size="sm" onClick={adopt} disabled={adopting}>
             {adopting ? 'Adopting…' : 'Adopt AGENTS.md'}
-          </button>
+          </Button>
         </div>
       )}
       <textarea

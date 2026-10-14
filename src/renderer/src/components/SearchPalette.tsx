@@ -44,7 +44,7 @@ export default function SearchPalette({ onClose, onOpen }: Props) {
     <div className="palette-overlay" onClick={onClose}>
       <div className="palette-card" onClick={(e) => e.stopPropagation()} onKeyDown={onKey}>
         <div className="palette-input-row">
-          <Icon name="search" size={16} className="palette-search-ico" />
+          <Icon name="search" size="md" className="palette-search-ico" />
           <input
             ref={inputRef} className="palette-input" value={query} placeholder="Search chats and messages…"
             onChange={(e) => setQuery(e.target.value)}
@@ -59,7 +59,7 @@ export default function SearchPalette({ onClose, onOpen }: Props) {
               onMouseEnter={() => setSel(i)}
               onClick={() => choose(h)}
             >
-              <Icon name={h.kind === 'message' ? 'file' : 'grid'} size={15} className="palette-row-ico" />
+              <Icon name={h.kind === 'message' ? 'file' : 'grid'} size="md" className="palette-row-ico" />
               <span className="palette-row-main">
                 <span className="truncate palette-row-title">{h.title}</span>
                 {h.snippet && <span className="truncate palette-row-snippet">{h.snippet}</span>}

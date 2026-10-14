@@ -1,9 +1,11 @@
+import { Badge } from './ui/Badge'
 import { useEffect, useState } from 'react'
 import Modal from './Modal'
 import { api } from '../api'
 import type { ProviderId } from '../../../shared/types'
 import type { ContextInspection, ContextSection } from '../../../shared/agent'
 import { providerLabel } from '../../../shared/providers'
+import { Button } from './ui/Button'
 
 interface Props {
   conversationId: string
@@ -32,7 +34,7 @@ export default function ContextInspector({ conversationId, providerId, onClose }
   const providerName = providerLabel(providerId, 'Claude')
 
   return (
-    <Modal title={`Context for the next message · ${providerName}`} onClose={onClose} footer={<><button className="btn" disabled={busy} onClick={compressNow}>{busy ? 'Compressing…' : 'Compress now'}</button><button className="btn" onClick={onClose}>Close</button></>}>
+    <Modal title={`Context for the next message · ${providerName}`} onClose={onClose} footer={<><Button disabled={busy} onClick={compressNow}>{busy ? 'Compressing…' : 'Compress now'}</Button><Button onClick={onClose}>Close</Button></>}>
       {!data && <p className="field-hint">Calculating…</p>}
       {data && data.sections.map((s) => {
         const b = badge(s)
@@ -40,7 +42,7 @@ export default function ContextInspector({ conversationId, providerId, onClose }
           <div key={s.name} className="ctx-section">
             <div className="ctx-section-head">
               <span className="ctx-name">{s.name}</span>
-              {b && <span className={`ctx-badge ctx-badge-${b.cls}`}>{b.label}</span>}
+              {b && <Badge className="ctx-badge" tone={b.cls === 'injected' ? 'accent' : 'neutral'} appearance={b.cls === 'none' ? 'outline' : 'soft'}>{b.label}</Badge>}
               <span className="ctx-size">{s.chars.toLocaleString()} chars · ~{s.approxTokens.toLocaleString()} tokens</span>
             </div>
             {s.warning && <p className="ctx-warning">{s.warning}</p>}

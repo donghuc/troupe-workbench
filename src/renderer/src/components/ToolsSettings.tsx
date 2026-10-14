@@ -1,3 +1,4 @@
+import { confirmDialog } from './ui/ConfirmDialog'
 import { useEffect, useState } from 'react'
 import Icon from './Icon'
 import McpAddModal from './McpAddModal'
@@ -8,6 +9,7 @@ import { agentEntry } from '../../../shared/providers'
 import { mcpOffKey, mcpDisplay, groupMcpServers } from '../../../shared/projectMcp'
 import type { AgentTools, McpServer, ProviderId } from '../../../shared/types'
 import Switch from './settings/Switch'
+import { Button, IconButton } from './ui/Button'
 
 interface Props {
   agents: ProviderId[]                      // agents that are on
@@ -42,7 +44,7 @@ export default function ToolsSettings({ agents, mcpOff, setMcpOff, webAccess, se
     setMcpOff(on ? mcpOff.filter((k) => !keys.includes(k)) : [...new Set([...mcpOff, ...keys])])
   }
   const remove = async (name: string) => {
-    if (!confirm(`Remove MCP server “${name}” from Claude and Codex?`)) return
+    if (!(await confirmDialog({ title: 'Remove MCP server?', message: `“${name}” is removed from Claude and Codex.`, confirmLabel: 'Remove' }))) return
     setRemoving(name)
     const r = await api.system.mcpRemove(name).catch(failed('Remove MCP server'))
     if (r && !r.ok) reportError('Remove MCP server', r.error || 'Failed.')
@@ -65,9 +67,9 @@ export default function ToolsSettings({ agents, mcpOff, setMcpOff, webAccess, se
         </div>
         <span className="tool-status">{on ? (m.status === 'pending' ? 'sign in' : m.status) : 'off'}</span>
         {opts.removable && d.removable && (
-          <button className="icon-btn" title="Remove server" disabled={removing === m.name} onClick={() => remove(m.name)}>
-            {removing === m.name ? <span className="activity-spinner spinner-xs" /> : <Icon name="close" size={13} />}
-          </button>
+          <IconButton title="Remove server" disabled={removing === m.name} onClick={() => remove(m.name)}>
+            {removing === m.name ? <span className="activity-spinner spinner-xs" /> : <Icon name="close" size="sm" />}
+          </IconButton>
         )}
         <Switch on={on} label={`${d.label} ${on ? 'on' : 'off'}`} onChange={(v) => setOn([m.name], v)} />
       </div>
@@ -88,8 +90,8 @@ export default function ToolsSettings({ agents, mcpOff, setMcpOff, webAccess, se
       )}
 
       <Section title="MCP servers" actions={<>
-          {canAdd && <button className="link-btn" onClick={() => setShowAdd(true)}>+ Add server</button>}
-          <button className="icon-btn" title="Refresh" onClick={load} disabled={loading}>{loading ? <span className="activity-spinner spinner-xs" /> : <Icon name="refresh" size={14} />}</button>
+          {canAdd && <Button variant="link" onClick={() => setShowAdd(true)}>+ Add server</Button>}
+          <IconButton title="Refresh" onClick={load} disabled={loading}>{loading ? <span className="activity-spinner spinner-xs" /> : <Icon name="refresh" size="sm" />}</IconButton>
         </>}>
       <Field hint={<>Off servers are left out of every run, in every project.{agent === 'codex' && ' On Codex, MCP tools run only in Full access.'}</>}>
       <Stack tight>
@@ -120,7 +122,7 @@ export default function ToolsSettings({ agents, mcpOff, setMcpOff, webAccess, se
                 <div key={plugin} className="tools-plugin">
                   <div className={`settings-row tools-row${onCount ? '' : ' off'}`}>
                     <button className="tools-plugin-toggle" aria-expanded={open} onClick={() => setOpenPlugins((cur) => { const n = new Set(cur); if (open) n.delete(plugin); else n.add(plugin); return n })}>
-                      <span className={`tools-chevron${open ? ' open' : ''}`}><Icon name="chevron-down" size={13} /></span>
+                      <span className={`tools-chevron${open ? ' open' : ''}`}><Icon name="chevron-down" size="sm" /></span>
                       <span className="settings-row-text">
                         <span className="settings-row-title">{plugin}</span>
                         <span className="settings-row-sub">{onCount === names.length ? `${names.length} servers, all on` : onCount === 0 ? `${names.length} servers, all off` : `${onCount} of ${names.length} servers on`}</span>

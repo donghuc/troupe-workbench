@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import Modal from './Modal'
 import type { NewProjectInput } from '../../../shared/types'
+import { Button } from './ui/Button'
 
 interface Props {
   onCreate: (input: NewProjectInput) => void
@@ -20,8 +21,8 @@ export default function NewProjectModal({ onCreate, onClose }: Props) {
       onClose={onClose}
       footer={
         <>
-          <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" disabled={!canCreate} onClick={submit}>Create</button>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" disabled={!canCreate} onClick={submit}>Create</Button>
         </>
       }
     >

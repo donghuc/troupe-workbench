@@ -1,3 +1,4 @@
+import { Badge } from './ui/Badge'
 import { memo, useEffect, useState } from 'react'
 import type { AgentTools, ProviderId } from '../../../shared/types'
 import { MCP_OFF_SETTING, mcpOffKey, parseMcpOff, mcpDisplay } from '../../../shared/projectMcp'
@@ -6,6 +7,7 @@ import { openSettings, SETTINGS_SAVED_EVENT } from '../notices'
 import { artifactIcon } from '../chatFiles'
 import { api } from '../api'
 import Icon from './Icon'
+import { Button, IconButton } from './ui/Button'
 
 interface Props {
   conversationId: string
@@ -63,13 +65,13 @@ function ChatSidePanel({ conversationId, cwd, composerProvider, agentName, artif
       <div className="side-section-label side-section-row">
         <span>Recent artifacts</span>
         {cwd && onBrowseFiles && (
-          <button className="folder-browse-icon" title="Browse files" aria-label="Browse files" onClick={onBrowseFiles}><Icon name="folder-open" size={16} /></button>
+          <button className="folder-browse-icon" title="Browse files" aria-label="Browse files" onClick={onBrowseFiles}><Icon name="folder-open" size="md" /></button>
         )}
       </div>
       {artifacts.length === 0 && workingFiles.length === 0 && <div className="sidebar-empty">No files yet.</div>}
       {(showAllArtifacts ? artifacts : artifacts.slice(0, 8)).map((rel) => (
         <button key={rel} className="artifact-row" onClick={() => onOpen?.(rel)} disabled={!cwd} title={cwd ? rel : `${rel} (connect a folder to open)`}>
-          <Icon name={artifactIcon(rel)} size={15} className="artifact-ico" />
+          <Icon name={artifactIcon(rel)} size="md" className="artifact-ico" />
           <span className="truncate">{rel.split('/').pop()}</span>
         </button>
       ))}
@@ -81,12 +83,12 @@ function ChatSidePanel({ conversationId, cwd, composerProvider, agentName, artif
       {workingFiles.length > 0 && (
         <>
           <button className="view-more disclosure" onClick={() => setShowWorking((v) => !v)} title="Files the agent read or edited but did not link in a reply" aria-expanded={showWorking}>
-            <Icon name="chevron-down" size={13} className={`disclosure-chevron ${showWorking ? 'open' : ''}`} />
+            <Icon name="chevron-down" size="sm" className={`disclosure-chevron ${showWorking ? 'open' : ''}`} />
             <span>Working files ({workingFiles.length})</span>
           </button>
           {showWorking && workingFiles.map((rel) => (
             <button key={rel} className="artifact-row artifact-row-working" onClick={() => onOpen?.(rel)} disabled={!cwd} title={rel}>
-              <Icon name={artifactIcon(rel)} size={15} className="artifact-ico" />
+              <Icon name={artifactIcon(rel)} size="md" className="artifact-ico" />
               <span className="truncate">{rel.split('/').pop()}</span>
             </button>
           ))}
@@ -95,8 +97,8 @@ function ChatSidePanel({ conversationId, cwd, composerProvider, agentName, artif
       <div className="side-section-label side-section-row">
         <span>Tools &amp; sources · {agentName}</span>
         <span className="side-actions">
-          <button className="link-btn side-manage" title="Turn servers and tools on or off in Settings ▸ Tools" onClick={() => openSettings('tools')}>Manage</button>
-          <button className="icon-btn side-refresh" title="Refresh" onClick={loadTools} disabled={toolsLoading}>{toolsLoading ? <span className="activity-spinner spinner-xs" /> : <Icon name="refresh" size={14} />}</button>
+          <Button variant="link" className="side-manage" title="Turn servers and tools on or off in Settings ▸ Tools" onClick={() => openSettings('tools')}>Manage</Button>
+          <IconButton className="side-refresh" title="Refresh" onClick={loadTools} disabled={toolsLoading}>{toolsLoading ? <span className="activity-spinner spinner-xs" /> : <Icon name="refresh" size="sm" />}</IconButton>
         </span>
       </div>
       {toolsLoading && !tools && (
@@ -115,10 +117,10 @@ function ChatSidePanel({ conversationId, cwd, composerProvider, agentName, artif
           <div className="settings-group tools-panel" role="group" aria-label="Tools and sources">
             <button className={`settings-row tools-panel-row${showAllMcp ? ' open' : ''}`} aria-expanded={showAllMcp} onClick={() => setShowAllMcp((v) => !v)}>
               <span className="settings-row-text">
-                <span className="settings-row-title">MCP servers {failing > 0 && <span className="tools-badge failed">{failing} failing</span>}</span>
+                <span className="settings-row-title">MCP servers {failing > 0 && <Badge appearance="soft" tone="danger" className="tools-badge">{failing} failing</Badge>}</span>
                 <span className="settings-row-sub clamp1">{mcpSub}</span>
               </span>
-              <Icon name="chevron-down" size={13} className={`disclosure-chevron ${showAllMcp ? 'open' : ''}`} />
+              <Icon name="chevron-down" size="sm" className={`disclosure-chevron ${showAllMcp ? 'open' : ''}`} />
             </button>
             {showAllMcp && activeMcp.length > 0 && (
               <div className="tools-panel-list">
@@ -137,7 +139,7 @@ function ChatSidePanel({ conversationId, cwd, composerProvider, agentName, artif
                 <span className="settings-row-title">Built-in tools</span>
                 <span className={`settings-row-sub${showAllTools ? '' : ' clamp1'}`}>{activeBuiltin.length ? activeBuiltin.join(', ') : 'None'}</span>
               </span>
-              <Icon name="chevron-down" size={13} className={`disclosure-chevron ${showAllTools ? 'open' : ''}`} />
+              <Icon name="chevron-down" size="sm" className={`disclosure-chevron ${showAllTools ? 'open' : ''}`} />
             </button>
           </div>
         )

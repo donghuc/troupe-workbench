@@ -18,6 +18,26 @@ Each version here matches a packaged build — the dmg is named
 > - Bumping rules: PATCH = fixes/small tweaks, MINOR = new features (backward-compatible),
 >   MAJOR = breaking changes or a data format users can't roll back from.
 
+## [2.5.0] - 2026-10-14
+
+### Added
+- Browse files shows files the way the artifact viewer does: images, videos, PDFs, web pages, tables and JSON open as previews instead of raw text.
+- Files Troupe can't preview (Word, PowerPoint, Keynote, design files, audio, archives…) say so, with **Show in Finder** and **Open in default app** buttons.
+- Collab works with agents you added yourself (OpenCode, Cursor CLI…): Troupe gives them the files they need and saves what they write from their reply.
+
+### Changed
+- New typeface: Google Sans for the interface, Google Sans Code for code.
+- Delete and remove confirmations open in Troupe's own dialog instead of a system alert; Esc cancels.
+- The file tree starts with folders closed, opens the folders of the file you open, and shows "Empty folder" for folders with nothing to list.
+- Collab checks that a task's files were actually written before reviewing it, and tells the planner what each agent can do (files, web, shell), so tasks go to agents that can do them.
+- Badges, buttons and menus look the same everywhere; panels and the white background of artifacts were tidied up.
+
+### Fixed
+- Menus in the sidebar didn't close when you clicked outside them. Every menu now closes on a click outside, Esc, or switching windows.
+- Opening an image or other binary file in Browse files showed its bytes as text.
+- A Collab run could get stuck retrying a task whose agent never wrote its file; it now goes straight back to that agent with the reason and pauses with clear next steps.
+- The typing cursor while an agent replies now blinks as intended.
+
 ## [2.4.1] - 2026-10-13
 
 ### Changed

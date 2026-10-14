@@ -39,14 +39,16 @@ const ICONS = {
 
 export type IconName = keyof typeof ICONS
 
-interface Props { name: IconName; size?: number; className?: string }
+/** DS icon sizes (Dimension › icon-size/*): xs 12, sm 14, md 16, nav 18, lg 20, xl 28. */
+export type IconSize = 'xs' | 'sm' | 'md' | 'nav' | 'lg' | 'xl'
+interface Props { name: IconName; size?: IconSize; className?: string }
 
-// Renders a headless line icon (recolored to currentColor) at the given pixel size.
-export default function Icon({ name, size = 18, className }: Props) {
+// Renders a headless line icon (recolored to currentColor) at a token size.
+export default function Icon({ name, size = 'nav', className }: Props) {
   return (
     <span
       className={`icon${className ? ' ' + className : ''}`}
-      style={{ width: size, height: size }}
+      style={{ width: `var(--icon-${size})`, height: `var(--icon-${size})` }}
       aria-hidden="true"
       dangerouslySetInnerHTML={{ __html: ICONS[name] }}
     />

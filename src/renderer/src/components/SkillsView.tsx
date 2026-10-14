@@ -1,8 +1,12 @@
+import { Badge } from './ui/Badge'
+import { confirmDialog } from './ui/ConfirmDialog'
 import { useEffect, useMemo, useState } from 'react'
 import Icon from './Icon'
 import MasterDetail from './MasterDetail'
 import { api } from '../api'
 import type { Skill, SkillScope, Project } from '../../../shared/types'
+import { Menu, MenuItem } from './ui/Menu'
+import { Button, IconButton } from './ui/Button'
 
 type Sel =
   | { mode: 'none' }
@@ -71,8 +75,8 @@ export default function SkillsView({ projects }: { projects: Project[] }) {
       await refresh(); setSel({ mode: 'none' })
     }
   }
-  const remove = async (s: Skill) => { if (confirm(`Delete skill “${s.name}”?`)) { await api.skills.remove(s.id, cwdOf(s)); await refresh(); setSel({ mode: 'none' }) } }
-  const resetBuiltin = async (s: Skill) => { if (confirm(`Reset “${s.name}” to its built-in default? Any edits you made will be lost.`)) { await api.skills.reset(s.id); await refresh(); setSel({ mode: 'view', id: s.id }) } }
+  const remove = async (s: Skill) => { if (await confirmDialog({ title: 'Delete skill?', message: `“${s.name}” is deleted.`, confirmLabel: 'Delete' })) { await api.skills.remove(s.id, cwdOf(s)); await refresh(); setSel({ mode: 'none' }) } }
+  const resetBuiltin = async (s: Skill) => { if (await confirmDialog({ title: `Reset “${s.name}”?`, message: 'It goes back to its built-in default. Any edits you made will be lost.', confirmLabel: 'Reset' })) { await api.skills.reset(s.id); await refresh(); setSel({ mode: 'view', id: s.id }) } }
   const doDraft = async () => {
     setDraftBusy(true); setDraftError(null)
     try {
@@ -84,33 +88,31 @@ export default function SkillsView({ projects }: { projects: Project[] }) {
 
   const overflow = (s: Skill) => (
     <span className="md-head-menu">
-      <button className="icon-btn" title="More" aria-expanded={menuOpen} onClick={() => setMenuOpen((v) => !v)}><Icon name="more-vertical" size={16} /></button>
-      {menuOpen && <>
-        <div className="md-menu-backdrop" onClick={() => setMenuOpen(false)} />
-        <div className="conv-menu">{s.builtin
-          ? <button onClick={() => { setMenuOpen(false); resetBuiltin(s) }}>Reset to default</button>
-          : <button className="danger" onClick={() => { setMenuOpen(false); remove(s) }}>Delete</button>}</div>
-      </>}
+      <IconButton title="More" aria-expanded={menuOpen} onClick={() => setMenuOpen((v) => !v)}><Icon name="more-vertical" size="md" /></IconButton>
+      <Menu open={menuOpen} onClose={() => setMenuOpen(false)}>{s.builtin
+        ? <MenuItem onClick={() => { setMenuOpen(false); resetBuiltin(s) }}>Reset to default</MenuItem>
+        : <MenuItem danger onClick={() => { setMenuOpen(false); remove(s) }}>Delete</MenuItem>}
+      </Menu>
     </span>
   )
 
   const header = () => {
-    if (sel.mode === 'draft') return <><span className="md-head-title">Draft with agent</span><span className="md-head-spacer" /><button className="btn btn-sm" onClick={() => setSel({ mode: 'none' })} disabled={draftBusy}>Cancel</button><button className="btn btn-primary btn-sm" disabled={!purpose.trim() || draftBusy} onClick={doDraft}>{draftBusy ? <><span className="activity-spinner spinner-xs" />Drafting</> : 'Draft'}</button></>
+    if (sel.mode === 'draft') return <><span className="md-head-title">Draft with agent</span><span className="md-head-spacer" /><Button size="sm" onClick={() => setSel({ mode: 'none' })} disabled={draftBusy}>Cancel</Button><Button variant="primary" size="sm" disabled={!purpose.trim() || draftBusy} onClick={doDraft}>{draftBusy ? <><span className="activity-spinner spinner-xs" />Drafting</> : 'Draft'}</Button></>
     if (sel.mode === 'new' || editing) return (
       <>
         <span className="md-head-title truncate">{editing ? name || editing.name : 'New skill'}</span>
         <span className="md-head-spacer" />
-        <button className="btn btn-sm" onClick={editing ? cancelEdit : () => setSel({ mode: 'none' })}>Cancel</button>
-        <button className="btn btn-primary btn-sm" disabled={!name.trim()} onClick={save}>Save</button>
+        <Button size="sm" onClick={editing ? cancelEdit : () => setSel({ mode: 'none' })}>Cancel</Button>
+        <Button variant="primary" size="sm" disabled={!name.trim()} onClick={save}>Save</Button>
       </>
     )
     if (sel.mode === 'view' && current) return (
       <>
         <span className="md-head-title truncate">{current.name}</span>
-        {current.builtin && <span className="skill-builtin-badge">Built-in</span>}
-        <span className="skill-scope-badge">{scopeLabel(current)}</span>
+        {current.builtin && <Badge tone="accent" className="skill-builtin-badge">Built-in</Badge>}
+        <Badge className="skill-scope-badge">{scopeLabel(current)}</Badge>
         <span className="md-head-spacer" />
-        <button className="btn btn-sm" onClick={() => openEdit(current)}><Icon name="edit" size={14} />Edit</button>
+        <Button size="sm" onClick={() => openEdit(current)}><Icon name="edit" size="sm" />Edit</Button>
         {overflow(current)}
       </>
     )
@@ -121,8 +123,8 @@ export default function SkillsView({ projects }: { projects: Project[] }) {
     <MasterDetail
       listHeader={
         <>
-          <button className="btn btn-sm" onClick={openNew}><Icon name="plus" size={14} />New skill</button>
-          <button className="btn btn-sm" onClick={openDraft}><Icon name="flash" size={14} />Draft</button>
+          <Button size="sm" onClick={openNew}><Icon name="plus" size="sm" />New skill</Button>
+          <Button size="sm" onClick={openDraft}><Icon name="flash" size="sm" />Draft</Button>
         </>
       }
       list={
@@ -131,7 +133,7 @@ export default function SkillsView({ projects }: { projects: Project[] }) {
           {skills.map((s) => (
             <div key={s.id} className={`md-row ${selId === s.id ? 'active' : ''}`} onClick={() => openView(s)}>
               <div className="md-row-main">
-                <div className="truncate md-row-title">{s.name} {s.builtin && <span className="skill-builtin-badge">Built-in</span>}<span className="skill-scope-badge">{scopeLabel(s)}</span></div>
+                <div className="truncate md-row-title">{s.name} {s.builtin && <Badge tone="accent" className="skill-builtin-badge">Built-in</Badge>}<Badge className="skill-scope-badge">{scopeLabel(s)}</Badge></div>
                 <div className="truncate md-row-sub">{s.description || s.body.slice(0, 100)}</div>
               </div>
             </div>

@@ -1,8 +1,11 @@
+import { confirmDialog } from './ui/ConfirmDialog'
 import { useEffect, useRef, useState } from 'react'
 import Icon from './Icon'
 import MasterDetail from './MasterDetail'
 import { api } from '../api'
 import type { Note, Project } from '../../../shared/types'
+import { Menu, MenuItem } from './ui/Menu'
+import { Button, IconButton } from './ui/Button'
 
 interface Props {
   projects: Project[]
@@ -58,7 +61,7 @@ export default function NotesView({ projects, onNoteToChat, onNoteToProject }: P
     setNotes((cur) => [n, ...cur]); setSelId(n.id); setTitle(''); setBody('')
   }
   const del = async (n: Note): Promise<void> => {
-    if (!confirm('Delete this note?')) return
+    if (!(await confirmDialog({ title: 'Delete this note?', message: undefined, confirmLabel: 'Delete' }))) return
     await api.notes.remove(n.id)
     if (selId === n.id) { setSelId(null); setTitle(''); setBody('') }
     await load()
@@ -73,7 +76,7 @@ export default function NotesView({ projects, onNoteToChat, onNoteToProject }: P
   return (
     <MasterDetail
       contentWhite
-      listHeader={<button className="btn btn-sm" onClick={newNote}><Icon name="plus" size={14} />New note</button>}
+      listHeader={<Button size="sm" onClick={newNote}><Icon name="plus" size="sm" />New note</Button>}
       list={
         <>
           {notes.length === 0 && <div className="sidebar-empty">No notes yet.</div>}
@@ -93,30 +96,20 @@ export default function NotesView({ projects, onNoteToChat, onNoteToProject }: P
           <span className="md-head-title truncate">{title.trim() || noteTitle({ title, body })}</span>
           <span className="md-head-spacer" />
           <div className="note-tochat">
-            <button className="btn btn-sm" disabled={!projects.length} onClick={() => { setMenuOpen(false); setPickChat((v) => !v) }}>Turn into chat ▾</button>
-            {pickChat && (
-              <>
-                <div className="md-menu-backdrop" onClick={() => setPickChat(false)} />
-                <div className="conv-menu note-proj-menu">
-                  {projects.length === 0 && <div className="sidebar-empty">No projects yet</div>}
-                  {projects.map((p) => (
-                    <button key={p.id} onClick={() => { setPickChat(false); toChat(p.id) }}>{p.name}</button>
-                  ))}
-                </div>
-              </>
-            )}
+            <Button size="sm" disabled={!projects.length} onClick={() => { setMenuOpen(false); setPickChat((v) => !v) }}>Turn into chat ▾</Button>
+            <Menu open={pickChat} onClose={() => setPickChat(false)} className="conv-menu note-proj-menu">
+              {projects.length === 0 && <div className="sidebar-empty">No projects yet</div>}
+              {projects.map((p) => (
+                <MenuItem key={p.id} onClick={() => { setPickChat(false); toChat(p.id) }}>{p.name}</MenuItem>
+              ))}
+            </Menu>
           </div>
           <span className="md-head-menu">
-            <button className="icon-btn" title="More" aria-expanded={menuOpen} onClick={() => { setPickChat(false); setMenuOpen((v) => !v) }}><Icon name="more-vertical" size={16} /></button>
-            {menuOpen && (
-              <>
-                <div className="md-menu-backdrop" onClick={() => setMenuOpen(false)} />
-                <div className="conv-menu">
-                  <button onClick={() => { setMenuOpen(false); toProject() }}>Turn into project</button>
-                  <button className="danger" onClick={() => { setMenuOpen(false); del(selected) }}>Delete</button>
-                </div>
-              </>
-            )}
+            <IconButton title="More" aria-expanded={menuOpen} onClick={() => { setPickChat(false); setMenuOpen((v) => !v) }}><Icon name="more-vertical" size="md" /></IconButton>
+            <Menu open={menuOpen} onClose={() => setMenuOpen(false)}>
+              <MenuItem onClick={() => { setMenuOpen(false); toProject() }}>Turn into project</MenuItem>
+              <MenuItem danger onClick={() => { setMenuOpen(false); del(selected) }}>Delete</MenuItem>
+            </Menu>
           </span>
         </>
       )}

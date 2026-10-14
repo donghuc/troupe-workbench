@@ -3,6 +3,7 @@ import Modal from './Modal'
 import { api } from '../api'
 import { reportError } from '../notices'
 import type { SkillScope } from '../../../shared/types'
+import { Button } from './ui/Button'
 
 interface Props {
   content: string
@@ -32,8 +33,8 @@ export default function SaveAsSkillModal({ content, cwd, onClose, onSaved }: Pro
 
   return (
     <Modal title="Save as skill" onClose={onClose} footer={<>
-      <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
-      <button className="btn btn-primary" disabled={!name.trim() || !body.trim() || busy} onClick={save}>Save skill</button>
+      <Button onClick={onClose} disabled={busy}>Cancel</Button>
+      <Button variant="primary" disabled={!name.trim() || !body.trim() || busy} onClick={save}>Save skill</Button>
     </>}>
       <label className="field-label">Name</label>
       <input className="field-input" autoFocus value={name} placeholder="e.g. Portfolio review" onChange={(e) => setName(e.target.value)} />

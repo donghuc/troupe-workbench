@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import Icon from '../Icon'
 import type { CanvasIndex } from '../../../../shared/imageCanvas'
+import { Menu, MenuItem } from '../ui/Menu'
+import { IconButton } from '../ui/Button'
 
 // Canvas tabs in the Image Creation header (D-102). Click to switch, double-click to rename,
 // ⋮ for Rename · Duplicate · Clear canvas · Delete. "+" adds a canvas after the active one.
@@ -45,23 +47,18 @@ export default function CanvasTabs({ index, busy, onSelect, onCreate, onRename, 
                 <span className="img-tab-name truncate">{t.name}</span>
               )}
               <button className="img-tab-more" title="Canvas options" aria-label={`Options for ${t.name}`}
-                onClick={(e) => { e.stopPropagation(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setMenuAt({ x: r.left, y: r.bottom + 4 }); setMenu(menu === t.id ? null : t.id) }}><Icon name="more-vertical" size={14} /></button>
-              {menu === t.id && (
-                <>
-                  <div className="menu-backdrop" onClick={(e) => { e.stopPropagation(); setMenu(null) }} />
-                  <div className="conv-menu img-tab-menu" style={{ left: menuAt.x, top: menuAt.y }} onClick={(e) => e.stopPropagation()}>
-                    <button onClick={() => startRename(t.id, t.name)}>Rename</button>
-                    <button onClick={() => { setMenu(null); onDuplicate(t.id) }}>Duplicate</button>
-                    <button onClick={() => { setMenu(null); onClear(t.id) }}>Clear canvas</button>
-                    <button className="danger" onClick={() => { setMenu(null); onDelete(t.id) }}>Delete</button>
-                  </div>
-                </>
-              )}
+                onClick={(e) => { e.stopPropagation(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setMenuAt({ x: r.left, y: r.bottom + 4 }); setMenu(menu === t.id ? null : t.id) }}><Icon name="more-vertical" size="sm" /></button>
+              <Menu open={menu === t.id} onClose={() => setMenu(null)} className="conv-menu img-tab-menu" style={{ left: menuAt.x, top: menuAt.y }} onClick={(e) => e.stopPropagation()}>
+                <MenuItem onClick={() => startRename(t.id, t.name)}>Rename</MenuItem>
+                <MenuItem onClick={() => { setMenu(null); onDuplicate(t.id) }}>Duplicate</MenuItem>
+                <MenuItem onClick={() => { setMenu(null); onClear(t.id) }}>Clear canvas</MenuItem>
+                <MenuItem danger onClick={() => { setMenu(null); onDelete(t.id) }}>Delete</MenuItem>
+              </Menu>
             </div>
           )
         })}
       </div>
-      <button className="icon-btn img-tab-add" title="New canvas" aria-label="New canvas" onClick={onCreate}><Icon name="plus" size={15} /></button>
+      <IconButton className="img-tab-add" title="New canvas" aria-label="New canvas" onClick={onCreate}><Icon name="plus" size="md" /></IconButton>
     </div>
   )
 }

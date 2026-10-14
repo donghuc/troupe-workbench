@@ -1,3 +1,4 @@
+import { Button } from '../ui/Button'
 import { useEffect, useMemo, useState } from 'react'
 import Modal from '../Modal'
 import { Field } from '../Form'
@@ -84,9 +85,9 @@ export default function AddAgentModal({ editing, onClose }: Props) {
   const footer = (
     <>
       <span className="modal-footer-note">{passed ? 'Test passed' : testing ? '' : !runChanged ? '' : skipTest ? (editing ? 'Saving without a test' : 'Adding without a test') : editing ? 'Command changed — test it, then save' : 'Test it, then add it'}</span>
-      <button className="btn" onClick={onClose}>Cancel</button>
-      <button className="btn" onClick={runTest} disabled={testing || !draft.command.trim()}>{testing ? <><span className="activity-spinner" /> Testing…</> : 'Test'}</button>
-      <button className="btn btn-primary" onClick={save} disabled={saving || testing || !canSave}>{editing ? 'Save' : 'Add'}</button>
+      <Button onClick={onClose}>Cancel</Button>
+      <Button onClick={runTest} disabled={testing || !draft.command.trim()}>{testing ? <><span className="activity-spinner" /> Testing…</> : 'Test'}</Button>
+      <Button variant="primary" onClick={save} disabled={saving || testing || !canSave}>{editing ? 'Save' : 'Add'}</Button>
     </>
   )
 
@@ -106,17 +107,17 @@ export default function AddAgentModal({ editing, onClose }: Props) {
                 const state = found === null ? 'Checking…' : isAdded ? 'Already added' : bin ? 'Found on your Mac' : 'Not installed'
                 return (
                   <div key={r.id} role="listitem" className={`settings-row preset-row${picked ? ' picked' : ''}`}>
-                    <ProviderAvatar id={`x-${r.id}`} size={28} />
+                    <ProviderAvatar id={`x-${r.id}`} size="lg" />
                     <div className="settings-row-text">
                       <div className="settings-row-title">{r.label}</div>
                       <div className="settings-row-sub"><span className={bin && !isAdded ? 'ok' : ''}>{state}</span>{r.needs ? ` · ${r.needs}` : ''}</div>
                     </div>
-                    {picked && <span className="preset-picked"><Icon name="check" size={12} /> Selected</span>}
-                    {!picked && bin && !isAdded && <button className="btn btn-sm" onClick={() => pickPreset(r)}>Use</button>}
+                    {picked && <span className="preset-picked"><Icon name="check" size="xs" /> Selected</span>}
+                    {!picked && bin && !isAdded && <Button size="sm" onClick={() => pickPreset(r)}>Use</Button>}
                     {found !== null && !bin && !isAdded && r.install && (
-                      <button className="btn btn-sm" title={`Opens Terminal and runs: ${r.install.cmd}`} onClick={() => api.agents.setupStart(r.id, 'install', true)}>Install…</button>
+                      <Button size="sm" title={`Opens Terminal and runs: ${r.install.cmd}`} onClick={() => api.agents.setupStart(r.id, 'install', true)}>Install…</Button>
                     )}
-                    {bin && r.signIn && !isAdded && <button className="btn btn-sm btn-ghost" title={`Opens Terminal and runs: ${r.signIn.cmd}`} onClick={() => api.agents.setupStart(r.id, 'signIn', true)}>Sign in…</button>}
+                    {bin && r.signIn && !isAdded && <Button variant="ghost" size="sm" title={`Opens Terminal and runs: ${r.signIn.cmd}`} onClick={() => api.agents.setupStart(r.id, 'signIn', true)}>Sign in…</Button>}
                   </div>
                 )
               })}
@@ -146,7 +147,7 @@ export default function AddAgentModal({ editing, onClose }: Props) {
 
           <div className={`disclosure${showAdvanced ? ' open' : ''}`}>
             <button type="button" className="disclosure-head" aria-expanded={showAdvanced} onClick={() => setShowAdvanced((v) => !v)}>
-              <Icon name="chevron-down" size={12} className="disclosure-chevron" />
+              <Icon name="chevron-down" size="xs" className="disclosure-chevron" />
               <span>Advanced</span>
               {!showAdvanced && <span className="disclosure-summary">{advSummary}</span>}
             </button>
@@ -182,7 +183,7 @@ export default function AddAgentModal({ editing, onClose }: Props) {
           </div>
         )}
 
-        <p className="agent-trust"><Icon name="info" size={13} /> Added agents can read and change files in your project folder. Only add tools you trust.</p>
+        <p className="agent-trust"><Icon name="info" size="sm" /> Added agents can read and change files in your project folder. Only add tools you trust.</p>
       </div>
     </Modal>
   )

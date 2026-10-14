@@ -2,6 +2,7 @@
 // Welcome screen and Settings ▸ Agents. Commands come from the bundled recipe; main runs them
 // only after the user confirms (once per recipe version). Every command stays copyable under
 // "Or do it yourself in Terminal".
+import { Badge } from './ui/Badge'
 import { useEffect, useRef, useState } from 'react'
 import ProviderAvatar from './ProviderAvatar'
 import { api } from '../api'
@@ -10,6 +11,7 @@ import { BUILTIN_RECIPES, recipeHash, SETUP_CONFIRMED_SETTING } from '../../../s
 import { agentState } from '../../../shared/welcome'
 import type { ProviderId, BuiltinProviderId } from '../../../shared/types'
 import type { SetupEvent } from '../../../shared/agentSetup'
+import { Button, buttonClass } from './ui/Button'
 
 type Avail = { installed: boolean; authenticated: boolean; detail?: string }
 type Phase = 'idle' | 'confirm' | 'installing' | 'signingIn' | 'terminal' | 'failed'
@@ -27,7 +29,7 @@ function CopyCmd({ cmd }: { cmd: string }) {
   return (
     <div className="welcome-cmd">
       <code>{cmd}</code>
-      <button className="btn btn-sm" onClick={copy}>{done ? 'Copied' : 'Copy'}</button>
+      <Button size="sm" onClick={copy}>{done ? 'Copied' : 'Copy'}</Button>
     </div>
   )
 }
@@ -105,9 +107,9 @@ export default function AgentSetupCard({ id, status, onStatus }: Props) {
   return (
     <div className="setup-card">
       <div className="setup-card-head">
-        <ProviderAvatar id={id} size={36} />
+        <ProviderAvatar id={id} size="xl" />
         <div className="setup-card-title">
-          <div className="setup-card-name">{recipe.label}{recipe.recommended && <span className="welcome-tag">Recommended</span>}</div>
+          <div className="setup-card-name">{recipe.label}{recipe.recommended && <Badge appearance="soft">Recommended</Badge>}</div>
           <div className="welcome-agent-state"><span className={`welcome-dot ${st}`} />
             {st === 'checking' && 'Checking…'}
             {st === 'ready' && (id === 'grok' || id === 'gemini' ? 'Installed · sign-in is checked on first use' : `Ready${status?.detail ? ` · ${status.detail.split(' · ')[0]}` : ''}`)}
@@ -122,8 +124,8 @@ export default function AgentSetupCard({ id, status, onStatus }: Props) {
           <div><b>Install {recipe.label}?</b> This downloads and runs the official installer from <b>{recipe.install.host}</b> on your Mac.</div>
           <code className="setup-cmd">{recipe.install.cmd}</code>
           <div className="setup-actions">
-            <button className="btn btn-primary" onClick={confirmInstall}>Install</button>
-            <button className="btn btn-ghost" onClick={() => setPhase('idle')}>Cancel</button>
+            <Button variant="primary" onClick={confirmInstall}>Install</Button>
+            <Button variant="ghost" onClick={() => setPhase('idle')}>Cancel</Button>
           </div>
         </div>
       )}
@@ -133,8 +135,8 @@ export default function AgentSetupCard({ id, status, onStatus }: Props) {
           <div className="setup-progress-row">
             <span className="activity-spinner spinner-xs" />
             <span>{phase === 'installing' ? 'Installing…' : 'Finish signing in in your browser.'}</span>
-            <button className="link-btn" onClick={() => setShowLog((v) => !v)}>{showLog ? 'Hide details' : 'Show details'}</button>
-            <button className="btn btn-sm" onClick={cancel}>Cancel</button>
+            <Button variant="link" onClick={() => setShowLog((v) => !v)}>{showLog ? 'Hide details' : 'Show details'}</Button>
+            <Button size="sm" onClick={cancel}>Cancel</Button>
           </div>
           {showLog && lines.length > 0 && <pre className="setup-log">{lines.slice(-8).join('\n')}</pre>}
         </div>
@@ -145,7 +147,7 @@ export default function AgentSetupCard({ id, status, onStatus }: Props) {
           <div className="setup-progress-row">
             <span className="activity-spinner spinner-xs" />
             <span>Finish in the Terminal window, then come back here.</span>
-            <button className="btn btn-sm" onClick={() => setPhase('idle')}>Stop waiting</button>
+            <Button size="sm" onClick={() => setPhase('idle')}>Stop waiting</Button>
           </div>
         </div>
       )}
@@ -154,24 +156,24 @@ export default function AgentSetupCard({ id, status, onStatus }: Props) {
         <div className="setup-failed">
           <div>Couldn't finish. {error}</div>
           <div className="setup-actions">
-            <button className="btn btn-sm" onClick={() => setPhase('idle')}>Try again</button>
-            <button className="btn btn-sm" onClick={() => startStep(st === 'missing' ? 'install' : 'signIn', true)}>Open in Terminal</button>
+            <Button size="sm" onClick={() => setPhase('idle')}>Try again</Button>
+            <Button size="sm" onClick={() => startStep(st === 'missing' ? 'install' : 'signIn', true)}>Open in Terminal</Button>
           </div>
         </div>
       )}
 
       {phase === 'idle' && st !== 'ready' && st !== 'checking' && (
         <div className="setup-actions">
-          {st === 'missing' && recipe.install && <button className="btn btn-primary" onClick={install}>Install</button>}
-          {st === 'missing' && !recipe.install && recipe.docs && <a className="btn btn-sm" href={recipe.docs} target="_blank" rel="noreferrer">Install instructions ↗</a>}
-          {st === 'signin' && recipe.signIn && <button className="btn btn-primary" onClick={() => startStep('signIn')}>Sign in</button>}
-          <button className="link-btn" onClick={() => void check(true)}>Check again</button>
+          {st === 'missing' && recipe.install && <Button variant="primary" onClick={install}>Install</Button>}
+          {st === 'missing' && !recipe.install && recipe.docs && <a className={buttonClass({ size: 'sm' })} href={recipe.docs} target="_blank" rel="noreferrer">Install instructions ↗</a>}
+          {st === 'signin' && recipe.signIn && <Button variant="primary" onClick={() => startStep('signIn')}>Sign in</Button>}
+          <Button variant="link" onClick={() => void check(true)}>Check again</Button>
         </div>
       )}
 
       {st !== 'ready' && (recipe.install || recipe.signIn) && (
         <div className="setup-diy">
-          <button className="link-btn" onClick={() => setDiy((v) => !v)}>{diy ? '▾' : '▸'} Or do it yourself in Terminal</button>
+          <Button variant="link" onClick={() => setDiy((v) => !v)}>{diy ? '▾' : '▸'} Or do it yourself in Terminal</Button>
           {diy && (
             <div className="setup-diy-body">
               {st === 'missing' && recipe.install && <CopyCmd cmd={recipe.install.cmd} />}

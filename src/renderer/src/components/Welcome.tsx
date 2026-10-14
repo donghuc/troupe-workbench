@@ -2,6 +2,7 @@
 // 1 · which agents are ready (copyable install/sign-in commands, Re-check),
 // 2 · first project (a folder, or scratch mode), created on Continue,
 // 3 · permission modes + a one-click first prompt (read-only).
+import { Button, buttonClass } from './ui/Button'
 import { useEffect, useState } from 'react'
 import ProviderAvatar from './ProviderAvatar'
 import { refreshAgentStatus, saveDisabledAgents, setAgentStatus } from '../agents'
@@ -104,7 +105,7 @@ export default function Welcome({ createProject, onFinish }: Props) {
                   const st = agentState(status[id])
                   return (
                     <button key={id} role="option" aria-selected={sel === id} className={`welcome-rail-row${sel === id ? ' on' : ''}`} onClick={() => setSel(id)}>
-                      <ProviderAvatar id={id} size={24} />
+                      <ProviderAvatar id={id} size="md" />
                       <span className="welcome-rail-name">{agentEntry(id).label}</span>
                       <span className={`welcome-dot ${st}`} title={st} />
                     </button>
@@ -131,7 +132,7 @@ export default function Welcome({ createProject, onFinish }: Props) {
               <button className={`welcome-choice${!scratch ? ' sel' : ''}`} disabled={!!projectId} onClick={chooseFolder}>
                 <span className="welcome-choice-title">Use a folder</span>
                 <span className="welcome-choice-sub">Docs, notes, a repo — anything you want agents to work on.</span>
-                {folder ? <span className="welcome-path">{folder}</span> : <span className="btn btn-sm">Choose folder…</span>}
+                {folder ? <span className="welcome-path">{folder}</span> : <span className={buttonClass({ size: 'sm' })}>Choose folder…</span>}
               </button>
               <button className={`welcome-choice${scratch ? ' sel' : ''}`} disabled={!!projectId} onClick={() => { setScratch(true); setFolder(null) }}>
                 <span className="welcome-choice-title">Start without a folder</span>
@@ -163,9 +164,9 @@ export default function Welcome({ createProject, onFinish }: Props) {
                 <div className="welcome-try-title">{prompt.compare ? "Try Troupe's best trick" : 'Try a first question'}</div>
                 <div className="welcome-try-prompt">{prompt.text}</div>
                 <div className="welcome-try-row">
-                  <button className="btn btn-primary" onClick={() => onFinish(projectId, { text: prompt.text, provider: prompt.provider })}>
+                  <Button variant="primary" onClick={() => onFinish(projectId, { text: prompt.text, provider: prompt.provider })}>
                     Run with {prompt.compare ? names(ready) : agentEntry(prompt.provider).label}
-                  </button>
+                  </Button>
                   <span className="welcome-hint">
                     {prompt.compare ? 'Each agent answers on its own, then a Compare card shows where they agree and disagree. ' : ''}
                     Runs read-only and uses a little of each agent's plan.
@@ -178,12 +179,12 @@ export default function Welcome({ createProject, onFinish }: Props) {
 
         <div className="welcome-foot">
           {/* Back sits on the left, apart from the forward actions on the right. */}
-          {step > 1 && <button className="btn btn-ghost" onClick={() => setStep((step - 1) as 1 | 2)}>Back</button>}
+          {step > 1 && <Button variant="ghost" onClick={() => setStep((step - 1) as 1 | 2)}>Back</Button>}
           <span className="welcome-meta">{step === 1 && (checking ? 'Checking your agents…' : ready.length ? `${ready.length} of ${BUILTIN_IDS.length} ready` : 'Install and sign in to at least one agent to continue')}</span>
-          {step < 3 && <button className="btn btn-ghost" onClick={() => onFinish(projectId)}>Skip setup</button>}
-          {step === 1 && <button className="btn btn-primary" disabled={!canContinue1} onClick={next1}>Continue</button>}
-          {step === 2 && <button className="btn btn-primary" disabled={busy || (!folder && !scratch)} onClick={next2}>{busy ? 'Creating…' : 'Continue'}</button>}
-          {step === 3 && <button className="btn" onClick={() => onFinish(projectId)}>Skip, open project</button>}
+          {step < 3 && <Button variant="ghost" onClick={() => onFinish(projectId)}>Skip setup</Button>}
+          {step === 1 && <Button variant="primary" disabled={!canContinue1} onClick={next1}>Continue</Button>}
+          {step === 2 && <Button variant="primary" disabled={busy || (!folder && !scratch)} onClick={next2}>{busy ? 'Creating…' : 'Continue'}</Button>}
+          {step === 3 && <Button onClick={() => onFinish(projectId)}>Skip, open project</Button>}
         </div>
       </div>
     </div>

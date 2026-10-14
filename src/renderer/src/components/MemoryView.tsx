@@ -3,6 +3,7 @@ import { api } from '../api'
 import Icon from './Icon'
 import MasterDetail from './MasterDetail'
 import type { Project, MemoryOverview, MirrorResult } from '../../../shared/types'
+import { Button } from './ui/Button'
 
 interface Props {
   projects: Project[]
@@ -108,7 +109,7 @@ export default function MemoryView({ projects, onChanged }: Props) {
             className={`md-row ${sameTarget(target, { kind: 'global' }) ? 'active' : ''}`}
             onClick={() => setTarget({ kind: 'global' })}
           >
-            <Icon name="grid" size={15} className="mem-ico" />
+            <Icon name="grid" size="md" className="mem-ico" />
             <div className="md-row-main">
               <div className="truncate md-row-title">Global</div>
               <div className="truncate md-row-sub">{overview ? meta(overview.global.chars) : '…'} · all projects</div>
@@ -123,7 +124,7 @@ export default function MemoryView({ projects, onChanged }: Props) {
               className={`md-row ${sameTarget(target, { kind: 'project', id: p.id }) ? 'active' : ''}`}
               onClick={() => setTarget({ kind: 'project', id: p.id })}
             >
-              <Icon name="folder-open" size={15} className="mem-ico" />
+              <Icon name="folder-open" size="md" className="mem-ico" />
               <div className="md-row-main">
                 <div className="truncate md-row-title">{p.name}</div>
                 <div className="truncate md-row-sub">{meta(p.chars)}{p.folderPath ? '' : ' · no folder'}</div>
@@ -139,9 +140,9 @@ export default function MemoryView({ projects, onChanged }: Props) {
             {text.length.toLocaleString()} chars{text.length > 30000 ? ' · near Codex 32 KB cap' : ''}
           </span>
           <span className="md-head-spacer" />
-          <button className="btn btn-primary btn-sm" onClick={save} disabled={!dirty || saving}>
+          <Button variant="primary" size="sm" onClick={save} disabled={!dirty || saving}>
             {saving ? <><span className="activity-spinner spinner-xs" />Saving</> : 'Save'}
-          </button>
+          </Button>
         </>
       )}
     >
@@ -156,9 +157,9 @@ export default function MemoryView({ projects, onChanged }: Props) {
                 ? "Workbench could not read the AGENTS.md here, so it will inject this memory for Codex instead of mirroring it."
                 : "Codex has its own AGENTS.md here, so Workbench will inject this memory for Codex instead of mirroring it."}
             </span>
-            <button className="btn btn-sm" onClick={adopt} disabled={adopting}>
+            <Button size="sm" onClick={adopt} disabled={adopting}>
               {adopting ? 'Adopting…' : 'Adopt AGENTS.md'}
-            </button>
+            </Button>
           </div>
         )}
         <textarea

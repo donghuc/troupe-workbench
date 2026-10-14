@@ -6,9 +6,11 @@ interface Props {
   children: ReactNode
   footer?: ReactNode
   wide?: boolean
+  /** Small dialog (confirmations). */
+  narrow?: boolean
 }
 
-export default function Modal({ title, onClose, children, footer, wide }: Props) {
+export default function Modal({ title, onClose, children, footer, wide, narrow }: Props) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
@@ -17,7 +19,7 @@ export default function Modal({ title, onClose, children, footer, wide }: Props)
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className={`modal-card${wide ? ' wide' : ''}`} onClick={(e) => e.stopPropagation()}>
+      <div className={`modal-card${wide ? ' wide' : ''}${narrow ? ' narrow' : ''}`} onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2>{title}</h2>
           <button className="modal-close" onClick={onClose} aria-label="Close">✕</button>

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import Modal from './Modal'
+import { Button } from './ui/Button'
 
 interface Props {
   initial: string
@@ -15,8 +16,8 @@ export default function InstructionsEditor({ initial, onSave, onClose }: Props) 
       onClose={onClose}
       footer={
         <>
-          <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={() => onSave(value)}>Save</button>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" onClick={() => onSave(value)}>Save</Button>
         </>
       }
     >

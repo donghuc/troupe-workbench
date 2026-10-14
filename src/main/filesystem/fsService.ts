@@ -95,9 +95,34 @@ export async function readDataUrl(root: string, relPath: string): Promise<string
   return `data:${mime};base64,${buf.toString('base64')}`
 }
 
+// Text previews are capped; a bigger file is opened in its own app instead.
+const TEXT_PREVIEW_MAX_BYTES = 5 * 1024 * 1024
+// Error messages the renderer matches on (they survive IPC as part of the message).
+const FILE_BINARY = 'FILE_BINARY'
+const FILE_TOO_LARGE = 'FILE_TOO_LARGE'
+
+/** Heuristic: a NUL byte, or many control characters, in the first 8 KB means "not text". */
+export function looksBinary(buf: Buffer): boolean {
+  const n = Math.min(buf.length, 8192)
+  if (n === 0) return false
+  let ctrl = 0
+  for (let i = 0; i < n; i++) {
+    const b = buf[i]
+    if (b === 0) return true
+    if (b < 7 || (b > 13 && b < 32 && b !== 27)) ctrl++
+  }
+  return ctrl / n > 0.1
+}
+
+// Read a file as UTF-8 text. Refuses binaries and very large files so the UI never
+// renders a JPEG's bytes as text (it shows "can't preview" + Show in Finder instead).
 export async function readTextFile(root: string, relPath: string): Promise<string> {
   const abs = ensureInside(root, relPath)
-  return fs.readFile(abs, 'utf8')
+  const { size } = await fs.stat(abs)
+  if (size > TEXT_PREVIEW_MAX_BYTES) throw new Error(FILE_TOO_LARGE)
+  const buf = await fs.readFile(abs)
+  if (looksBinary(buf)) throw new Error(FILE_BINARY)
+  return buf.toString('utf8')
 }
 
 export async function writeTextFile(root: string, relPath: string, content: string): Promise<void> {

@@ -1,3 +1,5 @@
+import { Badge } from '../ui/Badge'
+import { confirmDialog } from '../ui/ConfirmDialog'
 import { useState } from 'react'
 import ProviderAvatar from '../ProviderAvatar'
 import Modal from '../Modal'
@@ -13,6 +15,7 @@ import type { CustomAgent } from '../../../../shared/customAgents'
 import { presetRecipe } from '../../../../shared/agentRecipes'
 import { useAgentList, customAgentFor } from '../../agents'
 import { api } from '../../api'
+import { Button } from '../ui/Button'
 
 type Status = Partial<Record<ProviderId, { installed: boolean; authenticated: boolean }>>
 interface Props {
@@ -40,7 +43,7 @@ export default function AgentsTab({ offAgents, toggleAgent, offModels, toggleMod
   const typed = parseExtraModels(extraModels)
 
   const remove = async (a: CustomAgent) => {
-    if (!confirm(`Remove ${a.name}? It leaves your pickers; past messages keep its name.`)) return
+    if (!(await confirmDialog({ title: `Remove ${a.name}?`, message: 'It leaves your pickers; past messages keep its name.', confirmLabel: 'Remove' }))) return
     setOpen(null)
     await api.customAgents.remove(a.id)
   }
@@ -59,7 +62,7 @@ export default function AgentsTab({ offAgents, toggleAgent, offModels, toggleMod
       )}
       {(adding || editing) && <AddAgentModal editing={editing ?? undefined} onClose={() => { setAdding(false); setEditing(null) }} />}
 
-      <Section title="Agents" actions={<button className="btn btn-sm" onClick={() => setAdding(true)}><Icon name="plus" size={12} /> Add agent</button>}>
+      <Section title="Agents" actions={<Button size="sm" onClick={() => setAdding(true)}><Icon name="plus" size="xs" /> Add agent</Button>}>
         <Field hint="Off agents leave every picker; at least one stays on. Open an agent to choose the models its picker shows.">
           <div className="settings-group agents-list" role="list" aria-label="Agents">
             {ids.map((id) => {
@@ -79,20 +82,20 @@ export default function AgentsTab({ offAgents, toggleAgent, offModels, toggleMod
                 <div key={id} role="listitem" className={`agent-item${on ? '' : ' off'}${isOpen ? ' open' : ''}`}>
                   <div className="agent-head">
                     <button type="button" className="agent-head-main" aria-expanded={isOpen} disabled={!on} onClick={() => { setOpen(isOpen ? null : id); setNewModel('') }}>
-                      <ProviderAvatar id={id} size={28} />
+                      <ProviderAvatar id={id} size="lg" />
                       <span className="settings-row-text">
                         <span className="settings-row-title">
                           {e.label} <span className="settings-row-handle">@{e.handle}</span>
-                          {custom && <span className="agent-tag" title="Shows replies only. Live tool steps and cost aren't available for this agent.">Basic</span>}
+                          {custom && <Badge className="agent-tag" title="Shows replies only. Live tool steps and cost aren't available for this agent.">Basic</Badge>}
                         </span>
                         <span className={`settings-row-sub ${tone}`}>
                           {status}{on && ready ? ` · ${shown + 1} model${shown ? 's' : ''}` : ''}
                         </span>
                       </span>
                     </button>
-                    {canSetUp && <button className="btn btn-sm" onClick={() => setSetupFor(id as BuiltinProviderId)}>Set up</button>}
+                    {canSetUp && <Button size="sm" onClick={() => setSetupFor(id as BuiltinProviderId)}>Set up</Button>}
                     <button type="button" className="agent-chevron-btn" aria-label={isOpen ? `Close ${e.label} details` : `Open ${e.label} details`} disabled={!on} onClick={() => { setOpen(isOpen ? null : id); setNewModel('') }}>
-                      {on && <Icon name="chevron-down" size={14} className="agent-chevron" />}
+                      {on && <Icon name="chevron-down" size="sm" className="agent-chevron" />}
                     </button>
                     <Switch on={on} disabled={last} label={`${e.label} ${on ? 'on' : 'off'}`} title={last ? 'At least one agent must stay on' : undefined} onChange={(v) => { toggleAgent(id, v); if (!v && open === id) setOpen(null) }} />
                   </div>
@@ -109,9 +112,9 @@ export default function AgentsTab({ offAgents, toggleAgent, offModels, toggleMod
                           return (
                             <span key={key} className={`model-chip-wrap${isTyped ? ' typed' : ''}`}>
                               <button type="button" className={`model-chip${mOn ? ' on' : ''}`} aria-pressed={mOn} title={`${m.v}${m.note ? ` — ${m.note}` : ''}\n${mOn ? `Hide ${m.l} from the model picker` : `Show ${m.l} in the model picker`}`} onClick={() => toggleModel(key, !mOn)}>
-                                <Icon name={mOn ? 'check' : 'close'} size={11} />{m.l}{m.note && <span className="model-chip-note"> · retiring</span>}
+                                <Icon name={mOn ? 'check' : 'close'} size="xs" />{m.l}{m.note && <span className="model-chip-note"> · retiring</span>}
                               </button>
-                              {isTyped && <button type="button" className="model-chip-remove" aria-label={`Remove ${m.l}`} title={`Remove ${m.l}`} onClick={() => setExtraModelsText(removeExtraModel(extraModels, id, m.v))}><Icon name="close" size={10} /></button>}
+                              {isTyped && <button type="button" className="model-chip-remove" aria-label={`Remove ${m.l}`} title={`Remove ${m.l}`} onClick={() => setExtraModelsText(removeExtraModel(extraModels, id, m.v))}><Icon name="close" size="xs" /></button>}
                             </span>
                           )
                         })}
@@ -121,7 +124,7 @@ export default function AgentsTab({ offAgents, toggleAgent, offModels, toggleMod
                         : (
                           <form className="agent-add-model" onSubmit={(ev) => { ev.preventDefault(); addModel(id) }}>
                             <input className="field-input mono" placeholder={id === 'claude-code' ? 'haiku' : custom?.presetId === 'opencode' ? 'provider/model, e.g. opencode/big-pickle' : custom ? 'model id' : 'model-id'} value={newModel} onChange={(ev) => setNewModel(ev.target.value)} aria-label={`Add a ${e.label} model`} />
-                            <button className="btn btn-sm" type="submit" disabled={!newModel.trim()}>Add model</button>
+                            <Button size="sm" type="submit" disabled={!newModel.trim()}>Add model</Button>
                           </form>
                         )}
                       {(id === 'codex' || id === 'gemini') && models.length === 0 && <p className="agent-body-hint">Model list not found — run {e.cli} once, or add models above.</p>}
@@ -137,11 +140,11 @@ export default function AgentsTab({ offAgents, toggleAgent, offModels, toggleMod
                           <div className="agent-body-label">Command</div>
                           <code className="agent-command">{custom.command}</code>
                           <div className="agent-custom-actions">
-                            <button className="btn btn-sm" onClick={() => setEditing(custom)}><Icon name="edit" size={12} /> Edit</button>
+                            <Button size="sm" onClick={() => setEditing(custom)}><Icon name="edit" size="xs" /> Edit</Button>
                             {custom.presetId && presetRecipe(custom.presetId)?.signIn && (
-                              <button className="btn btn-sm" title={`Opens Terminal and runs: ${presetRecipe(custom.presetId)!.signIn!.cmd} — sign in or add an API key there`} onClick={() => api.agents.setupStart(custom.presetId!, 'signIn', true)}>Sign in / API key…</button>
+                              <Button size="sm" title={`Opens Terminal and runs: ${presetRecipe(custom.presetId)!.signIn!.cmd} — sign in or add an API key there`} onClick={() => api.agents.setupStart(custom.presetId!, 'signIn', true)}>Sign in / API key…</Button>
                             )}
-                            <button className="btn btn-sm btn-ghost danger" onClick={() => remove(custom)}>Remove</button>
+                            <Button variant="ghost" size="sm" danger onClick={() => remove(custom)}>Remove</Button>
                           </div>
                         </div>
                       )}

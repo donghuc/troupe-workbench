@@ -11,6 +11,7 @@ import {
 import type { ProviderId, ProviderInfo } from '../../../../shared/types'
 import type { CardUi } from './ImageCanvas'
 import { fileUrl, IMAGE_REF_TYPE } from './geometry'
+import { Button, IconButton } from '../ui/Button'
 
 export interface RunState { runId: string; label: string; startedAt: number; hash: string }
 
@@ -41,8 +42,8 @@ function Head({ card, ui, ctx, children }: { card: Card; ui: CardUi; ctx: CardCt
     <div className="img-card-head" onPointerDown={ui.startDrag}>
       <span className={`img-kind img-kind-${card.kind}`}>{CARD_LABEL[card.kind]}</span>
       <span className="img-card-head-extra">{children}</span>
-      <button className="icon-btn img-card-x" title="Remove card" onPointerDown={(e) => e.stopPropagation()}
-        onClick={() => ctx.remove(card.id)}><Icon name="close" size={14} /></button>
+      <IconButton className="img-card-x" title="Remove card" onPointerDown={(e) => e.stopPropagation()}
+        onClick={() => ctx.remove(card.id)}><Icon name="close" size="sm" /></IconButton>
     </div>
   )
 }
@@ -102,13 +103,13 @@ function MediaCard({ card, ui, ctx }: { card: CardOf<'media'>; ui: CardUi; ctx: 
             {files.map((f) => (
               <div key={f} className="img-thumb">
                 <img src={fileUrl(ctx.root, f)} alt="" onClick={() => ctx.openImage(f)} />
-                <button className="img-thumb-x" title="Remove" onClick={() => ctx.patch(card.id, (k) => (k.kind === 'media' ? { ...k, data: { files: k.data.files.filter((x) => x !== f) } } : k))}><Icon name="close" size={12} /></button>
+                <button className="img-thumb-x" title="Remove" onClick={() => ctx.patch(card.id, (k) => (k.kind === 'media' ? { ...k, data: { files: k.data.files.filter((x) => x !== f) } } : k))}><Icon name="close" size="xs" /></button>
               </div>
             ))}
           </div>
         )}
         <button className="img-drop" onClick={() => input.current?.click()} disabled={busy}>
-          {busy ? <><span className="activity-spinner" /> Adding…</> : <><Icon name="image" size={16} /> {files.length ? 'Add more' : 'Drop, paste (⌘V) or choose images'}</>}
+          {busy ? <><span className="activity-spinner" /> Adding…</> : <><Icon name="image" size="md" /> {files.length ? 'Add more' : 'Drop, paste (⌘V) or choose images'}</>}
         </button>
         <input ref={input} type="file" accept="image/*" multiple hidden onChange={(e) => { void add([...(e.target.files ?? [])]); e.target.value = '' }} />
       </div>
@@ -140,7 +141,7 @@ function ProcessorCard({ card, ui, ctx }: { card: CardOf<'processor'>; ui: CardU
   const last = lastRunOf(ctx.canvas, card.id)
   return (
     <>
-      <Head card={card} ui={ui} ctx={ctx}><ProviderAvatar id={agent} size={18} /></Head>
+      <Head card={card} ui={ui} ctx={ctx}><ProviderAvatar id={agent} size="sm" /></Head>
       <OutPort ui={ui} />
       <div className="img-slots">
         {slots.map((s, i) => {
@@ -150,13 +151,13 @@ function ProcessorCard({ card, ui, ctx }: { card: CardOf<'processor'>; ui: CardU
             <div key={s} className="img-slot" data-card={card.id} data-slot={s}>
               <InPort card={card} slot={s} ui={ui} filled={!!src} />
               <span className={`img-slot-label truncate${src ? '' : ' empty'}`} title={sourceLabel(src)}>{i + 1}. {sourceLabel(src)}</span>
-              {slots.length > 1 && <button className="icon-btn img-slot-x" title="Remove input" onClick={() => ctx.removeSlot(card.id, s)}><Icon name="close" size={12} /></button>}
+              {slots.length > 1 && <IconButton className="img-slot-x" title="Remove input" onClick={() => ctx.removeSlot(card.id, s)}><Icon name="close" size="xs" /></IconButton>}
             </div>
           )
         })}
       </div>
       <div className="img-card-body img-proc">
-        <button className="img-add-slot" onClick={() => ctx.addSlot(card.id)}><Icon name="plus" size={13} /> Add input</button>
+        <button className="img-add-slot" onClick={() => ctx.addSlot(card.id)}><Icon name="plus" size="sm" /> Add input</button>
         <div className="img-proc-row">
           <label className="img-field">
             <span>Agent</span>
@@ -185,14 +186,14 @@ function ProcessorCard({ card, ui, ctx }: { card: CardOf<'processor'>; ui: CardU
             <span className="activity-spinner" />
             <span className="img-run-label truncate">{run.label}</span>
             <span className="img-run-time">{Math.round((Date.now() - run.startedAt) / 1000)}s</span>
-            <button className="btn btn-sm" onClick={() => ctx.stop(card.id)}><Icon name="stop" size={13} /> Stop</button>
+            <Button size="sm" onClick={() => ctx.stop(card.id)}><Icon name="stop" size="sm" /> Stop</Button>
           </div>
         ) : (
           <div className="img-run-row">
             {last?.error && !last.files.length
               ? <span className="img-run-error truncate" title={last.error}>{last.error}</span>
               : <span className="img-run-hint truncate">{last ? `Last run ${timeAgo(last.at)}` : 'Connects to an Output card on run'}</span>}
-            <button className="btn btn-primary btn-sm" disabled={!agentOn} onClick={() => ctx.run(card.id)}><Icon name="send" size={13} /> Run</button>
+            <Button variant="primary" size="sm" disabled={!agentOn} onClick={() => ctx.run(card.id)}><Icon name="send" size="sm" /> Run</Button>
           </div>
         )}
       </div>
@@ -249,7 +250,7 @@ function OutputCard({ card, ui, ctx }: { card: CardOf<'output'>; ui: CardUi; ctx
             {runs.map((r, i) => <option key={r.id} value={r.id}>v{i + 1}{r.files.length ? '' : ' · failed'}</option>)}
           </select>
         )}
-        {shown && <ProviderAvatar id={shown.agent} size={18} />}
+        {shown && <ProviderAvatar id={shown.agent} size="sm" />}
       </Head>
       <InPort card={card} slot={OUTPUT_SLOT} ui={ui} filled={!!proc} />
       <OutPort ui={ui} />
@@ -264,20 +265,20 @@ function OutputCard({ card, ui, ctx }: { card: CardOf<'output'>; ui: CardUi; ctx
               <figure key={f} className={`img-shot${sel.has(f) ? ' selected' : ''}`}>
                 <img src={fileUrl(ctx.root, f)} alt="" onClick={() => ctx.openImage(f)} draggable
                   onDragStart={(e) => { e.dataTransfer.setData(IMAGE_REF_TYPE, f); e.dataTransfer.effectAllowed = 'copy' }} />
-                {card.data.saved[f] && <span className="img-saved-chip" title={card.data.saved[f]}><Icon name="check" size={11} /> Saved</span>}
+                {card.data.saved[f] && <span className="img-saved-chip" title={card.data.saved[f]}><Icon name="check" size="xs" /> Saved</span>}
                 <div className="img-shot-actions">
                   <button className={card.data.saved[f] ? 'on' : ''} aria-pressed={!!card.data.saved[f]}
                     title={card.data.saved[f] ? `Saved as ${card.data.saved[f]} — click to remove that copy` : 'Save — copy into the saved/ folder'}
-                    onClick={() => ctx.toggleSaved(card.id, f, hint)}><Icon name={card.data.saved[f] ? 'check' : 'download'} size={13} /></button>
-                  {!/\.svg$/i.test(f) && <button title="Copy image" onClick={() => api.system.copyImage(ctx.root, f).then((ok: boolean) => ok && notify('Image copied')).catch(failed('Copy image'))}><Icon name="copy" size={13} /></button>}
-                  <button title="Open in its own window" onClick={() => api.system.openArtifactWindow(ctx.root, f).catch(failed('Open window'))}><Icon name="popout" size={13} /></button>
-                  <button title="Show in Finder" onClick={() => api.system.revealItem(ctx.root, f).catch(failed('Show in Finder'))}><Icon name="folder-open" size={13} /></button>
+                    onClick={() => ctx.toggleSaved(card.id, f, hint)}><Icon name={card.data.saved[f] ? 'check' : 'download'} size="sm" /></button>
+                  {!/\.svg$/i.test(f) && <button title="Copy image" onClick={() => api.system.copyImage(ctx.root, f).then((ok: boolean) => ok && notify('Image copied')).catch(failed('Copy image'))}><Icon name="copy" size="sm" /></button>}
+                  <button title="Open in its own window" onClick={() => api.system.openArtifactWindow(ctx.root, f).catch(failed('Open window'))}><Icon name="popout" size="sm" /></button>
+                  <button title="Show in Finder" onClick={() => api.system.revealItem(ctx.root, f).catch(failed('Show in Finder'))}><Icon name="folder-open" size="sm" /></button>
                 </div>
                   {feedsOn && (
                     <button className={`img-shot-ref${sel.has(f) ? ' on' : ''}`} aria-pressed={sel.has(f)}
                       title={sel.has(f) ? 'Sent to the next card as a reference — click to stop' : 'Send only this image to the next card (otherwise all images of the latest run go)'}
                       onClick={() => toggle(f)}>
-                      <Icon name={sel.has(f) ? 'check' : 'link'} size={12} /> {sel.has(f) ? 'Reference' : 'Use as reference'}
+                      <Icon name={sel.has(f) ? 'check' : 'link'} size="xs" /> {sel.has(f) ? 'Reference' : 'Use as reference'}
                     </button>
                   )}
               </figure>

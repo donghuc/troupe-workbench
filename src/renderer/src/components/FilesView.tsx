@@ -3,9 +3,12 @@ import { rankFileNames } from '../../../shared/fileNameSearch'
 import { api } from '../api'
 import FileTree, { type FileSort } from './FileTree'
 import MarkdownDoc from './MarkdownDoc'
+import FilePreview, { normalizePath } from './FilePreview'
+import { kindOf } from '../fileKinds'
 import MasterDetail from './MasterDetail'
 import Icon from './Icon'
 import type { FileNode, FileChange, FileSearchResult } from '../../../shared/types'
+import { IconButton } from './ui/Button'
 
 interface Props {
   root: string
@@ -71,6 +74,17 @@ export default function FilesView({ root, onBack }: Props) {
     /* eslint-disable-next-line */
   }, [q, root])
 
+  // A link inside a previewed file (relative to that file, or an absolute path in the project).
+  const openLink = (href: string) => {
+    let h = href
+    if (h.startsWith(root + '/')) h = h.slice(root.length + 1)
+    else if (!h.startsWith('/') && activePath) {
+      const dir = activePath.includes('/') ? activePath.slice(0, activePath.lastIndexOf('/')) : ''
+      h = normalizePath(dir ? `${dir}/${h}` : h)
+    }
+    setActivePath(h); setJump(null)
+  }
+
   const hitCount = hits.reduce((n, r) => n + r.hits.length, 0)
 
   // File-name matches (D-069), ranked, from the already-loaded tree — every file type,
@@ -88,12 +102,12 @@ export default function FilesView({ root, onBack }: Props) {
       contentClassName="files-doc-content"
       listHeader={
         <>
-          <button className="icon-btn files-back" title="Back to project" onClick={onBack}><Icon name="chevron-down" size={16} className="rot90" /></button>
+          <IconButton className="files-back" title="Back to project" onClick={onBack}><Icon name="chevron-down" size="md" className="rot90" /></IconButton>
           <div className="files-filter">
-            <Icon name="search" size={13} className="files-filter-ico" />
+            <Icon name="search" size="sm" className="files-filter-ico" />
             <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search file names and contents…" spellCheck={false} />
             {filter && (
-              <button className="icon-btn files-filter-clear" title="Clear" onClick={() => setFilter('')}><Icon name="close" size={12} /></button>
+              <IconButton className="files-filter-clear" title="Clear" onClick={() => setFilter('')}><Icon name="close" size="xs" /></IconButton>
             )}
           </div>
           <div className="files-sort" role="tablist" aria-label="Sort files">
@@ -112,7 +126,7 @@ export default function FilesView({ root, onBack }: Props) {
                 const dir = m.relPath.slice(0, m.relPath.length - name.length).replace(/\/$/, '')
                 return (
                   <button key={m.relPath} className={`file-search-name ${activePath === m.relPath ? 'active' : ''}`} onClick={() => { setActivePath(m.relPath); setJump(null) }} title={m.relPath}>
-                    <Icon name="file" size={13} className="tree-ico" />
+                    <Icon name="file" size="sm" className="tree-ico" />
                     <span className="file-search-name-main truncate">{highlightWords(name, q)}</span>
                     {dir && <span className="file-search-name-dir truncate">{dir}</span>}
                   </button>
@@ -140,7 +154,24 @@ export default function FilesView({ root, onBack }: Props) {
       }
     >
       {activePath ? (
-        <MarkdownDoc root={root} relPath={activePath} externalChangeToken={changeTokens[activePath] ?? 0} jumpTo={jump} />
+        // Markdown and text open in the editor (edit, save, jump to a search hit); every other
+        // kind uses the artifact viewer's preview, and unsupported files say so (no raw bytes).
+        kindOf(activePath) === 'md' || kindOf(activePath) === 'text' ? (
+          <MarkdownDoc root={root} relPath={activePath} externalChangeToken={changeTokens[activePath] ?? 0} jumpTo={jump} />
+        ) : (
+          <div className="doc">
+            <div className="doc-toolbar">
+              <span className="doc-path truncate">{activePath}</span>
+              <div className="doc-actions">
+                <IconButton title="Show in Finder" onClick={() => api.system.revealItem(root, activePath)}><Icon name="folder-open" size="md" /></IconButton>
+                <IconButton title="Open in default app" onClick={() => api.system.openItem(root, activePath)}><Icon name="external" size="md" /></IconButton>
+              </div>
+            </div>
+            <div className="doc-preview-file" key={`${activePath}:${changeTokens[activePath] ?? 0}`}>
+              <FilePreview root={root} relPath={activePath} onOpenLink={(href) => openLink(href)} />
+            </div>
+          </div>
+        )
       ) : (
         <div className="md-placeholder">Select a file to view it.</div>
       )}

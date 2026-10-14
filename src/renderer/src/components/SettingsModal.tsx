@@ -1,3 +1,4 @@
+import { Button } from './ui/Button'
 import { useEffect, useMemo, useState } from 'react'
 import { setExtraModels, setAutoModels } from '../models'
 import { saveDisabledAgents, saveDisabledModels, refreshAgentStatus } from '../agents'
@@ -143,14 +144,14 @@ export default function SettingsModal({ onClose, initialTab = 'general' }: { onC
 
   return (
     <Modal title="Settings" wide onClose={cancel} footer={<>
-      <button className="btn" onClick={cancel}>{savedOnce ? 'Close' : 'Cancel'}</button>
-      <button className="btn btn-primary" onClick={save} disabled={saveState === 'saving'}>{saveState === 'saving' ? 'Saving…' : saveState === 'saved' ? <><Icon name="check" size={13} /> Saved</> : 'Save'}</button>
+      <Button onClick={cancel}>{savedOnce ? 'Close' : 'Cancel'}</Button>
+      <Button variant="primary" onClick={save} disabled={saveState === 'saving'}>{saveState === 'saving' ? 'Saving…' : saveState === 'saved' ? <><Icon name="check" size="sm" /> Saved</> : 'Save'}</Button>
     </>}>
       <div className="settings-tabs">
         <nav className="settings-nav">
           {TABS.map((t) => (
             <button key={t.v} className={tab === t.v ? 'active' : ''} onClick={() => setTab(t.v)}>
-              <Icon name={t.icon} size={15} /> {t.l}
+              <Icon name={t.icon} size="md" /> {t.l}
             </button>
           ))}
         </nav>

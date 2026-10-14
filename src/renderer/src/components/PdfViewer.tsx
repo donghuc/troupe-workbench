@@ -3,6 +3,7 @@ import * as pdfjsLib from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { TextLayerBuilder } from 'pdfjs-dist/web/pdf_viewer.mjs'
 import { api } from '../api'
+import { Button, IconButton } from './ui/Button'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
 
@@ -193,9 +194,9 @@ export default function PdfViewer({ url, root, relPath, onPageTextChange }: PdfV
           <div className="pdfv-error-msg">{errorMsg}</div>
           <div className="pdfv-error-actions">
             {root && relPath && (
-              <button className="btn btn-sm" onClick={() => api.system.openItem(root, relPath)}>Open in Preview</button>
+              <Button size="sm" onClick={() => api.system.openItem(root, relPath)}>Open in Preview</Button>
             )}
-            <button className="btn btn-sm" onClick={() => setUseIframe(true)}>Try the built-in viewer</button>
+            <Button size="sm" onClick={() => setUseIframe(true)}>Try the built-in viewer</Button>
           </div>
         </div>
       </div>
@@ -205,7 +206,7 @@ export default function PdfViewer({ url, root, relPath, onPageTextChange }: PdfV
   return (
     <div className="pdfv">
       <div className="pdfv-bar">
-        <button className="icon-btn" title="Previous page" disabled={busy || page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>‹</button>
+        <IconButton title="Previous page" disabled={busy || page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>‹</IconButton>
         <span className="pdfv-page">
           <input
             className="pdfv-page-input"
@@ -219,11 +220,11 @@ export default function PdfViewer({ url, root, relPath, onPageTextChange }: PdfV
           />
           <span className="pdfv-page-total"> / {num || '…'}</span>
         </span>
-        <button className="icon-btn" title="Next page" disabled={busy || num === 0 || page >= num} onClick={() => setPage((p) => Math.min(num, p + 1))}>›</button>
+        <IconButton title="Next page" disabled={busy || num === 0 || page >= num} onClick={() => setPage((p) => Math.min(num, p + 1))}>›</IconButton>
         <span className="pdfv-sep" />
-        <button className="icon-btn" title="Zoom out" disabled={busy} onClick={zoomOut}>−</button>
+        <IconButton title="Zoom out" disabled={busy} onClick={zoomOut}>−</IconButton>
         <button className="pdfv-zoom" title="Fit width" disabled={busy} onClick={() => setFit(true)}>{fit ? `Fit · ${pct}%` : `${pct}%`}</button>
-        <button className="icon-btn" title="Zoom in" disabled={busy} onClick={zoomIn}>+</button>
+        <IconButton title="Zoom in" disabled={busy} onClick={zoomIn}>+</IconButton>
       </div>
       <div className="pdfv-scroll" ref={wrapRef}>
         {status === 'loading'

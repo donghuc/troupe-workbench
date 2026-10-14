@@ -3,6 +3,7 @@ import Modal from './Modal'
 import { api } from '../api'
 import type { ContextCheckReport } from '../../../shared/api'
 import { providerLabel } from '../../../shared/providers'
+import { Button } from './ui/Button'
 
 // Check context (D-082): does a fresh chat know what this project decided? Two short
 // runs; results are shown per decision with what the fresh chat actually answered.
@@ -12,7 +13,7 @@ export default function ContextCheckModal({ projectId, onClose }: { projectId: s
   const run = () => { setReport(null); setError(null); api.outcomes.check(projectId).then(setReport).catch((e: unknown) => setError(e instanceof Error ? e.message : String(e))) }
   useEffect(run, [projectId]) // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <Modal title="Check context" onClose={onClose} footer={<>{(report || error) && <button className="btn" onClick={run}>Run again</button>}<button className="btn" onClick={onClose}>Close</button></>}>
+    <Modal title="Check context" onClose={onClose} footer={<>{(report || error) && <Button onClick={run}>Run again</Button>}<Button onClick={onClose}>Close</Button></>}>
       {!report && !error && <div className="outcome-drafting"><span className="activity-spinner" /> Asking a fresh chat what this project has decided…</div>}
       {error && <div className="mcp-error">⚠ {error}</div>}
       {report && (

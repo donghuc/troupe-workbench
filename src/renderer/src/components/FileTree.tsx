@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { FileNode } from '../../../shared/types'
 import Icon, { type IconName } from './Icon'
 import { api } from '../api'
+import { Button } from './ui/Button'
+import { kindOf } from '../fileKinds'
 
 export type FileSort = 'name' | 'modified'
 
@@ -18,8 +20,10 @@ interface Props {
 }
 
 function fileIcon(name: string): IconName {
-  if (/\.(png|jpe?g|gif|webp|svg|bmp|avif|ico)$/i.test(name)) return 'image'
-  if (/\.html?$/i.test(name)) return 'globe'
+  const k = kindOf(name)
+  if (k === 'image') return 'image'
+  if (k === 'video') return 'film'
+  if (k === 'html') return 'globe'
   return 'file'
 }
 
@@ -55,7 +59,11 @@ export default function FileTree({ node, activePath, onOpenFile, filter = '', so
     try { setLoaded(await api.files.listTree(loadRoot, node.relPath)) } catch { /* leave as skipped */ } finally { setLoading(false) }
   }
   const f = filter.trim().toLowerCase()
-  const [openState, setOpenState] = useState(depth < 1)
+  // Folders start closed (like Finder's list view), except the ones holding the open file.
+  const holdsActive = node.type === 'dir' && !!activePath && !!node.relPath && activePath.startsWith(node.relPath + '/')
+  const [openState, setOpenState] = useState(holdsActive)
+  // Opening a file from search (or a link) reveals it: open its folders.
+  useEffect(() => { if (holdsActive) setOpenState(true) }, [holdsActive, activePath])
   // While filtering, force directories open so matches are visible.
   const open = f ? true : openState
 
@@ -63,11 +71,11 @@ export default function FileTree({ node, activePath, onOpenFile, filter = '', so
     return (
       <button
         className={`tree-row tree-file ${activePath === node.relPath ? 'active' : ''}`}
-        style={{ paddingLeft: 8 + depth * 14 }}
+        style={{ paddingLeft: `calc(var(--sp-2) + ${depth} * var(--tree-indent))` }}
         onClick={() => onOpenFile(node.relPath)}
         title={node.name}
       >
-        <Icon name={fileIcon(node.name)} size={14} className="tree-ico" />
+        <Icon name={fileIcon(node.name)} size="sm" className="tree-ico" />
         <span className="truncate">{node.name}</span>
       </button>
     )
@@ -93,17 +101,20 @@ export default function FileTree({ node, activePath, onOpenFile, filter = '', so
     <div>
       <button
         className="tree-row tree-dir"
-        style={{ paddingLeft: 8 + depth * 14 }}
+        style={{ paddingLeft: `calc(var(--sp-2) + ${depth} * var(--tree-indent))` }}
         onClick={() => setOpenState((o) => !o)}
       >
-        <Icon name="chevron-down" size={12} className={`tree-caret ${open ? 'open' : ''}`} />
-        <Icon name="folder-open" size={14} className="tree-ico" />
+        <Icon name="chevron-down" size="xs" className={`tree-caret ${open ? 'open' : ''}`} />
+        <Icon name="folder-open" size="sm" className="tree-ico" />
         <span className="truncate">{node.name}</span>
       </button>
+      {open && !skipped && !f && children.length === 0 && (
+        <div className="tree-empty" style={{ paddingLeft: `calc(var(--sp-2) + ${depth + 1} * var(--tree-indent))` }}>Empty folder</div>
+      )}
       {open && skipped && !f && (
-        <div className="tree-empty tree-skipped" style={{ paddingLeft: 8 + (depth + 1) * 14 }}>
+        <div className="tree-empty tree-skipped" style={{ paddingLeft: `calc(var(--sp-2) + ${depth + 1} * var(--tree-indent))` }}>
           {SKIP_TEXT[node.truncated!]}
-          {loadRoot && <button className="link-btn" onClick={loadContents} disabled={loading}>{loading ? 'Loading…' : 'Show contents'}</button>}
+          {loadRoot && <Button variant="link" onClick={loadContents} disabled={loading}>{loading ? 'Loading…' : 'Show contents'}</Button>}
         </div>
       )}
       {open &&

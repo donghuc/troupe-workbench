@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { api } from '../api'
+import { Button } from './ui/Button'
+import { previewRefusal } from '../fileKinds'
+import FileUnsupported from './FileUnsupported'
 
 interface Props {
   root: string
@@ -19,13 +22,21 @@ export default function MarkdownDoc({ root, relPath, externalChangeToken, jumpTo
   const [dirty, setDirty] = useState(false)
   const [savedAt, setSavedAt] = useState<number | null>(null)
   const [externalWhileEditing, setExternalWhileEditing] = useState(false)
+  const [refused, setRefused] = useState<'binary' | 'too-large' | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const isMd = /\.(md|markdown)$/i.test(relPath)
   const lastLoaded = useRef(0)
   const editorRef = useRef<HTMLTextAreaElement>(null)
   const plainRef = useRef<HTMLPreElement>(null)
 
   const load = async () => {
-    const text = await api.files.readFile(root, relPath)
+    setRefused(null); setError(null)
+    let text: string
+    try { text = await api.files.readFile(root, relPath) } catch (e) {
+      const r = previewRefusal(e)
+      if (r) setRefused(r); else setError(String(e))
+      setContent(''); setDraft(''); return
+    }
     setContent(text)
     setDraft(text)
     setDirty(false)
@@ -87,6 +98,8 @@ export default function MarkdownDoc({ root, relPath, externalChangeToken, jumpTo
     setExternalWhileEditing(false)
   }
 
+  if (refused) return <FileUnsupported root={root} relPath={relPath} reason={refused} />
+
   return (
     <div className="doc">
       <div className="doc-toolbar">
@@ -99,15 +112,16 @@ export default function MarkdownDoc({ root, relPath, externalChangeToken, jumpTo
             </div>
           )}
           {mode === 'edit' && (
-            <button className="btn btn-primary btn-sm" disabled={!dirty} onClick={save}>Save</button>
+            <Button variant="primary" size="sm" disabled={!dirty} onClick={save}>Save</Button>
           )}
         </div>
       </div>
 
+      {error && <div className="doc-banner">Couldn't open this file: {error}</div>}
       {externalWhileEditing && (
         <div className="doc-banner">
           This file changed on disk while you were editing.
-          <button className="link-btn" onClick={load}>Reload &amp; discard my changes</button>
+          <Button variant="link" onClick={load}>Reload &amp; discard my changes</Button>
         </div>
       )}
 

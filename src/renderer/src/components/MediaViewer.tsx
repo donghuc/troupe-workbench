@@ -23,9 +23,9 @@ export default function MediaViewer({ src, alt, root, relPath, onClose }: Props)
     <div className="media-viewer" role="dialog" aria-modal="true" onClick={onClose}>
       <div className="media-viewer-actions" onClick={(e) => e.stopPropagation()}>
         {root && relPath && !isVideo && (
-          <button className="media-viewer-btn" title={copied ? 'Copied' : 'Copy image'} onClick={copy}><Icon name={copied ? 'check' : 'copy'} size={18} /></button>
+          <button className="media-viewer-btn" title={copied ? 'Copied' : 'Copy image'} onClick={copy}><Icon name={copied ? 'check' : 'copy'} size="nav" /></button>
         )}
-        <button className="media-viewer-btn" title="Close (Esc)" onClick={onClose}><Icon name="close" size={20} /></button>
+        <button className="media-viewer-btn" title="Close (Esc)" onClick={onClose}><Icon name="close" size="lg" /></button>
       </div>
       {isVideo
         ? <video className="media-viewer-img" src={src} controls autoPlay onClick={(e) => e.stopPropagation()} />

@@ -3,6 +3,7 @@ import Modal from './Modal'
 import { api } from '../api'
 import { reportError } from '../notices'
 import { OUTCOME_KINDS, type Outcome, type OutcomeKind } from '../../../shared/decisions'
+import { Button } from './ui/Button'
 
 interface Props {
   conversationId: string
@@ -48,9 +49,9 @@ export default function SaveOutcomeModal({ conversationId, projectId, messageId,
 
   return (
     <Modal title="Save outcome" wide onClose={onClose} footer={<>
-      <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
-      {error && <button className="btn" onClick={load}>Try again</button>}
-      <button className="btn btn-primary" disabled={!draft?.title.trim() || busy} onClick={save}>{busy ? 'Saving…' : 'Save to log'}</button>
+      <Button onClick={onClose} disabled={busy}>Cancel</Button>
+      {error && <Button onClick={load}>Try again</Button>}
+      <Button variant="primary" disabled={!draft?.title.trim() || busy} onClick={save}>{busy ? 'Saving…' : 'Save to log'}</Button>
     </>}>
       {!draft && !error && <div className="outcome-drafting"><span className="activity-spinner" /> Drafting the record from this exchange…</div>}
       {error && <div className="mcp-error">⚠ {error}</div>}

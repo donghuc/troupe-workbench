@@ -7,6 +7,7 @@ import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { reportError } from '../notices'
 import { cleanErrorMessage, formatErrorDetails } from '../../../shared/errors'
 import { api } from '../api'
+import { Button } from './ui/Button'
 
 type Props = { label: string; resetKey?: unknown; compact?: boolean; children: ReactNode }
 type State = { error: unknown; componentStack?: string; copied: boolean }
@@ -41,10 +42,10 @@ export default class ErrorBoundary extends Component<Props, State> {
         <div className="crash-msg">{cleanErrorMessage(this.state.error)}</div>
         <div className="crash-hint">Running agents are not affected. Try again, or reload the window if it keeps happening.</div>
         <div className="crash-actions">
-          <button className="btn btn-primary" onClick={this.reset}>Try again</button>
-          <button className="btn" onClick={() => location.reload()}>Reload window</button>
-          <button className="btn" onClick={this.copy}>{this.state.copied ? 'Copied' : 'Copy details'}</button>
-          <button className="link-btn" onClick={() => { void api.system.openLogs() }}>Show log</button>
+          <Button variant="primary" onClick={this.reset}>Try again</Button>
+          <Button onClick={() => location.reload()}>Reload window</Button>
+          <Button onClick={this.copy}>{this.state.copied ? 'Copied' : 'Copy details'}</Button>
+          <Button variant="link" onClick={() => { void api.system.openLogs() }}>Show log</Button>
         </div>
       </div>
     )
