@@ -29,7 +29,7 @@ export function failSig(findings: string[]): string {
  * check ("Deliverable missing: x.md") and a long review of the same problem still match;
  * Jaccard would punish the long one for its extra detail.
  */
-export function sigSimilarity(a: string, b: string): number {
+function sigSimilarity(a: string, b: string): number {
   const A = new Set(a.split(' ').filter(Boolean)), B = new Set(b.split(' ').filter(Boolean))
   if (!A.size || !B.size) return 0
   let both = 0
@@ -37,7 +37,7 @@ export function sigSimilarity(a: string, b: string): number {
   return both / Math.min(A.size, B.size)
 }
 /** Failures this similar count as "the same failure again". */
-export const SAME_FAILURE = 0.45
+const SAME_FAILURE = 0.45
 
 /** Same failure as last time → how many in a row now (1 when it differs). */
 export function nextSameFails(prevSig: string | undefined, prevCount: number | undefined, sig: string): number {
