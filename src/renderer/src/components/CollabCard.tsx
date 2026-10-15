@@ -7,7 +7,8 @@ import { rowsFromTasks, draftsFromRows, type PlanRow } from '../../../shared/col
 import { resolveTaskModel } from '../../../shared/models'
 import Icon from './Icon'
 import { api } from '../api'
-import { Button } from './ui/Button'
+import { Button, IconButton } from './ui/Button'
+import { Menu, MenuItem } from './ui/Menu'
 
 const statusIcon = (s: CollabTaskStatus): JSX.Element => {
   if (s === 'in_progress') return <span className="activity-spinner spinner-xs" />
@@ -35,6 +36,12 @@ const findingText = (f: unknown): string => {
 // options. Planner options that duplicate those (another agent, skip) aren't listed twice;
 // any other Planner fix sits under "More fixes". Details (full diagnosis + findings) collapsed.
 type Open = 'note' | 'agent' | 'more' | null
+// Scope as shown in the plan list: paths relative to the deliverables folder, read-only inputs dropped.
+const shortScope = (scope: string, outDir: string): string => {
+  const s = scope.replace(/\(read[- ]only:[^)]*\)/gi, '').trim()
+  const short = outDir ? s.split(outDir + '/').join('') : s
+  return short.length > 70 ? short.slice(0, 68) + '…' : short
+}
 const stripDate = (h: string) => h.replace(/^\d{4}-\d{2}-\d{2} · /, '')
 
 function AttentionPanel({ run, task, providers }: { run: CollabRun; task: CollabTask; providers: ProviderInfo[] }): JSX.Element {
@@ -151,7 +158,9 @@ export default function CollabCard({ run, providers, onOpenFile }: { run: Collab
   // task to Codex) no longer wipes "waits for" links (D-064).
   const rows: PlanRow[] = draft ?? rowsFromTasks(tasks)
   const setRow = (i: number, patch: Partial<PlanRow>) => setDraft(rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)))
-  const addRow = () => setDraft([...rows, { key: `new-${Date.now()}`, title: '', kind: 'work', scope: '', acceptance: '', dependsOn: [] }])
+  const addRow = (): string => { const key = `new-${Date.now()}`; setDraft([...rows, { key, title: '', kind: 'work', scope: '', acceptance: '', dependsOn: [] }]); return key }
+  const [openRow, setOpenRow] = useState<string | null>(null)
+  const [menuRow, setMenuRow] = useState<string | null>(null)
   const delRow = (i: number) => setDraft(rows.filter((_, idx) => idx !== i))
   const move = (i: number, dir: -1 | 1) => {
     const j = i + dir; if (j < 0 || j >= rows.length) return
@@ -240,54 +249,86 @@ export default function CollabCard({ run, providers, onOpenFile }: { run: Collab
       )}
 
       {editing && (
+        // D-113: the plan reads as a short numbered list (title, agent, what it produces, what
+        // it waits for); one task at a time opens to edit. Moving and deleting live inside the
+        // open task, not as icon rows on every task.
         <div className="collab-plan-edit">
-          {rows.map((r, i) => (
-            <div key={r.key} className="collab-plan-row">
-              <div className="collab-plan-row-top">
-                <span className="collab-plan-num">{i + 1}</span>
-                <input className="collab-ti" value={r.title ?? ''} placeholder="Task title" onChange={(e) => setRow(i, { title: e.target.value })} />
-                <select className="collab-kind-sel" value={r.kind ?? 'work'} onChange={(e) => setRow(i, { kind: e.target.value as CollabTaskKind })}>
-                  <option value="work">work</option>
-                  <option value="review">review</option>
-                </select>
-                <div className="collab-row-tools">
-                  <button className="collab-move" title="Move up" onClick={() => move(i, -1)} disabled={i === 0}>↑</button>
-                  <button className="collab-move" title="Move down" onClick={() => move(i, 1)} disabled={i === rows.length - 1}>↓</button>
-                  <button className="collab-move danger" title="Delete" onClick={() => delRow(i)}>✕</button>
-                </div>
-              </div>
-              <label className="collab-flabel">Scope</label>
-              <textarea className="collab-ta" rows={2} value={r.scope ?? ''} placeholder="Files or area this task owns" onChange={(e) => setRow(i, { scope: e.target.value })} />
-              {(() => {
-                const waits = (r.dependsOn ?? []).map((k) => rows.findIndex((x) => x.key === k)).filter((n) => n >= 0 && n !== i)
-                return waits.length
-                  ? <div className="collab-flabel collab-agent-note">Waits for {waits.map((n) => `#${n + 1}`).join(', ')} to pass <Button variant="link" onClick={() => setRow(i, { dependsOn: [] })}>Clear</Button></div>
-                  : null
-              })()}
-              <label className="collab-flabel">Acceptance</label>
-              <textarea className="collab-ta" rows={2} value={r.acceptance ?? ''} placeholder="How we know it's done and correct" onChange={(e) => setRow(i, { acceptance: e.target.value })} />
-              {(r.kind ?? 'work') === 'review'
-                ? <div className="collab-flabel collab-agent-note">Uses the strong reviewer model.</div>
-                : <>
-                    <label className="collab-flabel">Agent</label>
-                    <div className="collab-agent-row">
-                      <select className="collab-kind-sel" value={r.provider ?? ''} onChange={(e) => setRow(i, { provider: (e.target.value || undefined) as ProviderId | undefined, model: undefined })}>
-                        <option value="">Default</option>
-                        {providers.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                      </select>
-                      <select className="collab-kind-sel" value={r.model ?? ''} onChange={(e) => setRow(i, { model: e.target.value || undefined })}>
-                        {presetsFor((r.provider ?? run.providerId) as ProviderId).map((m) => <option key={m.v} value={m.v}>{m.v ? m.l : `${providers.find((p) => p.id === (r.provider ?? run.providerId))?.name ?? ''} default`.trim()}</option>)}
-                      </select>
+          <div className="collab-plan-intro">{rows.length} task{rows.length === 1 ? '' : 's'} · check the plan, open a task to change it, then run.</div>
+          <ol className="collab-plan-list">
+            {rows.map((r, i) => {
+              const isOpen = openRow === r.key
+              const isReview = (r.kind ?? 'work') === 'review'
+              const pid = (r.provider ?? run.providerId) as ProviderId
+              const agent = isReview ? 'review' : `${providers.find((p) => p.id === pid)?.name ?? pid}${r.model ? ` · ${presetsFor(pid).find((m) => m.v === r.model)?.l ?? (r.model.charAt(0).toUpperCase() + r.model.slice(1))}` : ''}`
+              const waits = (r.dependsOn ?? []).map((k) => rows.findIndex((x) => x.key === k)).filter((n) => n >= 0 && n !== i)
+              const out = shortScope(r.scope ?? '', run.outputDir)
+              return (
+                <li key={r.key} className={`collab-plan-item${isOpen ? ' open' : ''}`}>
+                  <div className="collab-plan-row">
+                  <button className="collab-plan-hit" onClick={() => setOpenRow(isOpen ? null : r.key)} aria-expanded={isOpen}>
+                    <span className="collab-plan-num">{i + 1}</span>
+                    <span className="collab-plan-main">
+                      <span className="collab-plan-title">{r.title?.trim() || 'Untitled task'}</span>
+                      {(out || waits.length > 0) && (
+                        <span className="collab-plan-sub">{out}{out && waits.length ? ' · ' : ''}{waits.length ? `after ${waits.map((n) => n + 1).join(', ')}` : ''}</span>
+                      )}
+                    </span>
+                    <span className={`collab-plan-agent${isReview ? ' review' : ''}`}>{agent}</span>
+                  </button>
+                  <span className="collab-plan-more">
+                    <IconButton title="More" aria-expanded={menuRow === r.key} onClick={() => setMenuRow(menuRow === r.key ? null : r.key)}><Icon name="more-vertical" size="md" /></IconButton>
+                    <Menu open={menuRow === r.key} onClose={() => setMenuRow(null)}>
+                      <MenuItem disabled={i === 0} onClick={() => { move(i, -1); setMenuRow(null) }}><Icon name="arrow-up" size="sm" />Move up</MenuItem>
+                      <MenuItem disabled={i === rows.length - 1} onClick={() => { move(i, 1); setMenuRow(null) }}><Icon name="arrow-down" size="sm" />Move down</MenuItem>
+                      <MenuItem danger onClick={() => { delRow(i); setMenuRow(null); if (isOpen) setOpenRow(null) }}><Icon name="close" size="sm" />Delete task</MenuItem>
+                    </Menu>
+                  </span>
+                  <IconButton className="collab-plan-expand" title={isOpen ? 'Collapse' : 'Edit task'} aria-expanded={isOpen} onClick={() => setOpenRow(isOpen ? null : r.key)}>
+                    <Icon name="chevron-down" size="xs" className={`collab-plan-caret${isOpen ? ' open' : ''}`} />
+                  </IconButton>
+                  </div>
+                  {isOpen && (
+                    <div className="collab-plan-form">
+                      <label className="collab-flabel">Task</label>
+                      <input className="collab-ti" value={r.title ?? ''} placeholder="What should be done" onChange={(e) => setRow(i, { title: e.target.value })} />
+                      <label className="collab-flabel">Produces <span className="collab-flabel-hint">files or folders this task owns</span></label>
+                      <textarea className="collab-ta" rows={2} value={r.scope ?? ''} placeholder="e.g. notes/summary.md" onChange={(e) => setRow(i, { scope: e.target.value })} />
+                      <label className="collab-flabel">Done when</label>
+                      <textarea className="collab-ta" rows={3} value={r.acceptance ?? ''} placeholder="How anyone can tell it's done and correct" onChange={(e) => setRow(i, { acceptance: e.target.value })} />
+                      <div className="collab-plan-fields">
+                        <span className="collab-plan-field">
+                          <label className="collab-flabel">Type</label>
+                          <select className="collab-kind-sel" value={r.kind ?? 'work'} onChange={(e) => setRow(i, { kind: e.target.value as CollabTaskKind })}>
+                            <option value="work">Work (agent does it, reviewer checks)</option>
+                            <option value="review">Review only</option>
+                          </select>
+                        </span>
+                        {!isReview && (
+                          <span className="collab-plan-field">
+                            <label className="collab-flabel">Agent</label>
+                            <span className="collab-agent-row">
+                              <select className="collab-kind-sel" value={r.provider ?? ''} onChange={(e) => setRow(i, { provider: (e.target.value || undefined) as ProviderId | undefined, model: undefined })}>
+                                <option value="">Default</option>
+                                {providers.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                              </select>
+                              <select className="collab-kind-sel" value={r.model ?? ''} onChange={(e) => setRow(i, { model: e.target.value || undefined })}>
+                                {presetsFor(pid).map((m) => <option key={m.v} value={m.v}>{m.v ? m.l : 'Default model'}</option>)}
+                              </select>
+                            </span>
+                          </span>
+                        )}
+                      </div>
+                      {waits.length > 0 && <div className="collab-plan-hint">Starts after {waits.length === 1 ? `task ${waits[0] + 1} passes` : `tasks ${waits.slice(0, -1).map((n) => n + 1).join(', ')} and ${waits[waits.length - 1] + 1} pass`} · <Button variant="link" onClick={() => setRow(i, { dependsOn: [] })}>don't wait</Button></div>}
+                      {isReview && <div className="collab-plan-hint">Review tasks use the strong reviewer model.</div>}
                     </div>
-                    {r.provider === 'codex' && presetsFor('codex').length === 1 && (
-                      <div className="field-hint">Add Codex models in Settings ▸ Agents to pick one.</div>
-                    )}
-                  </>}
-            </div>
-          ))}
-          <Button size="sm" className="collab-add" onClick={addRow}><Icon name="plus" size="sm" />Add task</Button>
-          {draft && <div className="field-hint">Runs top to bottom; the review runs last.</div>}
+                  )}
+                </li>
+              )
+            })}
+          </ol>
           <div className="collab-plan-actions">
+            <Button size="sm" variant="ghost" onClick={() => { const k = addRow(); setOpenRow(k) }}><Icon name="plus" size="sm" />Add task</Button>
+            <span className="collab-card-spacer" />
             <Button size="sm" onClick={stop} disabled={busy}>Reject</Button>
             <Button variant="primary" size="sm" onClick={confirm} disabled={busy || rows.length === 0}>
               {busy ? <><span className="activity-spinner spinner-xs" />Starting</> : 'Confirm & run'}

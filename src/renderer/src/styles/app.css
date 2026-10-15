@@ -1200,6 +1200,7 @@ body.resizing .resize-handle::after { background: var(--accent); }
 
 /* Wide modal + tabbed settings */
 .modal-card.wide { width: var(--modal-wide-w); }
+.modal-overlay.top { z-index: var(--z-top); }  /* confirmations opened from inside another modal (Settings) */
 .modal-card.narrow { width: min(var(--modal-narrow-w), 92vw); }
 .confirm-message { margin: 0; color: var(--text-secondary); overflow-wrap: anywhere; }
 .settings-tabs { display: flex; height: min(460px, calc(100vh - 220px)); }
@@ -1407,22 +1408,43 @@ select.field-input {
 .collab-chip.skip { color: var(--text-tertiary); }
 .collab-findings { margin: var(--sp-1) 0 0; padding-left: var(--sp-5); font-size: var(--fs-xs); color: var(--text-secondary); }
 
-.collab-plan-edit { display: flex; flex-direction: column; gap: var(--sp-3); }
-.collab-plan-row { background: var(--bg-panel); border: 1px solid var(--border-subtle); border-radius: var(--r-md); padding: var(--sp-3); display: flex; flex-direction: column; gap: var(--sp-1); box-shadow: var(--shadow-xs); }
-.collab-plan-row-top { display: flex; align-items: center; gap: var(--sp-2); }
-.collab-plan-num { font-size: var(--fs-sm); font-weight: var(--fw-semibold); color: var(--text-tertiary); width: 18px; text-align: center; flex: none; }
 .collab-ti { flex: 1; min-width: 0; font: inherit; font-weight: var(--fw-medium); color: var(--text-primary); background: var(--bg-app); border: 1px solid var(--border-default); border-radius: var(--r-sm); padding: var(--sp-1-5) var(--sp-2); outline: none; }
 .collab-ti:focus { border-color: var(--focus-ring); }
 .collab-kind-sel { flex: none; width: 88px; font: inherit; font-size: var(--fs-sm); color: var(--text-secondary); background: var(--bg-app); border: 1px solid var(--border-default); border-radius: var(--r-sm); padding: var(--sp-1-5) var(--sp-1-5); }
-.collab-row-tools { display: inline-flex; gap: var(--sp-0-5); flex: none; }
-.collab-move { min-width: 26px; height: 26px; padding: 0 var(--sp-1-5); font-size: var(--fs-sm); line-height: var(--lh-none); color: var(--text-secondary); background: transparent; border: 1px solid transparent; border-radius: var(--r-sm); cursor: pointer; }
-.collab-move:hover:not(:disabled) { background: var(--bg-hover); }
-.collab-move:disabled { opacity: var(--opacity-30); cursor: default; }
-.collab-move.danger:hover:not(:disabled) { color: var(--danger); }
+/* Plan review (D-113): a short numbered list; one task opens to edit */
+.collab-plan-edit { display: flex; flex-direction: column; gap: var(--sp-2); }
+.collab-plan-intro { font-size: var(--fs-sm); color: var(--text-secondary); }
+.collab-plan-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border-subtle); border-radius: var(--r-md); background: var(--bg-panel); }
+.collab-plan-item:first-child > .collab-plan-row { border-radius: var(--r-md) var(--r-md) 0 0; }
+.collab-plan-item:last-child > .collab-plan-row, .collab-plan-item:last-child > .collab-plan-form { border-radius: 0 0 var(--r-md) var(--r-md); }
+.collab-plan-item:last-child.open > .collab-plan-row { border-radius: 0; }
+.collab-plan-item + .collab-plan-item { border-top: 1px solid var(--border-subtle); }
+.collab-plan-row { position: relative; display: flex; align-items: center; padding-right: var(--sp-1-5); }
+.collab-plan-more { position: relative; flex: none; opacity: 0; transition: opacity var(--dur-fast) ease; }
+.collab-plan-row:hover .collab-plan-more, .collab-plan-row:focus-within .collab-plan-more, .collab-plan-item.open .collab-plan-more, .collab-plan-more:has([aria-expanded="true"]) { opacity: 1; }
+.collab-plan-more .conv-menu { top: calc(100% + var(--sp-0-5)); right: 0; width: max-content; }
+.collab-plan-more .conv-menu button { display: flex; align-items: center; gap: var(--sp-2); }
+.collab-plan-hit { flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--sp-2-5); padding: var(--sp-2-5) var(--sp-1-5) var(--sp-2-5) var(--sp-3); text-align: left; color: var(--text-primary); }
+.collab-plan-row:hover { background: var(--bg-hover); }
+.collab-plan-item.open .collab-plan-row { background: var(--bg-sunken); }
+.collab-plan-num { flex: none; width: 18px; font-size: var(--fs-sm); font-weight: var(--fw-semibold); color: var(--text-tertiary); text-align: center; }
+.collab-plan-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.collab-plan-title { font-size: var(--fs-sm); font-weight: var(--fw-medium); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.collab-plan-sub { font-size: var(--fs-xs); color: var(--text-tertiary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.collab-plan-agent { flex: none; font-size: var(--fs-xs); color: var(--text-secondary); }
+.collab-plan-agent.review { color: var(--text-tertiary); }
+.collab-plan-caret { flex: none; color: var(--text-tertiary); transform: rotate(-90deg); transition: transform var(--dur-base) ease; }
+.collab-plan-caret.open { transform: none; }
+.collab-plan-form { display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-1) var(--sp-3) var(--sp-3) calc(var(--sp-3) + var(--sp-5) + var(--sp-2-5)); background: var(--bg-sunken); }
+.collab-plan-form .collab-ti { width: 100%; box-sizing: border-box; }
+.collab-plan-fields { display: flex; flex-wrap: wrap; gap: var(--sp-3); margin-top: var(--sp-1); }
+.collab-plan-field { display: flex; flex-direction: column; flex: 1 1 40%; min-width: 0; }
+.collab-plan-field .collab-kind-sel { width: 100%; }
+.collab-plan-hint { margin-top: var(--sp-1); font-size: var(--fs-xs); color: var(--text-tertiary); }
+.collab-flabel-hint { font-weight: var(--fw-regular); color: var(--text-tertiary); margin-left: var(--sp-1); }
 .collab-flabel { font-size: var(--fs-xs); font-weight: var(--fw-medium); color: var(--text-tertiary); margin: var(--sp-1-5) 0 0; }
 .collab-ta { width: 100%; box-sizing: border-box; min-height: 2.4em; field-sizing: content; max-height: 220px; overflow-y: auto; resize: vertical; font: inherit; font-size: var(--fs-sm); line-height: var(--lh-normal); color: var(--text-primary); background: var(--bg-app); border: 1px solid var(--border-subtle); border-radius: var(--r-sm); padding: var(--sp-1-5) var(--sp-2); outline: none; }
 .collab-ta:focus { border-color: var(--focus-ring); }
-.collab-add { align-self: flex-start; }
 .collab-plan-actions { display: flex; justify-content: flex-end; gap: var(--sp-2); margin-top: var(--sp-3); }
 .composer-collab-hint { font-size: var(--fs-xs); color: var(--warning); padding: var(--sp-1) var(--sp-2) var(--sp-1-5); }
 .collab-agent-row { display: flex; gap: var(--sp-1-5); }

@@ -18,6 +18,15 @@ Each version here matches a packaged build — the dmg is named
 > - Bumping rules: PATCH = fixes/small tweaks, MINOR = new features (backward-compatible),
 >   MAJOR = breaking changes or a data format users can't roll back from.
 
+## [2.6.1] - 2026-10-15
+
+### Changed
+- Collab plan review is a short numbered list — each task shows what it produces, which agent does it and what it waits for. Open a task to edit it; the ⋮ menu on each row moves or deletes it.
+
+### Fixed
+- The confirm dialog for removing an agent (and other confirmations opened from Settings) appeared behind the Settings window. It now always opens on top.
+- Clicking outside Settings (or any dialog with a form, such as Add agent) closed it and threw away what you'd entered. Dialogs now close only with Esc, ✕ or their buttons; Esc closes just the dialog on top (e.g. Add agent, not Settings behind it).
+
 ## [2.6.0] - 2026-10-14
 
 ### Added

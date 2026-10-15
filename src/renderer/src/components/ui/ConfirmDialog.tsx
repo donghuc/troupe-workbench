@@ -44,6 +44,8 @@ export function ConfirmHost() {
   return (
     <Modal
       narrow
+      top
+      dismissOnBackdrop
       title={cur.title}
       onClose={() => done(false)}
       footer={<>
