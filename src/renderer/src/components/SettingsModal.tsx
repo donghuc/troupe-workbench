@@ -18,6 +18,8 @@ import AgentsTab from './settings/AgentsTab'
 import ThinkingTab from './settings/ThinkingTab'
 import { CommandsTab, AboutTab } from './settings/InfoTabs'
 import { api } from '../api'
+import { SHELL_SANDBOX_SETTING, SHELL_DOMAINS_SETTING, sandboxOn, parseDomains } from '../../../shared/shellSandbox'
+import { Segmented } from './ui/Segmented'
 import {
   applyAppearance, DEFAULT_CHAT_FONT, MIN_CHAT_FONT, MAX_CHAT_FONT, DEFAULT_ARTIFACT_FONT, MIN_ARTIFACT_FONT, MAX_ARTIFACT_FONT, clampArtifactFont, type ThemeChoice
 } from '../appearance'
@@ -51,6 +53,8 @@ export default function SettingsModal({ onClose, initialTab = 'general' }: { onC
   const [idleWarn, setIdleWarn] = useState('5')
   const [webAccess, setWebAccess] = useState(true)
   const [shellAccess, setShellAccess] = useState(true)
+  const [shellSandbox, setShellSandbox] = useState(true)   // D-115
+  const [shellDomains, setShellDomains] = useState('')
   const [chromeAccess, setChromeAccess] = useState(false)
   const [extraModels, setExtraModelsText] = useState('')   // global "More models" (D-078)
   const [autoLists, setAutoLists] = useState<ModelLists>({})   // each agent's own list (D-076, D-079)
@@ -83,6 +87,8 @@ export default function SettingsModal({ onClose, initialTab = 'general' }: { onC
     api.settings.get(MODES_SETTING).then((v: string | null) => setModeTpl(parseModeTemplates(v)))
     api.settings.get('agent_web_access').then((v: string | null) => setWebAccess(v !== '0'))
     api.settings.get('agent_shell_access').then((v: string | null) => setShellAccess(v !== '0'))
+    api.settings.get(SHELL_SANDBOX_SETTING).then((v: string | null) => setShellSandbox(sandboxOn(v)))
+    api.settings.get(SHELL_DOMAINS_SETTING).then((v: string | null) => setShellDomains(v ?? ''))
     api.settings.get(CHROME_ACCESS_SETTING).then((v: string | null) => setChromeAccess(v === '1'))
     api.settings.get(EXTRA_MODELS_SETTING).then((v: string | null) => setExtraModelsText(v ?? ''))
     api.system.autoModels().then((l: ModelLists) => { setAutoLists(l); setAutoModels(l) }).catch(() => {})
@@ -125,6 +131,8 @@ export default function SettingsModal({ onClose, initialTab = 'general' }: { onC
     await api.settings.set(MODES_SETTING, JSON.stringify(modeTpl))
     await api.settings.set('agent_web_access', webAccess ? '1' : '0')
     await api.settings.set('agent_shell_access', shellAccess ? '1' : '0')
+    await api.settings.set(SHELL_SANDBOX_SETTING, shellSandbox ? '1' : '0')
+    await api.settings.set(SHELL_DOMAINS_SETTING, parseDomains(shellDomains).join('\n'))
     await api.settings.set(CHROME_ACCESS_SETTING, chromeAccess ? '1' : '0')
     await api.settings.set(EXTRA_MODELS_SETTING, extraModels)
     await api.settings.set('codex_image_model', codexImageModel.trim())
@@ -173,11 +181,8 @@ export default function SettingsModal({ onClose, initialTab = 'general' }: { onC
           {tab === 'appearance' && (
             <Stack>
               <Field label="Theme">
-                <div className="seg-control">
-                  {THEMES.map((t) => (
-                    <button key={t.v} className={`seg-btn ${theme === t.v ? 'active' : ''}`} onClick={() => pickTheme(t.v)}>{t.l}</button>
-                  ))}
-                </div>
+                <Segmented label="Theme" value={theme} onChange={pickTheme}
+                  options={THEMES.map((t) => ({ value: t.v, label: t.l }))} />
               </Field>
               <Field label={`Chat font size — ${font}px`} htmlFor="chat-font">
                 <input id="chat-font" className="field-range" type="range" min={MIN_CHAT_FONT} max={MAX_CHAT_FONT} step={1} value={font} onChange={(e) => pickFont(Number(e.target.value))} />
@@ -209,7 +214,7 @@ export default function SettingsModal({ onClose, initialTab = 'general' }: { onC
 
           {tab === 'tools' && (
             <ToolsSettings agents={BUILTIN_IDS.filter((id) => !offAgents.includes(id))} mcpOff={mcpOff} setMcpOff={setMcpOff}
-              webAccess={webAccess} setWebAccess={setWebAccess} shellAccess={shellAccess} setShellAccess={setShellAccess} chromeAccess={chromeAccess} setChromeAccess={setChromeAccess} />
+              webAccess={webAccess} setWebAccess={setWebAccess} shellAccess={shellAccess} setShellAccess={setShellAccess} shellSandbox={shellSandbox} setShellSandbox={setShellSandbox} shellDomains={shellDomains} setShellDomains={setShellDomains} chromeAccess={chromeAccess} setChromeAccess={setChromeAccess} />
           )}
 
           {tab === 'thinking' && (

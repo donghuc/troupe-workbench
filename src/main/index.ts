@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, nativeImage, protocol } from 'electron'
+import { app, BrowserWindow, nativeImage, protocol } from 'electron'
 import { promises as fsp } from 'fs'
 import { join } from 'path'
 import { existsSync, createReadStream } from 'fs'
@@ -7,7 +7,7 @@ import { getDb, closeDb } from './database/db'
 import { registerProjectIpc } from './ipc/projects'
 import { registerFileIpc } from './ipc/files'
 import { registerConversationIpc } from './ipc/conversations'
-import { guardNavigation } from './ipc/handle'
+import { guardNavigation, openExternalSafely } from './ipc/handle'
 import { registerAgentIpc } from './ipc/agent'
 import { registerContextIpc } from './ipc/context'
 import { registerSkillIpc } from './ipc/skills'
@@ -33,6 +33,7 @@ import { stopWatch } from './filesystem/watcher'
 import { ensureInside, mimeForPath } from './filesystem/fsService'
 import { parseRange, isRangeMedia } from './filesystem/byteRange'
 import { assertProjectRoot } from './security/roots'
+import { DOCUMENT_CSP, isDocumentMime } from './security/documentCsp'
 import { migrateProjectMcpOff } from './tools/mcpMigration'
 import { migrateExtraModels } from './tools/codexModels'
 
@@ -48,7 +49,8 @@ protocol.registerSchemesAsPrivileged([
   // corsEnabled: pdf.js loads the document with fetch() from the renderer origin; from
   // Electron 44 a cross-origin fetch to a custom scheme is refused (status 0) unless the
   // scheme opts in and the response carries Access-Control-Allow-Origin.
-  { scheme: 'wbfile', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, bypassCSP: true, corsEnabled: true } }
+  // No bypassCSP: an HTML file served from here must obey its own CSP (below).
+  { scheme: 'wbfile', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }
 ])
 
 // App icon (dev: set the Dock icon at runtime; packaging picks up build/icon.png).
@@ -75,10 +77,7 @@ function createWindow(): void {
     }
   })
 
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    if (!/^wbfile:/i.test(url)) shell.openExternal(url) // never hand our internal scheme to the OS
-    return { action: 'deny' }
-  })
+  win.webContents.setWindowOpenHandler(({ url }) => openExternalSafely(url)) // http(s)/mailto only; never wbfile:
   guardNavigation(win.webContents)   // D-100: a dropped or clicked page never replaces the app
 
   if (process.env.ELECTRON_RENDERER_URL) {
@@ -114,6 +113,7 @@ app.whenReady().then(() => {
       const buf = await fsp.readFile(abs)
       return new Response(new Uint8Array(buf), {
         headers: {
+          ...(isDocumentMime(mime) ? { 'content-security-policy': DOCUMENT_CSP } : {}),
           'content-type': mime,
           'content-length': String(buf.byteLength),
           'access-control-allow-origin': '*',

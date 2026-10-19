@@ -17,6 +17,18 @@ export function matchRoot(abs: string, allowed: readonly string[]): string | nul
   return null
 }
 
+// Links the app may hand to the OS (shell.openExternal). Anything else — smb://, a
+// custom app scheme, file:// — could mount a share or drive another app from a page
+// the user only previewed (security review 2026-10).
+export function isSafeExternalUrl(url: string): boolean {
+  return /^(https?:|mailto:)/i.test(url.trim())
+}
+
+// One folder name (a skill slug): no separators, not '.' or '..', not empty.
+export function isSafeSegment(s: string): boolean {
+  return s.length > 0 && s !== '.' && s !== '..' && !/[\\/\0]/.test(s)
+}
+
 // Argument-shape helpers: IPC arguments arrive untyped from the renderer.
 export function expectString(v: unknown, name: string): string {
   if (typeof v !== 'string' || v.length === 0) throw new Error(`Invalid ${name}`)

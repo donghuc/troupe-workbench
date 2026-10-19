@@ -7,6 +7,7 @@ import type { Project, ProviderInfo, Schedule, ScheduleKind, ScheduleTarget } fr
 import type { PermissionMode } from '../../../shared/agent'
 import { Menu, MenuItem } from './ui/Menu'
 import { Button, IconButton } from './ui/Button'
+import { Segmented } from './ui/Segmented'
 
 interface Props {
   projects: Project[]
@@ -181,10 +182,8 @@ export default function SchedulesView({ projects, providers, onRun }: Props) {
           <textarea className="schedule-prompt" placeholder="What should the agent do each run?" value={prompt} onChange={(e) => setPrompt(e.target.value)} />
           <label className="field-label">When</label>
           <div className="schedule-row schedule-when">
-            <div className="seg-control">
-              <button className={`seg-btn ${kind === 'daily' ? 'active' : ''}`} onClick={() => setKind('daily')}>Daily</button>
-              <button className={`seg-btn ${kind === 'interval' ? 'active' : ''}`} onClick={() => setKind('interval')}>Every</button>
-            </div>
+            <Segmented label="Repeat" value={kind} onChange={setKind}
+              options={[{ value: 'daily', label: 'Daily' }, { value: 'interval', label: 'Every' }]} />
             {kind === 'daily' ? (
               <input className="field-input schedule-time" type="time" value={atTime} onChange={(e) => setAtTime(e.target.value)} />
             ) : (
@@ -198,10 +197,8 @@ export default function SchedulesView({ projects, providers, onRun }: Props) {
             )}
           </div>
           <label className="field-label">Each run</label>
-          <div className="seg-control seg-inline">
-            <button className={`seg-btn ${target === 'new' ? 'active' : ''}`} onClick={() => setTarget('new')}>New thread</button>
-            <button className={`seg-btn ${target === 'same' ? 'active' : ''}`} onClick={() => setTarget('same')}>Same thread</button>
-          </div>
+          <Segmented label="Each run" className="seg-inline" value={target} onChange={setTarget}
+            options={[{ value: 'new', label: 'New thread' }, { value: 'same', label: 'Same thread' }]} />
         </div>
       )}
     </MasterDetail>

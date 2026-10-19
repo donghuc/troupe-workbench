@@ -9,6 +9,7 @@ import MasterDetail from './MasterDetail'
 import Icon from './Icon'
 import type { FileNode, FileChange, FileSearchResult } from '../../../shared/types'
 import { IconButton } from './ui/Button'
+import { Segmented } from './ui/Segmented'
 
 interface Props {
   root: string
@@ -110,10 +111,8 @@ export default function FilesView({ root, onBack }: Props) {
               <IconButton className="files-filter-clear" title="Clear" onClick={() => setFilter('')}><Icon name="close" size="xs" /></IconButton>
             )}
           </div>
-          <div className="files-sort" role="tablist" aria-label="Sort files">
-            <button className={sort === 'name' ? 'active' : ''} onClick={() => setSort('name')}>Name</button>
-            <button className={sort === 'modified' ? 'active' : ''} onClick={() => setSort('modified')}>Modified</button>
-          </div>
+          <Segmented size="sm" label="Sort files" className="files-sort" value={sort} onChange={setSort}
+            options={[{ value: 'name', label: 'Name' }, { value: 'modified', label: 'Modified' }]} />
         </>
       }
       list={

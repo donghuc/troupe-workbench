@@ -9,6 +9,7 @@ import type { Skill, SkillInput, SkillScope } from '../../shared/types'
 import { BUILTIN_SKILLS, BUILTIN_SLUGS, builtinBySlug } from './builtinSkills'
 import { isUneditedOldBuiltin } from './builtinVersions'
 import { logInfo } from '../util/logger'
+import { isSafeSegment } from '../security/pathGuard'
 
 // File-based skills (D-018): skills are Claude Code SKILL.md files, so they're
 // picked up natively by Claude Code and interoperate with the user's terminal.
@@ -72,6 +73,8 @@ function dirForId(id: string, cwd?: string): { base: string; slug: string; scope
   if (slash < 0) return null
   const scope = id.slice(0, slash) as SkillScope
   const slug = id.slice(slash + 1)
+  // The id comes from the window: "global/.." would point rmSync at ~/.claude (review 2026-10).
+  if (!isSafeSegment(slug)) return null
   if (scope === 'global') return { base: GLOBAL_DIR(), slug, scope }
   if (scope === 'project' && cwd) return { base: PROJECT_DIR(cwd), slug, scope }
   return null

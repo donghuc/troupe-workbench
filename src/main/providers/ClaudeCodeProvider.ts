@@ -14,6 +14,7 @@ import { memoryDelivery, globalMemoryDelivery } from '../context/projectMemory'
 import { logInfo } from '../util/logger'
 import { configuredClaudeMcpNames, liveClaudeMcpNames } from '../tools/toolsService'
 import type { AgentProvider } from './AgentProvider'
+import { claudeSandboxSettings, parseDomains, sandboxOn, SHELL_SANDBOX_SETTING, SHELL_DOMAINS_SETTING } from '../../shared/shellSandbox'
 import type {
   AgentRequest, AgentEvent, ProviderCapabilities, ProviderAvailability
 } from '../../shared/agent'
@@ -97,6 +98,11 @@ export class ClaudeCodeProvider implements AgentProvider {
     // so it must not sit directly before a positional argument; `-p prompt` is already
     // first, so appending here is safe.
     if (req.addDirs?.length) args.push('--add-dir', ...req.addDirs)
+    // D-115: in Auto, shell commands run in Claude Code's sandbox (writes in the project
+    // and added folders only, listed sites only, fails closed). Full access skips it.
+    if (mode === 'auto' && shellAccess && sandboxOn(getSetting(SHELL_SANDBOX_SETTING))) {
+      args.push('--settings', claudeSandboxSettings(parseDomains(getSetting(SHELL_DOMAINS_SETTING))))
+    }
     if (req.model) args.push('--model', req.model)
     if (resumeSessionId) args.push('--resume', resumeSessionId)
 

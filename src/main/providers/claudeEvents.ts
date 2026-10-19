@@ -32,7 +32,9 @@ export function claudeEvents(e: any, st: ClaudeStreamState): AgentEvent[] {
     if (errored && !producedText) {
       // An error with no text (a usage limit, or an execution error that exits cleanly) is
       // surfaced instead of a silent blank complete (B-041).
-      const msg = (typeof e.result === 'string' && e.result.trim()) || e.subtype || 'The agent reported an error'
+      // e.errors carries the reason for startup failures, e.g. "Sandbox required but unavailable…" (D-115).
+      const listed = Array.isArray(e.errors) ? e.errors.filter((x: unknown) => typeof x === 'string' && x.trim()).join('\n') : ''
+      const msg = (typeof e.result === 'string' && e.result.trim()) || listed || e.subtype || 'The agent reported an error'
       out.push({ type: 'error', message: String(msg), fatal: true })
     }
     // Fresh input, cache-read and cache-write stay separate so the UI can show whether

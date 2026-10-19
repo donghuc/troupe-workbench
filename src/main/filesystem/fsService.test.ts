@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { resolve, sep } from 'path'
+import * as fs from 'fs'
+import * as os from 'os'
 import { ensureInside, mimeForPath, looksBinary } from './fsService'
 
 const root = resolve('/tmp/wb-root')
@@ -46,5 +48,26 @@ describe('looksBinary', () => {
   it('flags NUL bytes and control-heavy data (JPEG header)', () => {
     expect(looksBinary(Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46]))).toBe(true)
     expect(looksBinary(Buffer.from([1, 2, 3, 4, 5, 6, 65, 66]))).toBe(true)
+  })
+})
+
+describe('ensureInside — symlinks (review 2026-10)', () => {
+  const base = fs.mkdtempSync(resolve(os.tmpdir(), 'wb-link-'))
+  const proj = resolve(base, 'proj'); const outside = resolve(base, 'outside')
+  fs.mkdirSync(resolve(proj, 'inner'), { recursive: true }); fs.mkdirSync(outside)
+  fs.writeFileSync(resolve(outside, 'secret.txt'), 'x')
+  fs.symlinkSync(outside, resolve(proj, 'escape'))
+  fs.symlinkSync(resolve(proj, 'inner'), resolve(proj, 'alias'))
+  fs.symlinkSync(resolve(outside, 'new.txt'), resolve(proj, 'dangling'))
+  it('refuses a path through a link that points outside', () => {
+    expect(() => ensureInside(proj, 'escape/secret.txt')).toThrow(/symlink/)
+    expect(() => ensureInside(proj, 'escape/not-yet.txt')).toThrow(/symlink/)
+  })
+  it('refuses a dangling link whose target is outside', () => {
+    expect(() => ensureInside(proj, 'dangling')).toThrow(/symlink/)
+  })
+  it('allows a link that stays inside the folder, and new files', () => {
+    expect(ensureInside(proj, 'alias/a.md')).toBe(resolve(proj, 'alias/a.md'))
+    expect(ensureInside(proj, 'inner/new/deep.md')).toBe(resolve(proj, 'inner/new/deep.md'))
   })
 })

@@ -1,4 +1,4 @@
-import { promises as fs, mkdtempSync, writeFileSync } from 'fs'
+import { promises as fs, mkdtempSync, writeFileSync, realpathSync, lstatSync } from 'fs'
 import { tmpdir } from 'os'
 import { execFileSync } from 'child_process'
 import { join, relative, resolve, sep, basename, dirname } from 'path'
@@ -16,7 +16,29 @@ export function ensureInside(root: string, target: string): string {
   if (t !== r && !t.startsWith(r + sep)) {
     throw new Error('Path escapes project folder')
   }
+  // Symlinks (review 2026-10): "notes -> ~/.ssh" passes the check above, so the real
+  // location of the deepest existing part must also lie under the real root.
+  const realRoot = realExisting(r)
+  const realT = realExisting(t)
+  if (realT !== realRoot && !realT.startsWith(realRoot + sep)) {
+    throw new Error('Path escapes project folder (symlink)')
+  }
   return t
+}
+
+// realpath of `p`, or of its deepest existing ancestor with the missing rest appended
+// (a file about to be written does not exist yet).
+function realExisting(p: string): string {
+  let cur = p
+  const rest: string[] = []
+  for (;;) {
+    try { return join(realpathSync.native(cur), ...rest.reverse()) } catch { /* not there yet */ }
+    // A dangling symlink: writing through it would create its target, wherever that is.
+    try { if (lstatSync(cur).isSymbolicLink()) throw new Error('Path escapes project folder (symlink)') } catch (e) { if (e instanceof Error && e.message.includes('symlink')) throw e }
+    const up = dirname(cur)
+    if (up === cur) return p
+    rest.push(basename(cur)); cur = up
+  }
 }
 
 const toRel = (root: string, abs: string): string => {

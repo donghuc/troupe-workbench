@@ -5,6 +5,7 @@ import { api } from '../api'
 import { Button } from './ui/Button'
 import { previewRefusal } from '../fileKinds'
 import FileUnsupported from './FileUnsupported'
+import { Segmented } from './ui/Segmented'
 
 interface Props {
   root: string
@@ -106,10 +107,8 @@ export default function MarkdownDoc({ root, relPath, externalChangeToken, jumpTo
         <span className="doc-path truncate">{relPath}</span>
         <div className="doc-actions">
           {isMd && (
-            <div className="seg">
-              <button className={mode === 'preview' ? 'seg-on' : ''} onClick={() => setMode('preview')}>Preview</button>
-              <button className={mode === 'edit' ? 'seg-on' : ''} onClick={() => setMode('edit')}>Edit</button>
-            </div>
+            <Segmented size="sm" label="View" value={mode} onChange={setMode}
+              options={[{ value: 'preview', label: 'Preview' }, { value: 'edit', label: 'Edit' }]} />
           )}
           {mode === 'edit' && (
             <Button variant="primary" size="sm" disabled={!dirty} onClick={save}>Save</Button>

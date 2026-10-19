@@ -10,6 +10,7 @@ import { mcpOffKey, mcpDisplay, groupMcpServers } from '../../../shared/projectM
 import type { AgentTools, McpServer, ProviderId } from '../../../shared/types'
 import Switch from './settings/Switch'
 import { Button, IconButton } from './ui/Button'
+import { Segmented } from './ui/Segmented'
 
 interface Props {
   agents: ProviderId[]                      // agents that are on
@@ -17,12 +18,14 @@ interface Props {
   setMcpOff: (next: string[]) => void
   webAccess: boolean; setWebAccess: (v: boolean) => void
   shellAccess: boolean; setShellAccess: (v: boolean) => void
+  shellSandbox: boolean; setShellSandbox: (v: boolean) => void   // D-115
+  shellDomains: string; setShellDomains: (v: string) => void
   chromeAccess: boolean; setChromeAccess: (v: boolean) => void
 }
 
 // Settings ▸ Tools (D-077): the one place MCP servers and built-in tool access are
 // switched on or off — for every project. The chat side panel only shows what's active.
-export default function ToolsSettings({ agents, mcpOff, setMcpOff, webAccess, setWebAccess, shellAccess, setShellAccess, chromeAccess, setChromeAccess }: Props) {
+export default function ToolsSettings({ agents, mcpOff, setMcpOff, webAccess, setWebAccess, shellAccess, setShellAccess, shellSandbox, setShellSandbox, shellDomains, setShellDomains, chromeAccess, setChromeAccess }: Props) {
   const [agent, setAgent] = useState<ProviderId>(agents[0] ?? 'claude-code')
   const [tools, setTools] = useState<AgentTools | null>(null)
   const [loading, setLoading] = useState(false)
@@ -82,11 +85,8 @@ export default function ToolsSettings({ agents, mcpOff, setMcpOff, webAccess, se
   return (
     <Stack>
       {agents.length > 1 && (
-        <div className="seg-control" role="tablist" aria-label="Agent">
-          {agents.map((id) => (
-            <button key={id} role="tab" aria-selected={agent === id} className={`seg-btn${agent === id ? ' active' : ''}`} onClick={() => setAgent(id)}>{agentEntry(id).label}</button>
-          ))}
-        </div>
+        <Segmented label="Agent" className="segmented-spaced" value={agent} onChange={setAgent}
+          options={agents.map((id) => ({ value: id, label: agentEntry(id).label }))} />
       )}
 
       <Section title="MCP servers" actions={<>
@@ -158,6 +158,24 @@ export default function ToolsSettings({ agents, mcpOff, setMcpOff, webAccess, se
           </div>
           <Switch on={shellAccess} label="Shell commands" onChange={setShellAccess} />
         </div>
+        {shellAccess && (
+          <div className="settings-row settings-row-nested">
+            <div className="settings-row-text">
+              <div className="settings-row-title">Sandbox in Auto</div>
+              <div className="settings-row-sub">In Auto, Claude's commands can only change files in the project and reach package registries, GitHub and the sites below. Full access skips the sandbox.</div>
+              {shellSandbox && (
+                <textarea
+                  className="global-instr-input shell-domains-input"
+                  aria-label="Other sites shell commands may reach"
+                  placeholder={'Other sites, one per line — e.g. api.example.com or *.figma.com'}
+                  value={shellDomains}
+                  onChange={(e) => setShellDomains(e.target.value)}
+                />
+              )}
+            </div>
+            <Switch on={shellSandbox} label="Sandbox in Auto" onChange={setShellSandbox} />
+          </div>
+        )}
         <div className="settings-row">
           <div className="settings-row-text">
             <div className="settings-row-title">Chrome browser</div>

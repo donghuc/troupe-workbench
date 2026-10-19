@@ -17,6 +17,7 @@ import { type SelectionItem, sourceLabel, snippet, composeWithSelections } from 
 import { type PendingAttachment, attachmentName, attachmentIsImage } from '../attachments'
 import { Menu } from './ui/Menu'
 import { Button, IconButton } from './ui/Button'
+import { Segmented } from './ui/Segmented'
 
 interface Props {
   providers: ProviderInfo[]
@@ -379,10 +380,11 @@ export default function Composer({ providers, onSend, disabled, placeholder = 'H
             </Menu>
           </div>
           {onStartCollab && (
-            <div className="composer-mode" role="tablist" aria-label="Send mode">
-              <button className={`cm-tab ${mode === 'chat' ? 'active' : ''}`} onClick={() => setMode('chat')}>Chat</button>
-              <button className={`cm-tab ${mode === 'collab' ? 'active' : ''}`} onClick={() => collabAvailable && setMode('collab')} disabled={!collabAvailable} title={collabAvailable ? 'Plan & run with multiple agents' : 'Collab needs a project folder'}>Collab</button>
-            </div>
+            <Segmented size="sm" label="Send mode" value={mode} onChange={setMode}
+              options={[
+                { value: 'chat', label: 'Chat' },
+                { value: 'collab', label: 'Collab', disabled: !collabAvailable, title: collabAvailable ? 'Plan & run with multiple agents' : 'Collab needs a project folder' }
+              ]} />
           )}
           <input
             ref={fileInputRef} type="file" multiple

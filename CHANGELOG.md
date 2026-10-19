@@ -18,6 +18,20 @@ Each version here matches a packaged build — the dmg is named
 > - Bumping rules: PATCH = fixes/small tweaks, MINOR = new features (backward-compatible),
 >   MAJOR = breaking changes or a data format users can't roll back from.
 
+## [2.7.0] - 2026-10-19
+
+### Changed
+- Every two- or three-way switch (theme, Chat/Collab, Preview/Edit, file sort, schedule options, the agent picker in Tools) now looks and works the same: arrow keys move the choice, and screen readers announce it as a choice group.
+
+### Security
+- In Auto, Claude's shell commands now run in a sandbox: they can change files only in the project (and its added folders), reach only package registries, GitHub and sites you list in Settings ▸ Tools, and can't read folders like `~/.ssh`. If the sandbox can't start, the run stops with the reason instead of running unprotected. Full access is unchanged; the sandbox can be switched off in Settings ▸ Tools.
+- An HTML file opened in the file preview could read other files in the same project folder and send them to a website. HTML and SVG files now load under a policy that blocks reading project files from script; their images, styles and scripts still load.
+- Links opened from a preview or a reply only go to web (http/https) and email addresses. Other kinds (network shares, links that launch other apps) are ignored.
+- File access now follows symlinks to where they really point: a link inside a project that points outside it can no longer be read or written through.
+- Deleting or editing a skill checks its name, so a malformed request can't reach outside the skills folder.
+### Fixed
+- When Claude stops before replying, the chat shows the reason it gave instead of "error_during_execution".
+
 ## [2.6.1] - 2026-10-15
 
 ### Changed

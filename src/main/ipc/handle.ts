@@ -3,6 +3,7 @@ import { pathToFileURL } from 'url'
 import { join } from 'path'
 import type { InvokePath, InvokeFn } from '../../shared/contract'
 import { logError } from '../util/logger'
+import { isSafeExternalUrl } from '../security/pathGuard'
 
 // D-097: the one way main answers a window's request. The channel is the API path and
 // the handler's arguments are typed from WorkbenchApi, so main and the renderer cannot
@@ -30,6 +31,12 @@ export function guardNavigation(wc: WebContents): void {
     e.preventDefault()
     if (/^https?:/i.test(url)) void shell.openExternal(url)
   })
+}
+
+/** window.open / target=_blank: web and mail links go to the OS; everything else is dropped. */
+export function openExternalSafely(url: string): { action: 'deny' } {
+  if (isSafeExternalUrl(url)) void shell.openExternal(url)
+  return { action: 'deny' }
 }
 const trustedSender = (e: IpcMainInvokeEvent): boolean => isAppUrl(e.senderFrame?.url ?? '')
 
