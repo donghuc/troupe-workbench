@@ -52,6 +52,9 @@ mac:
   extraResources:
     - from: build/Assets.car
       to: Assets.car
+    # D-117: the `troupe` command; Settings ▸ Tools ▸ Command line installs a wrapper that runs it.
+    - from: resources/troupe
+      to: troupe
   extendInfo:
     CFBundleIconName: Troupe
   # No Apple Developer ID: electron-builder doesn't sign (identity: null); the afterPack hook

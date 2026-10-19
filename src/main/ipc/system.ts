@@ -16,6 +16,7 @@ import { describeProviders } from '../providers/registry'
 import { getSetting } from '../database/settingsRepo'
 import { enabledProviderIds, DISABLED_AGENTS_SETTING } from '../../shared/providers'
 import { buildDiagnostics, tailLines } from '../../shared/diagnostics'
+import { cliStatus, installCli } from '../cli/cliAccess'
 
 export function registerSystemIpc(): void {
   // Open the native macOS Lookup/dictionary panel for the current text selection.
@@ -111,5 +112,8 @@ export function registerSystemIpc(): void {
   })
   handle('system.tools', (_e, provider: ProviderId, cwd?: string) => listAgentTools(provider, cwd))
   handle('system.mcpAdd', async (_e, input: McpAddInput, cwd?: string) => { const r = await addMcpServer(input, cwd); void refreshLiveMcpNames(cwd); return r })
+  // Command-line access (D-117): the Settings ▸ Tools ▸ Command line section.
+  handle('system.cliStatus', () => cliStatus())
+  handle('system.cliInstall', () => installCli())
   handle('system.mcpRemove', (_e, name: string, scope?: string, cwd?: string) => removeMcpServer(name, scope, cwd))
 }

@@ -89,6 +89,7 @@ export interface WorkbenchApi {
     export(id: string): Promise<string | null>
     search(query: string): Promise<SearchHit[]>
     onCompressing(cb: (p: { conversationId: string; state: 'start' | 'end' }) => void): () => void
+    onChanged(cb: () => void): () => void   // D-117: chats created outside the window
     compressNow(conversationId: string): Promise<void>
   }
   messages: {
@@ -152,6 +153,8 @@ export interface WorkbenchApi {
     diagnostics(): Promise<string>   // D-103: scrubbed text for a bug report
     logRendererError(where: string, message: string, detail?: string): Promise<void>
     copyImage(root: string, relPath: string): Promise<boolean>
+    cliStatus(): Promise<{ enabled: boolean; open: boolean; socket: string }>   // D-117
+    cliInstall(): Promise<{ path: string; onPath: boolean }>
   }
   notes: {
     list(): Promise<Note[]>

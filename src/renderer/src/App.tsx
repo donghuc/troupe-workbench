@@ -151,6 +151,8 @@ export default function App() {
 
   const refreshConvList = () => { api.conversations.recent(500).then(setAllConvos) }
   useEffect(() => { refreshConvList() }, [projects, conversations])
+  // D-117: a chat started from the command line (or a scheduled task) appears without a reload.
+  useEffect(() => api.conversations.onChanged(() => { refreshConvos(); refreshConvList() }), [refreshConvos])  // eslint-disable-line react-hooks/exhaustive-deps
 
   // Apply a cross-project "open conversation" once its project's list has loaded.
   useEffect(() => {

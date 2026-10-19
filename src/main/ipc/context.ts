@@ -9,6 +9,8 @@ import { saveOutcome, listOutcomes } from '../context/decisionsRepo'
 import { getProject } from '../projects/projectsRepo'
 import { expectString } from '../security/pathGuard'
 import type { Outcome } from '../../shared/decisions'
+import { refreshCliAccess } from '../cli/cliAccess'
+import { CLI_ACCESS_SETTING } from '../../shared/cliProtocol'
 
 export function registerContextIpc(): void {
   handle('context.list', (_e, projectId: string) => listContextFiles(projectId))
@@ -26,5 +28,8 @@ export function registerContextIpc(): void {
   handle('outcomes.check', (_e, projectId: string) => checkProjectContext(expectString(projectId, 'projectId')))
   handle('outcomes.list', (_e, projectId: string) => { const p = getProject(expectString(projectId, 'projectId')); return p ? listOutcomes(p) : [] })
   handle('settings.get', (_e, key: string) => getSetting(key))
-  handle('settings.set', (_e, key: string, value: string) => setSetting(key, value))
+  handle('settings.set', async (_e, key: string, value: string) => {
+    setSetting(key, value)
+    if (key === CLI_ACCESS_SETTING) await refreshCliAccess()   // D-117: open/close the socket now
+  })
 }

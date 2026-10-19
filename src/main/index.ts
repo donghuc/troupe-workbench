@@ -30,6 +30,7 @@ import { refreshLiveMcpNames } from './tools/toolsService'
 import { cancelAllRuns } from './agent/runner'
 import { logInfo, logError } from './util/logger'
 import { stopWatch } from './filesystem/watcher'
+import { refreshCliAccess, stopCliServer } from './cli/cliAccess'
 import { ensureInside, mimeForPath } from './filesystem/fsService'
 import { parseRange, isRangeMedia } from './filesystem/byteRange'
 import { assertProjectRoot } from './security/roots'
@@ -152,6 +153,7 @@ app.whenReady().then(() => {
   refreshSkillsWatch()
   createWindow()
   startScheduler()
+  void refreshCliAccess()   // D-117: open the CLI socket if Command line access is on
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
@@ -161,4 +163,4 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-app.on('will-quit', () => { void cancelAllRuns(); void cancelAllImageRuns(); stopWatch(); stopSkillsWatch(); stopScheduler(); closeDb(); logInfo('app quit') })
+app.on('will-quit', () => { void cancelAllRuns(); void cancelAllImageRuns(); stopWatch(); stopSkillsWatch(); stopScheduler(); stopCliServer(); closeDb(); logInfo('app quit') })

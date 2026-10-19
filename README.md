@@ -84,6 +84,7 @@ Troupe is an agent runner, so it is worth being precise about its footprint.
 - **The CLIs' own config.** Adding an MCP server in Settings ▸ Tools runs `claude mcp add` (writes `~/.claude.json`) and edits `~/.codex/config.toml` so both runtimes see it. Nothing else under `~/.claude`, `~/.codex`, `~/.grok` or `~/.gemini` is written.
 - **Troupe's own data.** One SQLite database, attachments and a rotating log in `~/Library/Application Support/AI Workbench/`. Nothing is sent anywhere by Troupe itself; the CLIs talk to their vendors as they normally would.
 - **Permission modes.** *Read-only* and *Auto* pre-approve a bounded tool set for headless runs (Auto accepts edits inside the project). *Full access* maps to `claude --permission-mode bypassPermissions` and `codex --dangerously-bypass-approvals-and-sandbox`: no sandbox, no prompts. Codex can only call MCP tools in Full access — a limitation of `codex exec`, not a choice of ours.
+- **Command line (off by default).** With Settings ▸ Tools ▸ Command line on, the `troupe` command (and bots on your Mac) can list projects and chat through a private socket in the app's folder — no network port, never Full access. See [CLI.md](CLI.md).
 - **Browser.** With the Chrome switch on, Claude runs with `--chrome` and acts in your signed-in Chrome through the Claude in Chrome extension.
 
 ## Docs and decisions

@@ -18,6 +18,12 @@ Each version here matches a packaged build — the dmg is named
 > - Bumping rules: PATCH = fixes/small tweaks, MINOR = new features (backward-compatible),
 >   MAJOR = breaking changes or a data format users can't roll back from.
 
+## [2.8.0] - 2026-10-19
+
+### Added
+- The `troupe` command: list projects, start or continue chats and get the replies from a terminal — or let a bot on your Mac, like Grok Bot, do it. Turn it on in Settings ▸ Tools ▸ Command line, then click Install. It works only while Troupe is open, only for your user, and never with Full access; image creation, settings and project setup stay in the app. See CLI.md.
+- Chats started from the command line or by a scheduled task now appear in the sidebar right away.
+
 ## [2.7.0] - 2026-10-19
 
 ### Changed

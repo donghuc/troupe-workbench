@@ -20,12 +20,13 @@ interface Props {
   shellAccess: boolean; setShellAccess: (v: boolean) => void
   shellSandbox: boolean; setShellSandbox: (v: boolean) => void   // D-115
   shellDomains: string; setShellDomains: (v: string) => void
+  cliAccess: boolean; setCliAccess: (v: boolean) => void   // D-117
   chromeAccess: boolean; setChromeAccess: (v: boolean) => void
 }
 
 // Settings ▸ Tools (D-077): the one place MCP servers and built-in tool access are
 // switched on or off — for every project. The chat side panel only shows what's active.
-export default function ToolsSettings({ agents, mcpOff, setMcpOff, webAccess, setWebAccess, shellAccess, setShellAccess, shellSandbox, setShellSandbox, shellDomains, setShellDomains, chromeAccess, setChromeAccess }: Props) {
+export default function ToolsSettings({ agents, mcpOff, setMcpOff, webAccess, setWebAccess, shellAccess, setShellAccess, shellSandbox, setShellSandbox, shellDomains, setShellDomains, cliAccess, setCliAccess, chromeAccess, setChromeAccess }: Props) {
   const [agent, setAgent] = useState<ProviderId>(agents[0] ?? 'claude-code')
   const [tools, setTools] = useState<AgentTools | null>(null)
   const [loading, setLoading] = useState(false)
@@ -187,7 +188,43 @@ export default function ToolsSettings({ agents, mcpOff, setMcpOff, webAccess, se
       </Field>
       </Section>
 
+      <Section title="Command line">
+      <Field hint="Lets tools on this Mac, like Grok Bot, list projects and chat through the troupe command. Runs use Read-only or Auto, never Full access.">
+      <div className="settings-group" role="group" aria-label="Command line">
+        <div className="settings-row">
+          <div className="settings-row-text">
+            <div className="settings-row-title">Allow command-line access</div>
+            <div className="settings-row-sub">Only while Troupe is open, and only for your user on this Mac.</div>
+          </div>
+          <Switch on={cliAccess} label="Allow command-line access" onChange={setCliAccess} />
+        </div>
+        <CliInstallRow />
+      </div>
+      </Field>
+      </Section>
+
       {showAdd && <McpAddModal globalOnly onClose={() => setShowAdd(false)} onAdded={() => { setShowAdd(false); load() }} />}
     </Stack>
+  )
+}
+
+// D-117: install the `troupe` command (a small wrapper in a bin folder) and show where it is.
+function CliInstallRow() {
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<{ path: string; onPath: boolean } | null>(null)
+  const install = async () => {
+    setBusy(true)
+    try { setResult(await api.system.cliInstall()) } catch (e) { reportError('Install the troupe command', e) } finally { setBusy(false) }
+  }
+  return (
+    <div className="settings-row">
+      <div className="settings-row-text">
+        <div className="settings-row-title">troupe command</div>
+        <div className={`settings-row-sub${result ? ' ok' : ''}`}>
+          {result ? <>Installed at <code>{result.path}</code>{result.onPath ? '' : ' — not on your PATH, so call it by this full path.'}</> : 'Adds the troupe command to your Mac. Run troupe --help to start.'}
+        </div>
+      </div>
+      <Button size="sm" disabled={busy} onClick={install}>{result ? 'Reinstall' : 'Install'}</Button>
+    </div>
   )
 }

@@ -1,0 +1,76 @@
+#!/bin/bash
+# troupe — work with the running Troupe app from a terminal or a bot (D-117).
+# Needs Troupe open with Settings ▸ Tools ▸ Command line switched on. Uses only bash and
+# curl (both built into macOS) and writes no files. Talks to the app over a private socket.
+set -u
+
+SOCK="${TROUPE_SOCKET:-$HOME/Library/Application Support/AI Workbench/troupe.sock}"
+
+usage() {
+  cat <<'U'
+Usage: troupe <command> [arguments] [--json]
+
+  projects                          List projects
+  chats <project>                   List a project's chats (name or id)
+  show <chat-id> [--last N]         Read the last N messages (default 10)
+  send <project> <message>          Start a new chat in a project; prints a run id
+  send <chat-id> <message>          Continue a chat
+       [--agent NAME] [--model M] [--mode read|auto] [--new]
+       Use - as the message to read it from stdin.
+  status <run-id> [--wait SECONDS]  Running, done or error, with the reply
+  stop <run-id>                     Stop a running reply
+  agents                            Agents you can use, with their models
+
+  --json   machine-readable output
+
+Runs use Read-only or Auto (sandboxed); Full access isn't available here.
+Exit codes: 0 ok, 1 Troupe refused the request, 2 bad usage, 3 Troupe not reachable.
+U
+}
+
+die() { echo "troupe: $*" >&2; exit 2; }
+[ $# -ge 1 ] || { usage >&2; exit 2; }
+cmd="$1"; shift
+args=()
+stdin_msg=0
+add() { args+=(--data-urlencode "$1=$2"); }
+
+case "$cmd" in
+  -h|--help|help) usage; exit 0 ;;
+  projects|agents) ;;
+  chats)  [ $# -ge 1 ] || die "usage: troupe chats <project>"; add project "$1"; shift ;;
+  show)   [ $# -ge 1 ] || die "usage: troupe show <chat-id> [--last N]"; add chat "$1"; shift ;;
+  send)   [ $# -ge 2 ] || die "usage: troupe send <project|chat-id> <message|->"
+          add to "$1"
+          if [ "$2" = "-" ]; then stdin_msg=1; else add message "$2"; fi
+          shift 2 ;;
+  status|stop) [ $# -ge 1 ] || die "usage: troupe $cmd <run-id>"; add run "$1"; shift ;;
+  *) die "unknown command: $cmd (try: troupe --help)" ;;
+esac
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --json) add format json ;;
+    --new) add new 1 ;;
+    --agent|--model|--mode|--last|--wait)
+      [ $# -ge 2 ] || die "$1 needs a value"
+      add "${1#--}" "$2"; shift ;;
+    *) die "unknown option: $1 (try: troupe --help)" ;;
+  esac
+  shift
+done
+[ "$stdin_msg" = 1 ] && args+=(--data-urlencode "message@-")
+
+if [ ! -S "$SOCK" ]; then
+  echo "troupe: can't reach Troupe. Open the app and turn on Settings ▸ Tools ▸ Command line." >&2
+  exit 3
+fi
+
+curl -sS --fail-with-body --unix-socket "$SOCK" -X POST ${args[@]+"${args[@]}"} "http://troupe/v1/$cmd"
+rc=$?
+case $rc in
+  0) exit 0 ;;
+  22) exit 1 ;;
+  7) echo "troupe: can't reach Troupe (is the app still open?)." >&2; exit 3 ;;
+  *) exit $rc ;;
+esac

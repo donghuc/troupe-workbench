@@ -126,6 +126,8 @@ export const INVOKE_PATHS = [
   'system.openLogs',
   'system.logRendererError',
   'system.copyImage',
+  'system.cliStatus',
+  'system.cliInstall',
 
   'notes.list',
   'notes.get',

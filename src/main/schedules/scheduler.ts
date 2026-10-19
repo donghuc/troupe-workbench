@@ -1,5 +1,5 @@
-import { BrowserWindow, Notification } from 'electron'
-import type { WebContents } from 'electron'
+import { Notification } from 'electron'
+import { senderForRun, isHeadless, broadcastConversationsChanged } from '../agent/headless'
 import { startTurn, isBusy } from '../agent/turns'
 import { createConversation, getConversation } from '../conversations/conversationsRepo'
 import { getProject } from '../projects/projectsRepo'
@@ -11,14 +11,6 @@ import { enabledProviderIds, offMessage, DISABLED_AGENTS_SETTING } from '../../s
 import { scheduledRunMarker } from '../../shared/contextBudget'
 
 let timer: ReturnType<typeof setInterval> | null = null
-
-// D-084 #1: a scheduled run no longer needs a window. Turn state is broadcast to every
-// open window anyway and the reply is persisted, so with no window the per-run events
-// simply have nowhere to go — this stand-in swallows them. The app stays alive on macOS
-// after the last window closes, which is when this matters.
-const headlessSender = { isDestroyed: () => true, send: () => {} } as unknown as WebContents
-const senderForRun = (): WebContents =>
-  BrowserWindow.getAllWindows().find((w) => !w.webContents.isDestroyed())?.webContents ?? headlessSender
 
 function notify(title: string, body: string): void {
   try { if (Notification.isSupported()) new Notification({ title, body }).show() } catch { /* best-effort */ }
@@ -43,6 +35,7 @@ function fire(s: Schedule): void {
     if (!convId) {
       convId = createConversation(s.projectId, `${label} · ${new Date().toLocaleDateString()}`, s.provider).id
       if (s.target === 'same') setScheduleConv(s.id, convId)
+      broadcastConversationsChanged()   // D-117: the new thread shows up without a reload
     }
     // A fresh thread is seeded with the full instruction (documents the task once).
     // On a reused thread the instruction is pinned into the context by the context
@@ -58,7 +51,7 @@ function fire(s: Schedule): void {
       return
     }
     const sender = senderForRun()
-    logInfo(`[scheduler] firing "${label}" -> conv ${convId} (${freshThread ? 'fresh' : 'reused'}${sender === headlessSender ? ', no window' : ''})`)
+    logInfo(`[scheduler] firing "${label}" -> conv ${convId} (${freshThread ? 'fresh' : 'reused'}${isHeadless(sender) ? ', no window' : ''})`)
     startTurn(sender, {
       conversationId: convId,
       text: prompt,

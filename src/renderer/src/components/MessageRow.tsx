@@ -57,7 +57,7 @@ function MessageRow({ m, idx, name, cwd, files, menuOpen, isStreaming, otherName
       <div className="msg-body markdown-body">
         {m.role === 'assistant'
           ? <MessageMarkdown onOpenArtifact={openArtifact} onOpenMedia={openMedia} root={cwd}>{m.content}</MessageMarkdown>
-          : <><span className="msg-user-text">{userDisplayText(m)}</span>{typeof m.metadata?.modeCast === 'string' && <span className="msg-mode-cast"><Icon name="flash" size="xs" /> {m.metadata.modeCast as string}</span>}</>}
+          : <><span className="msg-user-text">{userDisplayText(m)}</span>{typeof m.metadata?.modeCast === 'string' && <span className="msg-mode-cast"><Icon name="flash" size="xs" /> {m.metadata.modeCast as string}</span>}{m.metadata?.via === 'cli' && <span className="msg-mode-cast">Sent from the command line</span>}</>}
       </div>
       {m.role === 'assistant' && files.length > 0 && (
         <div className="msg-artifacts">
