@@ -1,6 +1,6 @@
 # The `troupe` command
 
-Work with Troupe from a terminal, or let a bot on your Mac (for example Grok Bot) do it: list projects, start or continue chats, wait for replies. The app does the work, so everything shows up live in its window.
+Work with Troupe from a terminal, or let a bot on your Mac (for example Grok Bot) do it: list projects, start or continue chats, see what ran, read project files, run scheduled tasks and drive Collab. The app does the work, so everything shows up live in its window.
 
 ## Turn it on
 
@@ -12,28 +12,96 @@ Troupe must be open. The command talks to it over a private socket that only you
 
 ## Commands
 
+**Projects and chats**
 ```
 troupe projects                          # list projects
+troupe context "Personal finance"        # a project's instructions and memory (read-only)
 troupe chats "Workbench sandbox"         # a project's chats (name, part of a name, or id)
-troupe show <chat-id> --last 5           # read the last messages
-troupe send "Workbench sandbox" "summarise PLAN.md"            # new chat → prints a run id
-troupe send <chat-id> "now draft the plan" --agent codex       # continue a chat
-troupe status <run-id> --wait 600        # running / done / error, with the reply
-troupe stop <run-id>                     # stop a running reply
+troupe show <chat> --last 5              # read the last messages
+troupe search "rebalance"                # search every chat
+troupe rename <chat> "CLI test"          # rename a chat
+troupe delete <chat>                     # delete a chat started from the command line
 troupe agents                            # agents you can use, and their models
 ```
 
-Options: `--agent NAME`, `--model MODEL`, `--mode read|auto` (default `auto`), `--new` (start a new chat even if you gave a chat id), `--json` (machine-readable output). Use `-` as the message to read it from stdin: `cat brief.md | troupe send "Workbench sandbox" -`.
+**Sending and runs**
+```
+troupe send "Workbench sandbox" "summarise PLAN.md"        # new chat → prints a run id
+troupe send <chat> "now draft the plan" --agent codex      # continue a chat
+troupe send "Personal finance" "what do you see?" --attach ~/Desktop/ssi.png
+troupe send "Idea Research" "remote work is better" --think debate
+troupe status <run> --wait 600           # running / done / error / stopped, the reply, and files changed
+troupe stop <run>
+troupe runs --since 10:00                # what ran since 10:00, and whether it failed (also 2h, 1d, a date)
+```
+Send options: `--agent NAME`, `--model MODEL`, `--mode read|auto` (default `auto`), `--think debate|critique|research`, `--attach FILE` (up to 5, 20 MB each), `--wait-free SECONDS` (if the chat is busy, wait for it instead of failing), `--new` (new chat even if you gave a chat id). `@codex @claude` at the start of a message chains agents. Use `-` as the message to read it from stdin: `cat brief.md | troupe send "Workbench sandbox" -`.
 
-Exit codes: `0` ok, `1` Troupe refused the request (the reason is printed), `2` bad usage, `3` Troupe isn't reachable (not open, or command-line access is off).
+`runs` options: `--since`, `--project NAME`, `--source cli|app|schedule`.
+
+**Scheduled tasks**
+```
+troupe schedules                         # list them, with next and last run
+troupe schedules run "Positive news"     # run one now
+```
+
+**Project files (read-only)**
+```
+troupe files "Personal finance" [folder] # list files
+troupe cat "Personal finance" docs/portfolio-management.md
+```
+Text files only, up to 5 MB, inside the project folder. Keys and credentials (`.env`, `*.pem`, `id_rsa`, `.ssh/` …) are never listed, shown or attached.
+
+**Collab**
+```
+troupe collab start "Workbench sandbox" "Build a rebalancing sheet"   # the Planner drafts a plan
+troupe collab status <run|chat> --wait 600   # plan, task progress, and fixes when it's stuck
+troupe collab approve <run>                  # run the plan        (troupe collab reject <run> to drop it)
+troupe collab fix <run> <n>                  # apply the Planner's fix n
+troupe collab retry <run> <task n> --note "use ISO dates"   # or: skip, ask (ask the Planner)
+troupe collab resume <run>     troupe collab stop <run>     troupe collab list <project>
+```
+
+Add `--json` to any command for machine-readable output.
+
+Exit codes: `0` ok · `1` Troupe refused (the reason is printed on stderr — `error: …`, or `{"error": …}` with `--json`) · `2` bad usage · `3` Troupe isn't reachable (not open, or command-line access is off) · `4` the chat is busy (or the Collab run isn't in a state for that).
 
 ## What it can and can't do
 
-- **Can:** list projects and chats, read messages, send messages (new or follow-up), wait for and stop replies.
-- **Can't:** create images, change settings, edit memory, notes or skills, create or delete projects, or touch the database directly.
+- **Can:** everything above — chats, runs, scheduled tasks, read-only project files, Collab.
+- **Can't:** create images, change settings, edit memory, notes or skills, create or delete projects, delete chats you started in the app, or touch the database directly.
 - Runs use **Read-only** or **Auto** (with the shell sandbox). **Full access is never available** from the command line.
 - Messages sent this way are marked *Sent from the command line* in the chat.
 
-## Instructions to give Grok Bot
+## Guide to give Grok Bot
 
-> You can work with my Troupe app through the `troupe` command on my Mac (full path: `/opt/homebrew/bin/troupe` — use the path Troupe's Settings shows). Start with `troupe projects` and `troupe agents`. To ask an agent something, run `troupe send "<project>" "<message>" --json`, take the `run` id from the output, then run `troupe status <run> --wait 600` until the state is `done`, `error` or `stopped`; repeat if it still says `running`. Continue a chat with `troupe send <chat-id> "<message>"`. Use `--mode read` when the agent only needs to look, not change files. Never try other ways to change Troupe or its files.
+````markdown
+# Working with Troupe via the `troupe` command
+
+Troupe is my macOS app that runs AI agents (Claude, Codex, Grok…) inside project chats.
+Use it only through `/opt/homebrew/bin/troupe` (Troupe must be open). Never edit Troupe's
+data, settings or database directly. Run `troupe --help` for every command.
+
+## Daily loop
+- What happened: `troupe runs --since <time> --json` (state done/error/stopped, files changed).
+- Ask an agent: `troupe send "<project>" "<message>" --json` → keep `run` and `chat`;
+  then `troupe status <run> --wait 600` until done/error/stopped. Follow up on the same chat id.
+- If a chat is busy (exit code 4), add `--wait-free 300` instead of retrying.
+- Read a project file: `troupe cat "<project>" <path>`; list them: `troupe files "<project>"`.
+- Pass a file: `--attach <absolute path>` (up to 5).
+- Scheduled tasks: `troupe schedules`, `troupe schedules run "<task>"`.
+- Clean up your test chats: `troupe delete <chat>` (only chats you started).
+
+## Modes
+- `--mode read` when the agent only needs to look; `--mode auto` when it should change files.
+- `--think debate|critique|research` for a structured multi-agent answer.
+
+## Collab (multi-agent runs)
+- Start: `troupe collab start "<project>" "<goal>"`, then `troupe collab status <run> --wait 600`.
+- ALWAYS show me the plan and ask before `troupe collab approve`.
+- When it's stuck, show me the reason and the fixes; apply one with `troupe collab fix <run> <n>`
+  only after I choose — except a fix marked (recommended) that doesn't change the goal.
+
+## Rules
+- Report the agent's actual reply and the files it changed, not just "done".
+- No image creation, settings, or project creation/deletion — I do those in the app.
+````

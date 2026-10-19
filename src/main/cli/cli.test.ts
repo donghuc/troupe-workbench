@@ -143,7 +143,11 @@ describe('troupe script over the socket (D-117)', () => {
   it('reports refusals with exit code 1 and usage errors with 2', async () => {
     const r = await troupe(['send', 'sandbox', 'x', '--mode', 'full'])
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/error: Full access is not available/)
+    expect(r.out).toBe('')
+    expect(r.err).toBe('error: Full access is not available from the command line. Use --mode read or auto.\n')   // no curl noise
+    const j = await troupe(['send', 'nowhere', 'x', '--json'])
+    expect(j.code).toBe(1)
+    expect(JSON.parse(j.err)).toEqual({ error: 'No project called "nowhere".' })
     expect((await troupe(['send', 'sandbox'])).code).toBe(2)
     expect((await troupe(['frobnicate'])).code).toBe(2)
   })

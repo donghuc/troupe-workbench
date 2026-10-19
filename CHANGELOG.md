@@ -18,6 +18,24 @@ Each version here matches a packaged build — the dmg is named
 > - Bumping rules: PATCH = fixes/small tweaks, MINOR = new features (backward-compatible),
 >   MAJOR = breaking changes or a data format users can't roll back from.
 
+## [2.9.0] - 2026-10-19
+
+### Added
+- More `troupe` commands (see CLI.md):
+  - `troupe runs --since 10:00`: what ran, from where, and whether it failed. A run that failed before replying is now remembered too.
+  - `troupe schedules` lists your scheduled tasks; `troupe schedules run` starts one now.
+  - `troupe files` and `troupe cat` read project files. They're read-only, and keys and credentials stay hidden.
+  - `send --attach` passes files with a message, up to 5.
+  - `troupe status` now lists the files a run changed.
+  - `troupe rename` renames a chat. `troupe delete` deletes it, but only for chats started from the command line.
+  - `troupe search` searches all chats; `troupe context` shows a project's instructions and memory.
+  - `send --think debate|critique|research` runs a thinking mode.
+  - Collab: `troupe collab start`, `status`, `approve`, `fix`, `retry` and the rest. Nothing runs until the plan is approved.
+- A busy chat now gets its own exit code (4), and `send --wait-free` waits for the chat instead of failing.
+
+### Fixed
+- `troupe` no longer prints curl's own "curl: (22) … error: 409" line when Troupe refuses a request; you get only Troupe's message, on stderr (found by Grok Bot's first test).
+
 ## [2.8.0] - 2026-10-19
 
 ### Added

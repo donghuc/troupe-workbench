@@ -6,8 +6,11 @@ import type { TurnState, TurnLane, StartTurnInput, RegenerateInput, TurnAttachme
 import { EMPTY_TURN, turnDelta } from '../../shared/turns'
 import { startRun, cancelRun } from './runner'
 import { planTurn } from './turnPlan'
-import { appendMessage, deleteMessagesFrom } from '../conversations/messagesRepo'
-import { setConversationPermissionMode } from '../conversations/conversationsRepo'
+import { appendMessage, deleteMessagesFrom, listMessages } from '../conversations/messagesRepo'
+import { setConversationPermissionMode, getConversation } from '../conversations/conversationsRepo'
+import { getProject } from '../projects/projectsRepo'
+import { appendRunLog } from './runLog'
+import { encodeRunId, filesChanged } from '../../shared/cliProtocol'
 import { modelForProvider, parseDisabledModels, DISABLED_MODELS_SETTING } from '../../shared/models'
 import { getSetting } from '../database/settingsRepo'
 import { enabledProviderIds, offMessage, DISABLED_AGENTS_SETTING } from '../../shared/providers'
@@ -43,6 +46,8 @@ interface Turn {
   // D-083: a thinking-mode run — one step per chain entry, each with its role instruction and skill.
   steps?: ModeStep[]
   modeSkill?: string
+  // D-118: what the run log needs when the turn ends (the user message's time and where it came from).
+  log?: { at: number; source: 'app' | 'cli' | 'schedule' }
 }
 
 const turns = new Map<string, Turn>()
@@ -111,12 +116,30 @@ export function sweepInterruptedTurns(): number {
 const codexExtra = modelLists   // each agent's own newest models + typed extras (D-076, D-078)
 
 function finish(conversationId: string): void {
+  const t = turns.get(conversationId)
   turns.delete(conversationId)
   unlockRow(conversationId)
   const err = getTurnState(conversationId).error
+  if (t?.log) logFinishedTurn(conversationId, t, err)
   set(conversationId, { busy: false, lanes: [], parallel: false, phase: undefined }, true)
   const h = hooks.get(conversationId); hooks.delete(conversationId)
   try { h?.onFinished?.(err ?? undefined) } catch { /* best-effort */ }
+}
+
+// D-118: one run-log line per finished turn: outcome, agents and the files they edited.
+function logFinishedTurn(conversationId: string, t: Turn, err: string | null): void {
+  try {
+    const conv = getConversation(conversationId); if (!conv || !t.log) return
+    const project = getProject(conv.projectId)
+    const replies = listMessages(conversationId).filter((m) => m.role === 'assistant' && m.createdAt >= t.log!.at)
+    const replied = [...new Set(replies.map((m) => m.provider).filter((p): p is ProviderId => !!p))]
+    appendRunLog({
+      run: encodeRunId(conversationId, t.log.at), kind: 'chat', chat: conversationId, project: project?.name ?? '', title: conv.title,
+      source: t.log.source, agents: replied.length ? replied : t.plan.chain,
+      startedAt: t.log.at, finishedAt: Date.now(), state: t.cancelled ? 'stopped' : err ? 'error' : 'done', error: err,
+      files: filesChanged(replies.map((m) => m.metadata), project?.folderPath)
+    })
+  } catch { /* the log is best-effort */ }
 }
 
 function onEvent(conversationId: string, provider: ProviderId, ev: AgentEvent): void {
@@ -269,7 +292,8 @@ export function startTurn(sender: WebContents, input: StartTurnInput, h?: { onFi
   const turn: Turn = {
     plan, i: 0, cwd: input.cwd, attachments: input.attachments, skillId: input.skillId, model: input.model, permMode: input.permissionMode,
     parallelGroup: plan.mode === 'parallel' ? userMsg.id : undefined, pending: 0, cancelled: false, runIds: new Set(), sender,
-    steps, modeSkill: thinking ? MODES[thinking].skill : undefined
+    steps, modeSkill: thinking ? MODES[thinking].skill : undefined,
+    log: { at: userMsg.createdAt, source: input.messageMetadata?.via === 'cli' ? 'cli' : input.messageMetadata?.scheduled ? 'schedule' : 'app' }
   }
   if (input.permissionMode) setConversationPermissionMode(input.conversationId, input.permissionMode)
   turns.set(input.conversationId, turn)

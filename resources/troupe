@@ -1,5 +1,5 @@
 #!/bin/bash
-# troupe — work with the running Troupe app from a terminal or a bot (D-117).
+# troupe — work with the running Troupe app from a terminal or a bot (D-117, D-118).
 # Needs Troupe open with Settings ▸ Tools ▸ Command line switched on. Uses only bash and
 # curl (both built into macOS) and writes no files. Talks to the app over a private socket.
 set -u
@@ -10,21 +10,47 @@ usage() {
   cat <<'U'
 Usage: troupe <command> [arguments] [--json]
 
-  projects                          List projects
-  chats <project>                   List a project's chats (name or id)
-  show <chat-id> [--last N]         Read the last N messages (default 10)
-  send <project> <message>          Start a new chat in a project; prints a run id
-  send <chat-id> <message>          Continue a chat
-       [--agent NAME] [--model M] [--mode read|auto] [--new]
-       Use - as the message to read it from stdin.
-  status <run-id> [--wait SECONDS]  Running, done or error, with the reply
-  stop <run-id>                     Stop a running reply
-  agents                            Agents you can use, with their models
+Projects and chats
+  projects                              List projects
+  context <project>                     A project's instructions and memory (read-only)
+  chats <project>                       List a project's chats (name or id)
+  show <chat> [--last N]                Read the last N messages (default 10)
+  search "<words>"                      Search all chats
+  rename <chat> "<new name>"            Rename a chat
+  delete <chat>                         Delete a chat started from the command line
+  agents                                Agents you can use, with their models
+
+Sending
+  send <project> <message>              Start a new chat; prints a run id
+  send <chat> <message>                 Continue a chat
+       --agent NAME   --model M   --mode read|auto   --think debate|critique|research
+       --attach FILE (up to 5)   --wait-free SECONDS (wait if the chat is busy)   --new
+       Use - as the message to read it from stdin. @codex @claude in a message chains agents.
+  status <run> [--wait SECONDS]         Running, done, error or stopped — reply and files changed
+  stop <run>                            Stop a running reply
+  runs [--since 10:00|2h|1d] [--project P] [--source cli|app|schedule]
+                                        What ran, when, and whether it failed
+
+Scheduled tasks
+  schedules                             List scheduled tasks
+  schedules run <task>                  Run one now
+
+Project files (read-only)
+  files <project> [folder]              List files
+  cat <project> <path>                  Print a text file
+
+Collab
+  collab start <project> "<goal>" [--agent A] [--model M] [--mode read|auto]
+  collab list <project>
+  collab status <run|chat> [--wait SECONDS]
+  collab approve <run>   collab reject <run>   collab stop <run>   collab resume <run>
+  collab fix <run> <n>                  Apply the Planner's fix n
+  collab retry|skip|ask <run> <task n> [--note "…"]
 
   --json   machine-readable output
 
 Runs use Read-only or Auto (sandboxed); Full access isn't available here.
-Exit codes: 0 ok, 1 Troupe refused the request, 2 bad usage, 3 Troupe not reachable.
+Exit codes: 0 ok · 1 refused · 2 bad usage · 3 Troupe not reachable · 4 chat busy
 U
 }
 
@@ -34,17 +60,35 @@ cmd="$1"; shift
 args=()
 stdin_msg=0
 add() { args+=(--data-urlencode "$1=$2"); }
+need() { [ "$1" -ge "$2" ] || die "usage: $3"; }
 
 case "$cmd" in
   -h|--help|help) usage; exit 0 ;;
   projects|agents) ;;
-  chats)  [ $# -ge 1 ] || die "usage: troupe chats <project>"; add project "$1"; shift ;;
-  show)   [ $# -ge 1 ] || die "usage: troupe show <chat-id> [--last N]"; add chat "$1"; shift ;;
-  send)   [ $# -ge 2 ] || die "usage: troupe send <project|chat-id> <message|->"
+  runs) ;;
+  chats|context) need $# 1 "troupe $cmd <project>"; add project "$1"; shift ;;
+  show|delete) need $# 1 "troupe $cmd <chat>"; add chat "$1"; shift ;;
+  rename) need $# 2 'troupe rename <chat> "<new name>"'; add chat "$1"; add title "$2"; shift 2 ;;
+  search) need $# 1 'troupe search "<words>"'; add query "$1"; shift ;;
+  send)   need $# 2 "troupe send <project|chat> <message|->"
           add to "$1"
           if [ "$2" = "-" ]; then stdin_msg=1; else add message "$2"; fi
           shift 2 ;;
-  status|stop) [ $# -ge 1 ] || die "usage: troupe $cmd <run-id>"; add run "$1"; shift ;;
+  status|stop) need $# 1 "troupe $cmd <run>"; add run "$1"; shift ;;
+  schedules) if [ $# -ge 1 ] && [ "$1" = "run" ]; then need $# 2 "troupe schedules run <task>"; add do run; add task "$2"; shift 2; fi ;;
+  files)  need $# 1 "troupe files <project> [folder]"; add project "$1"; shift
+          if [ $# -ge 1 ] && [ "${1#--}" = "$1" ]; then add path "$1"; shift; fi ;;
+  cat)    need $# 2 "troupe cat <project> <path>"; add project "$1"; add path "$2"; shift 2 ;;
+  collab) need $# 1 "troupe collab <start|list|status|approve|reject|stop|resume|fix|retry|skip|ask> …"
+          sub="$1"; shift; add do "$sub"
+          case "$sub" in
+            start) need $# 2 'troupe collab start <project> "<goal>"'; add project "$1"; add goal "$2"; shift 2 ;;
+            list)  need $# 1 "troupe collab list <project>"; add project "$1"; shift ;;
+            status|approve|reject|stop|resume) need $# 1 "troupe collab $sub <run>"; add run "$1"; shift ;;
+            fix)   need $# 2 "troupe collab fix <run> <n>"; add run "$1"; add n "$2"; shift 2 ;;
+            retry|skip|ask) need $# 2 "troupe collab $sub <run> <task n>"; add run "$1"; add task "$2"; shift 2 ;;
+            *) die "unknown collab command: $sub (try: troupe --help)" ;;
+          esac ;;
   *) die "unknown command: $cmd (try: troupe --help)" ;;
 esac
 
@@ -52,7 +96,12 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --json) add format json ;;
     --new) add new 1 ;;
-    --agent|--model|--mode|--last|--wait)
+    --attach)
+      [ $# -ge 2 ] || die "--attach needs a file"
+      f="$2"; case "$f" in /*) ;; *) f="$PWD/$f" ;; esac
+      add attach "$f"; shift ;;
+    --wait-free) [ $# -ge 2 ] || die "--wait-free needs seconds"; add waitfree "$2"; shift ;;
+    --agent|--model|--mode|--last|--wait|--think|--since|--project|--source|--note)
       [ $# -ge 2 ] || die "$1 needs a value"
       add "${1#--}" "$2"; shift ;;
     *) die "unknown option: $1 (try: troupe --help)" ;;
@@ -66,11 +115,20 @@ if [ ! -S "$SOCK" ]; then
   exit 3
 fi
 
-curl -sS --fail-with-body --unix-socket "$SOCK" -X POST ${args[@]+"${args[@]}"} "http://troupe/v1/$cmd"
+# -s: curl prints nothing of its own; the script reports errors itself (no stray "curl: (22)").
+resp=$(curl -s --unix-socket "$SOCK" -X POST -w $'\n%{http_code}' ${args[@]+"${args[@]}"} "http://troupe/v1/$cmd")
 rc=$?
-case $rc in
-  0) exit 0 ;;
-  22) exit 1 ;;
-  7) echo "troupe: can't reach Troupe (is the app still open?)." >&2; exit 3 ;;
-  *) exit $rc ;;
-esac
+if [ $rc -ne 0 ]; then
+  echo "troupe: can't reach Troupe (is the app still open?)." >&2
+  exit 3
+fi
+code="${resp##*$'\n'}"
+body="${resp%$'\n'*}"
+body="${body%$'\n'}"   # Troupe ends each answer with one newline; printf adds it back
+if [ "$code" -ge 200 ] 2>/dev/null && [ "$code" -lt 300 ]; then
+  printf '%s\n' "$body"
+  exit 0
+fi
+printf '%s\n' "$body" >&2   # Troupe's refusal: "error: …" (or {"error": …} with --json)
+[ "$code" = 409 ] && exit 4   # the chat (or Collab run) is busy, or not in a state for that
+exit 1

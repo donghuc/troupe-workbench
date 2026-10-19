@@ -31,6 +31,7 @@ import { cancelAllRuns } from './agent/runner'
 import { logInfo, logError } from './util/logger'
 import { stopWatch } from './filesystem/watcher'
 import { refreshCliAccess, stopCliServer } from './cli/cliAccess'
+import { initRunLog } from './agent/runLog'
 import { ensureInside, mimeForPath } from './filesystem/fsService'
 import { parseRange, isRangeMedia } from './filesystem/byteRange'
 import { assertProjectRoot } from './security/roots'
@@ -153,6 +154,7 @@ app.whenReady().then(() => {
   refreshSkillsWatch()
   createWindow()
   startScheduler()
+  initRunLog(join(app.getPath('userData'), 'run-log.jsonl'))   // D-118: `troupe runs`
   void refreshCliAccess()   // D-117: open the CLI socket if Command line access is on
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
