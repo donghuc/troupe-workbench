@@ -3,7 +3,7 @@ import { OS_WORDS } from '../../../../shared/platform'
 import Icon from '../Icon'
 import { api } from '../../api'
 import { failed, notify } from '../../notices'
-import { fileUrl, IMAGE_REF_TYPE } from './geometry'
+import { thumbUrl, IMAGE_REF_TYPE } from './geometry'
 import { SAVED_DIR, isImagePath } from '../../../../shared/imageCanvas'
 import type { FileNode } from '../../../../shared/types'
 import { IconButton } from '../ui/Button'
@@ -38,7 +38,7 @@ export default function SavedPanel({ root, version, onOpen, onClose }: Props) {
           <div className="img-saved-grid">
             {files.map((f) => (
               <figure key={f.relPath} className="img-saved-item" title={f.name}>
-                <img src={fileUrl(root, f.relPath)} alt="" onClick={() => onOpen(f.relPath)} draggable
+                <img src={thumbUrl(root, f.relPath, 400)} alt="" loading="lazy" decoding="async" onClick={() => onOpen(f.relPath)} draggable
                   title="Click to view · drag onto a Media card (or the canvas) to use as a reference"
                   onDragStart={(e) => { e.dataTransfer.setData(IMAGE_REF_TYPE, f.relPath); e.dataTransfer.effectAllowed = 'copy' }} />
                 <div className="img-shot-actions">

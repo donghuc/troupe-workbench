@@ -148,6 +148,23 @@ button { font-family: inherit; font-size: var(--fs-sm); border: none; background
 .send-btn:hover { background: var(--accent-solid-hover); }
 .send-btn:disabled { opacity: var(--opacity-40); cursor: default; }
 
+/* Voice input (D-124): mic in the composer; while recording it becomes a pill with the timer.
+   The recording dot is red by convention (D-122 exception) — it's the only red that isn't a destructive action. */
+.mic-btn { width: 32px; height: 32px; display: grid; place-items: center; border-radius: var(--r-md); color: var(--text-secondary); }
+.mic-btn:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); }
+.mic-btn:disabled { opacity: var(--opacity-40); cursor: default; }
+.voice-pill { display: inline-flex; align-items: center; gap: var(--sp-1-5); height: 32px; padding: 0 var(--sp-1) 0 var(--sp-3); border-radius: var(--r-full); background: var(--bg-sunken); font-size: var(--fs-sm); color: var(--text-secondary); }
+.voice-pill.recording { color: var(--text-primary); }
+.voice-pill-label { font-variant-numeric: tabular-nums; min-width: 3ch; }
+.voice-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); animation: run-pulse var(--dur-pulse) ease-in-out infinite; }
+.voice-pill-btn { width: 24px; height: 24px; display: grid; place-items: center; border-radius: var(--r-full); color: var(--text-secondary); }
+.voice-pill-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.voice-model-size { color: var(--text-tertiary); font-weight: var(--fw-regular); }
+.voice-model-inuse { display: inline-flex; align-items: center; gap: var(--sp-1); margin-left: var(--sp-2); font-size: var(--fs-xs); font-weight: var(--fw-regular); color: var(--text-secondary); }
+.voice-progress { height: 4px; margin-top: var(--sp-1-5); border-radius: var(--r-full); background: var(--bg-sunken); overflow: hidden; }
+.voice-progress > span { display: block; height: 100%; background: var(--ink-solid); transition: width var(--dur-fast) linear; }
+.voice-lang { min-width: 220px; }
+
 /* ---- Context panel (right) ---- */
 .context-panel {
   position: relative;
@@ -817,7 +834,7 @@ body.resizing .resize-handle::after { background: var(--text-tertiary); }
 .msg { padding: var(--sp-3) 0; }
 .msg-user { display: flex; flex-direction: column; align-items: flex-end; }
 .msg-user .msg-author { align-self: flex-end; }
-.msg-user .msg-body { background: var(--bg-active); border: 1px solid var(--border-subtle); border-radius: var(--r-lg) var(--r-lg) var(--r-sm) var(--r-lg); padding: var(--sp-3) var(--sp-4); max-width: 85%; }
+.msg-user .msg-body { background: var(--accent-wash); border: 1px solid var(--border-subtle); border-radius: var(--r-lg) var(--r-lg) var(--r-sm) var(--r-lg); padding: var(--sp-3) var(--sp-4); max-width: 85%; }
 .msg-user .msg-tokens { align-self: flex-end; }
 .msg-attachments { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-2); }
 .msg-user .msg-attachments { justify-content: flex-end; max-width: 85%; align-self: flex-end; }
@@ -923,6 +940,12 @@ body.resizing .resize-handle::after { background: var(--text-tertiary); }
 .msg-thumb-btn:hover { border-color: var(--text-tertiary); }
 .msg-thumb { display: block; max-width: 260px; max-height: 200px; object-fit: contain; }
 .msg-video { display: block; max-width: 360px; max-height: 260px; border: 1px solid var(--border-subtle); border-radius: var(--r-md); background: var(--surface-black); }
+.media-audio { display: inline-flex; flex-direction: column; gap: var(--sp-1); min-width: 280px; max-width: 420px; }
+.msg-audio-name { display: inline-flex; align-items: center; gap: var(--sp-1); font-size: var(--fs-sm); color: var(--text-secondary); }
+.msg-audio { width: 100%; height: 36px; }
+.artifact-audio { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-4); border: 1px solid var(--border-subtle); border-radius: var(--r-md); background: var(--bg-sunken); }
+.artifact-audio-ico { color: var(--text-secondary); }
+.artifact-audio audio { flex: 1; min-width: 0; }
 .artifact-video { display: block; max-width: 100%; margin-inline: auto; border-radius: var(--r-md); background: var(--surface-black); }
 .msg-artifact-chip { font-family: var(--font-ui); cursor: pointer; }
 .msg-artifact-chip:disabled { opacity: var(--opacity-50); cursor: default; }
@@ -1064,8 +1087,9 @@ body.resizing .resize-handle::after { background: var(--text-tertiary); }
 .chat-row:hover { background: var(--bg-hover); }
 .chat-row.active { background: var(--bg-active); }
 .chat-bullet { width: 4px; height: 4px; border-radius: 50%; background: var(--border-strong); flex: none; }
-.chat-row.active .chat-bullet { background: var(--text-secondary); }
-.chat-bullet.busy { background: var(--info); animation: run-pulse var(--dur-pulse) ease-in-out infinite; }
+.chat-row.active .chat-bullet:not(.busy) { background: var(--text-secondary); }
+/* D-122 exception (Hien): a chat whose agent is running pulses in the brand colour */
+.chat-bullet.busy { background: var(--accent); animation: run-pulse var(--dur-pulse) ease-in-out infinite; }
 .chat-bullet.unread { width: 7px; height: 7px; background: var(--ink-solid); }
 .chat-title { flex: 1; min-width: 0; cursor: pointer; font-size: var(--fs-md); color: var(--text-secondary); padding-right: var(--sp-5); }
 .chat-row:hover .chat-title, .chat-row.active .chat-title { color: var(--text-primary); }
@@ -1121,7 +1145,7 @@ body.resizing .resize-handle::after { background: var(--text-tertiary); }
 
 @media (prefers-reduced-motion: reduce) {
   .stream-body, .activity-label, .copy-btn.copied,
-  .cursor-blink, .stream-spider, .running-dot,
+  .cursor-blink, .stream-spider, .running-dot, .voice-dot,
   .modal-overlay, .palette-overlay, .modal-card, .palette-card,
   .chat-side .artifact-viewer, .proj-chats, .mcp-error, .form-error, .media-viewer,
   .skeleton::after { animation: none !important; }
@@ -1954,3 +1978,7 @@ select.field-input {
 .link-btn.danger { color: var(--danger); }
 .img-link-btn.danger { display: inline-flex; align-items: center; gap: var(--sp-0-5); color: var(--danger); }
 .img-link-btn.danger:hover { color: var(--danger); }
+
+/* Image Creation: zoomed-out placeholders (below 40%): no images or fields, same height */
+.img-card.lod { overflow: hidden; }
+.img-lod { padding: var(--sp-3); font-size: var(--fs-sm); color: var(--text-tertiary); overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }

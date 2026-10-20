@@ -38,6 +38,8 @@ const isOpenable = (href?: string) => !!href && !isWebUrl(href) && !href.startsW
 const fileIcon = (p: string): IconName => (/\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i.test(p) ? 'image' : /\.html?$/i.test(p) ? 'globe' : 'file')
 const isImagePath = (p: string) => /\.(png|jpe?g|gif|webp|svg|bmp|avif|ico)$/i.test(p)
 const isVideoPath = (p: string) => /\.(mp4|webm|mov|m4v)$/i.test(p)
+const isAudioPath = (p: string) => /\.(mp3|m4a|aac|wav|ogg|oga|opus|flac)$/i.test(p)   // D-124: play inline
+const isMediaPath = (p: string) => isImagePath(p) || isVideoPath(p) || isAudioPath(p)
 // Render a local image reference (a link or ![]()) as an inline, clickable thumbnail.
 // A missing file (e.g. a provider referenced an image it never actually wrote — see
 // B-042) renders a graceful "image unavailable" chip instead of a broken-image icon.
@@ -47,11 +49,22 @@ function MediaThumb({ root, rel, altText, onOpen, onMedia }: { root: string; rel
   const view = onMedia ?? onOpen
   const name = rel.split('/').pop() || rel
   const isVideo = isVideoPath(rel)
+  const isAudio = isAudioPath(rel)
+  const what = isVideo ? 'Video' : isAudio ? 'Audio' : 'Image'
   if (failed) {
     return (
-      <span className="media-item media-missing" title={`${isVideo ? 'Video' : 'Image'} not found: ${rel}`}>
-        <span className="media-missing-box"><Icon name={isVideo ? 'film' : 'image'} size="md" /> {isVideo ? 'Video' : 'Image'} unavailable</span>
+      <span className="media-item media-missing" title={`${what} not found or can't play: ${rel}`}>
+        <span className="media-missing-box"><Icon name={isVideo ? 'film' : isAudio ? 'mic' : 'image'} size="md" /> {what} unavailable</span>
         <span className="media-missing-path">{name}</span>
+      </span>
+    )
+  }
+  if (isAudio) {
+    return (
+      <span className="media-item media-audio">
+        <span className="msg-audio-name truncate" title={rel}><Icon name="mic" size="sm" /> {altText && altText !== rel ? altText : name}</span>
+        <audio className="msg-audio" src={src} controls preload="metadata" onError={() => setFailed(true)} />
+        <button type="button" className="media-open-btn" onClick={() => onOpen?.(rel)} title={`Open ${rel} in the artifact viewer`}><Icon name="popout" size="xs" /> Open as artifact</button>
       </span>
     )
   }
@@ -137,7 +150,7 @@ function isMediaChild(child: ReactNode, root: string | undefined): boolean {
     const href = node.properties?.href
     if (typeof href !== 'string' || !isLocalLink(href)) return false
     const rel = normalizeRel(href)
-    return !isOutsideRoot(rel, root) && (isImagePath(rel) || isVideoPath(rel))
+    return !isOutsideRoot(rel, root) && isMediaPath(rel)
   }
   return false
 }
@@ -183,7 +196,7 @@ function MessageMarkdown({ children, onOpenArtifact, root, onOpenMedia }: Props)
         const norm = normalizeRel(href!)
         if (isOutsideRoot(norm, r)) return <OutsideFileLink abs={norm} root={r} label={kids} onOpen={onOpenRef.current} />
         // A local image renders as an inline thumbnail; other files stay a link.
-        if (r && (isImagePath(normalizeRel(href!)) || isVideoPath(normalizeRel(href!)))) return imageThumb(r, onOpenRef.current, onMediaRef.current, href!, nodeText(kids))
+        if (r && isMediaPath(normalizeRel(href!))) return imageThumb(r, onOpenRef.current, onMediaRef.current, href!, nodeText(kids))
         // Always internal — never let a local file path open the OS browser.
         return (
           <a className="artifact-link" href={href} onClick={(e) => { e.preventDefault(); onOpenRef.current?.(normalizeRel(href!)) }}>

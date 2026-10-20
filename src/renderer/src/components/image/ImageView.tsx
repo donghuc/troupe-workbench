@@ -8,7 +8,7 @@ import { api } from '../../api'
 import { failed, notify, openSettings, IMAGE_FOLDER_EVENT } from '../../notices'
 import { useAgentList } from '../../agents'
 import ImageCanvas from './ImageCanvas'
-import { CardView, readBase64, type CardCtx, type RunState } from './ImageCards'
+import { readBase64, type CardCtx, type CardData, type RunState } from './ImageCards'
 import SavedPanel from './SavedPanel'
 import CardPalette, { CARD_DRAG_TYPE, CARD_SHORTCUTS } from './CardPalette'
 import CanvasTabs from './CanvasTabs'
@@ -17,7 +17,7 @@ import {
   emptyCanvas, makeCard, connect, canConnect, removeCard, removeSlot, updateCard, gatherInputs, validateRun, inputsHash,
   outputsOf, newId, isImageAgent, withoutRun, findFreeSpot, IMAGE_AGENTS, OUTPUT_SLOT, CARD_LABEL,
   type Canvas, type Card, type CardKind, type RunRecord, type ImageRunEvent, type ImageRunDone,
-  applyRunResult, type CanvasIndex
+  applyRunResult, type CanvasIndex, cardViews, indexCanvas, stabilize
 } from '../../../../shared/imageCanvas'
 
 // Image (D-088): a single open canvas, kept as canvas.json in one global folder.
@@ -49,6 +49,10 @@ export default function ImageView({ active = true }: { active?: boolean }) {
   const selectedRef = useRef(selectedIds); selectedRef.current = selectedIds
   const [importing, setImporting] = useState<string[]>([])
   const wrap = useRef<HTMLDivElement>(null)
+  // Rendered card heights, measured by the canvas (placement, box-select, culling).
+  const heights = useMemo(() => new Map<string, number>(), [])
+  const importingRef = useRef(importing); importingRef.current = importing
+  const folderRef = useRef(folder); folderRef.current = folder
   const canvasRef = useRef(canvas); canvasRef.current = canvas
   const runningRef = useRef(running); runningRef.current = running
   const allAgents = useAgentList()
@@ -125,6 +129,8 @@ export default function ImageView({ active = true }: { active?: boolean }) {
   }, [])
 
   const change = (fn: (c: Canvas) => Canvas) => setCanvas(fn)
+  const onViewCommit = useMemo(() => (view: Canvas['view']) => setCanvas((c) => ({ ...c, view })), [])
+  const onRemoveEdge = useMemo(() => (id: string) => setCanvas((c) => ({ ...c, edges: c.edges.filter((e) => e.id !== id) })), [])
 
   // New cards land near the middle of what's on screen, nudged so they don't stack.
   // Where a new card goes: the middle of the view, moved to the nearest free space so it
@@ -134,10 +140,7 @@ export default function ImageView({ active = true }: { active?: boolean }) {
     const v = canvasRef.current.view
     const cx = ((r ? r.width / 2 : 400) - v.x) / v.zoom - CARD_W[kind] / 2
     const cy = ((r ? r.height / 2 : 300) - v.y) / v.zoom - 120
-    const taken = canvasRef.current.cards.map((k) => {
-      const el = wrap.current?.querySelector(`[data-card-id="${k.id}"]`) as HTMLElement | null
-      return { x: k.x, y: k.y, w: CARD_W[k.kind], h: el?.offsetHeight ?? 240 }
-    })
+    const taken = canvasRef.current.cards.map((k) => ({ x: k.x, y: k.y, w: CARD_W[k.kind], h: heights.get(k.id) ?? 240 }))
     const p = findFreeSpot(taken, { x: Math.round(cx), y: Math.round(cy) }, { w: CARD_W[kind], h: 240 })
     return { x: Math.round(p.x), y: Math.round(p.y) }
   }
@@ -242,14 +245,17 @@ export default function ImageView({ active = true }: { active?: boolean }) {
     return () => window.removeEventListener('paste', onPaste)
   }, [active, folder, loaded])
 
-  const ctx: CardCtx = {
-    addMedia, addMediaRefs, importing,
-    canvas, root: folder || '', agents, running,
+  // Stable while the folder and agent list stay the same: every callback reads the latest
+  // state through refs, so editing one card doesn't re-render the others (image perf).
+  const ctx: CardCtx = useMemo(() => ({
+    addMedia: (id, files) => addMediaRef.current(id, files),
+    addMediaRefs: (id, rels) => addMediaRefsRef.current(id, rels),
+    root: folder || '', agents,
     patch: (id, fn) => change((c) => updateCard(c, id, fn)),
     remove: async (id) => {
       const k = canvasRef.current.cards.find((x) => x.id === id)
       if (!k) return
-      if (running[id]) { notify('Stop the run before removing this card.'); return }
+      if (runningRef.current[id]) { notify('Stop the run before removing this card.'); return }
       if (hasContent(k) && !(await confirmDialog({ title: `Remove this ${CARD_LABEL[k.kind]} card?`, message: 'Image files stay in the folder.', confirmLabel: 'Remove' }))) return
       change((c) => removeCard(c, id))
     },
@@ -302,7 +308,7 @@ export default function ImageView({ active = true }: { active?: boolean }) {
         change((cur) => ({ ...cur, cards: cur.cards.map((k) => withoutRun(k, runId)) }))
       } catch (e) { failed('Delete version')(e) }
     }
-  }
+  }), [folder, agents])
 
   // Delete / Backspace removes the selected card (same confirm as its ✕ when it has content);
   // Escape deselects. Ignored while typing in a field or when a dialog/lightbox is open.
@@ -310,16 +316,40 @@ export default function ImageView({ active = true }: { active?: boolean }) {
   // Several selected cards go in one step, with one confirm if any of them has content.
   const removeMany = async (ids: string[]) => {
     const ks = canvasRef.current.cards.filter((k) => ids.includes(k.id))
-    if (ks.some((k) => running[k.id])) { notify('Stop the run before removing these cards.'); return }
+    if (ks.some((k) => runningRef.current[k.id])) { notify('Stop the run before removing these cards.'); return }
     if (ks.some(hasContent) && !(await confirmDialog({ title: `Remove ${ks.length} cards?`, message: 'Image files stay in the folder.', confirmLabel: 'Remove' }))) return
     change((c) => ks.reduce((acc, k) => removeCard(acc, k.id), c))
   }
   const removeManyRef = useRef(removeMany); removeManyRef.current = removeMany
   // A removed card can't stay selected (whichever way it was removed).
   useEffect(() => {
-    const keep = selectedIds.filter((id) => canvas.cards.some((k) => k.id === id))
+    if (!selectedIds.length) return
+    const ids = new Set(canvas.cards.map((k) => k.id))
+    const keep = selectedIds.filter((id) => ids.has(id))
     if (keep.length !== selectedIds.length) setSelectedIds(keep)
-  }, [canvas, selectedIds])
+  }, [canvas.cards, selectedIds])
+  // What each card shows from other cards, run state and imports — one index per canvas
+  // version, and the same object for a card whose view didn't change (memoized cards).
+  const prevDerived = useRef<Map<string, CardData> | null>(null)
+  // Moving cards changes only positions: if every card's data, the edges, runs and imports are
+  // the same objects as last time, the views are too (a card drag skips the work entirely).
+  const lastInputs = useRef<{ datas: unknown[]; edges: unknown; running: unknown; importing: unknown } | null>(null)
+  const derived = useMemo(() => {
+    const li = lastInputs.current
+    if (li && prevDerived.current && li.edges === canvas.edges && li.running === running && li.importing === importing &&
+      li.datas.length === canvas.cards.length && canvas.cards.every((k, i) => k.data === li.datas[i] && prevDerived.current!.has(k.id))) return prevDerived.current
+    lastInputs.current = { datas: canvas.cards.map((k) => k.data), edges: canvas.edges, running, importing }
+    const ix = indexCanvas(canvas)
+    const views = cardViews(canvas, (pid) => !!running[pid], ix) as Map<string, CardData>
+    const busy = new Set(importing)
+    for (const [id, v] of views) {
+      const k = ix.byId.get(id)
+      if (k?.kind === 'processor' && running[id]) views.set(id, { ...v, run: running[id] })
+      else if (k?.kind === 'output' && v.procId && running[v.procId]) views.set(id, { ...v, run: running[v.procId] })
+      else if (k?.kind === 'media' && busy.has(id)) views.set(id, { ...v, busy: true })
+    }
+    return (prevDerived.current = stabilize(prevDerived.current, views))
+  }, [canvas.cards, canvas.edges, running, importing])
   useEffect(() => {
     if (!active || !folder || !loaded) return
     const onKey = (e: KeyboardEvent) => {
@@ -431,9 +461,12 @@ export default function ImageView({ active = true }: { active?: boolean }) {
           <ImageCanvas
             canvas={canvas}
             onChange={change}
+            onViewCommit={onViewCommit}
+            ctx={ctx}
+            derived={derived}
+            heights={heights}
             onConnect={onConnect}
-            onRemoveEdge={(id) => change((c) => ({ ...c, edges: c.edges.filter((e) => e.id !== id) }))}
-            renderCard={(k, ui) => <CardView card={k} ui={ui} ctx={ctx} />}
+            onRemoveEdge={onRemoveEdge}
             selectedIds={selectedIds}
             onSelect={setSelectedIds}
             empty={

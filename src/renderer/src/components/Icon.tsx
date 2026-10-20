@@ -33,11 +33,12 @@ import minus from '../assets/icons/minus.svg?raw'
 import arrowUp from '../assets/icons/arrow-up.svg?raw'
 import arrowDown from '../assets/icons/arrow-down.svg?raw'
 import trash from '../assets/icons/trash.svg?raw'
+import mic from '../assets/icons/mic.svg?raw'
 
 const ICONS = {
   grid, flash, settings, plus, 'folder-open': folderOpen, pin, more, send, stop,
   'chevron-down': chevronDown, image, globe, file, close, search, copy, link, check, 'more-vertical': moreVertical, popout, refresh, memory, clock, edit, info, film, external,
-  'chevron-left': chevronLeft, 'chevron-right': chevronRight, sidebar, download, minus, 'arrow-up': arrowUp, 'arrow-down': arrowDown, trash
+  'chevron-left': chevronLeft, 'chevron-right': chevronRight, sidebar, download, minus, 'arrow-up': arrowUp, 'arrow-down': arrowDown, trash, mic
 } as const
 
 export type IconName = keyof typeof ICONS

@@ -34,6 +34,11 @@ export function edgePath(a: Pt, b: Pt): string {
 export const fileUrl = (root: string, rel: string): string =>
   `wbfile://file/?root=${encodeURIComponent(root)}&path=${encodeURIComponent(rel)}`
 
+/** A downscaled copy for small previews (image perf, 2026-10): the main process makes and
+ *  caches a JPEG/PNG at most `w` px wide (about 2× the CSS size, for Retina). SVGs and
+ *  images already that small come back as they are. */
+export const thumbUrl = (root: string, rel: string, w: number): string => `${fileUrl(root, rel)}&w=${Math.round(w)}`
+
 /** Drag payload for an image already in the Image folder (Saved panel, Output cards):
  *  its folder-relative path. Dropped on a Media card it's added as a reference. */
 export const IMAGE_REF_TYPE = 'application/x-troupe-image-ref'

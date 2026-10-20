@@ -1,6 +1,6 @@
 {
   "name": "ai-workbench",
-  "version": "2.10.0",
+  "version": "2.11.0",
   "description": "Local-first workspace for multiple AI agent runtimes",
   "author": "Hien Do",
   "license": "Apache-2.0",
@@ -36,6 +36,7 @@
     "electron": "^44.4.3",
     "electron-builder": "^26.15.3",
     "electron-vite": "^2.3.0",
+    "jsdom": "^24.1.3",
     "knip": "^5.88.1",
     "pdfjs-dist": "^4.7.76",
     "react": "^18.3.1",
@@ -47,6 +48,7 @@
     "vitest": "^2.1.8"
   },
   "dependencies": {
+    "@fugood/whisper.node": "1.1.3",
     "better-sqlite3": "^13.0.3",
     "chokidar": "^4.0.1",
     "smol-toml": "^1.9.0"

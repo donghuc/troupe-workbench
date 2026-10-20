@@ -23,6 +23,7 @@ function fileIcon(name: string): IconName {
   const k = kindOf(name)
   if (k === 'image') return 'image'
   if (k === 'video') return 'film'
+  if (k === 'audio') return 'mic'
   if (k === 'html') return 'globe'
   return 'file'
 }

@@ -39,7 +39,7 @@ export default function ArtifactViewer({ root, relPath, onClose, popout }: Props
             <IconButton onClick={() => api.system.openArtifactWindow(root, current)} title="Open in new window"><Icon name="popout" size="md" /></IconButton>
           )}
           <IconButton onClick={() => api.system.revealItem(root, current)} title={OS_WORDS.showInFolder}><Icon name="folder-open" size="md" /></IconButton>
-          {(kind === 'pdf' || kind === 'video') && (
+          {(kind === 'pdf' || kind === 'video' || kind === 'audio') && (
             <IconButton onClick={() => api.system.openItem(root, current)} title={kind === 'pdf' ? 'Open in Preview' : 'Open in default app'}><Icon name="external" size="md" /></IconButton>
           )}
           {kind !== 'image' && text && (

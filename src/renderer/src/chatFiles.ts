@@ -10,7 +10,7 @@ import { selectionsFromMeta } from '../../shared/selections'
 // and shared with MessageRow / ChatSidePanel. Behaviour unchanged.
 
 /** File types the artifact viewer can open. */
-export const ARTIFACT_EXT = /\.(md|markdown|html?|txt|csv|tsv|json|pdf|png|jpe?g|gif|webp|svg|bmp|avif|mp4|webm|mov|m4v)$/i
+export const ARTIFACT_EXT = /\.(md|markdown|html?|txt|csv|tsv|json|pdf|png|jpe?g|gif|webp|svg|bmp|avif|mp4|webm|mov|m4v|mp3|m4a|aac|wav|ogg|oga|opus|flac)$/i
 
 const approxTokens = (s: string) => Math.max(1, Math.ceil(s.length / 4))
 interface Usage { inputTokens?: number; cacheReadTokens?: number; cacheCreationTokens?: number; outputTokens?: number; costUsd?: number }

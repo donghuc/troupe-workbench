@@ -8,9 +8,10 @@ describe('kindOf', () => {
     expect(kindOf('x.pdf')).toBe('pdf')
     expect(kindOf('clip.mov')).toBe('video')
     expect(kindOf('data.tsv')).toBe('csv')
+    for (const f of ['memo.m4a', 'song.MP3', 'take.wav', 'voice.opus', 'mix.flac']) expect(kindOf(f)).toBe('audio')
   })
   it('never reads known binaries as text', () => {
-    for (const f of ['deck.pptx', 'song.mp3', 'photo.HEIC', 'Archive.zip', 'font.woff2', 'design.fig']) expect(kindOf(f)).toBe('unsupported')
+    for (const f of ['deck.pptx', 'loop.aiff', 'photo.HEIC', 'Archive.zip', 'font.woff2', 'design.fig']) expect(kindOf(f)).toBe('unsupported')
   })
   it('tries unknown and extension-less files as text', () => {
     expect(kindOf('notes.log')).toBe('text')

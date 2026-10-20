@@ -23,7 +23,9 @@ import { seedAndMigrateSkills } from './skills/skillsFs'
 import { refreshSkillsWatch, stopSkillsWatch } from './skills/skillsWatcher'
 import { registerSystemIpc } from './ipc/system'
 import { registerImageIpc } from './ipc/image'
+import { registerVoiceIpc, releaseVoice } from './ipc/voice'
 import { cancelAllImageRuns } from './image/imageService'
+import { thumbnail, pruneThumbs, type ThumbImage } from './image/thumbs'
 import { registerDefaultProviders } from './providers/registry'
 import { loadCustomAgents } from './agents/customAgentStore'
 import { refreshLiveMcpNames } from './tools/toolsService'
@@ -102,7 +104,17 @@ function createWindow(): void {
   }
 }
 
+const thumbDeps = {
+  get dir() { return join(app.getPath('userData'), 'thumbs') },
+  // macOS QuickLook / Windows shell thumbnails decode off the main thread; elsewhere decode here.
+  osThumb: process.platform === 'darwin' || process.platform === 'win32'
+    ? (abs: string, w: number) => nativeImage.createThumbnailFromPath(abs, { width: w, height: w * 4 }) as Promise<ThumbImage>
+    : undefined,
+  decode: (abs: string) => nativeImage.createFromPath(abs) as ThumbImage
+}
+
 app.whenReady().then(() => {
+  void pruneThumbs(thumbDeps.dir).catch(() => {})
   logInfo('app ready', { version: app.getVersion?.() })
   protocol.handle('wbfile', async (req) => {
     try {
@@ -111,6 +123,12 @@ app.whenReady().then(() => {
       const rel = u.searchParams.get('path') || ''
       const abs = ensureInside(assertProjectRoot(root), rel) // root must be a connected folder; rel must stay under it
       const mime = mimeForPath(rel)
+      // `&w=N`: a cached small copy for card previews (image perf, 2026-10).
+      const w = Number(u.searchParams.get('w'))
+      if (w > 0) {
+        const t = await thumbnail(abs, w, thumbDeps).catch(() => null)
+        if (t) return new Response(new Uint8Array(t.body), { headers: { 'content-type': t.mime, 'content-length': String(t.body.byteLength), 'access-control-allow-origin': '*', 'cache-control': 'max-age=3600' } })
+      }
       // Video/audio: stream with byte ranges (206), which Chromium's player needs to play and
       // seek MP4s. Other files keep the whole-file answer (pdf.js relies on it).
       if (isRangeMedia(mime)) {
@@ -168,6 +186,7 @@ app.whenReady().then(() => {
   registerNoteIpc()
   registerSystemIpc()
   registerImageIpc()
+  registerVoiceIpc()
   try { seedAndMigrateSkills() } catch { /* non-fatal */ }
   refreshSkillsWatch()
   createWindow()
@@ -183,4 +202,4 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-app.on('will-quit', () => { void cancelAllRuns(); void cancelAllImageRuns(); stopWatch(); stopSkillsWatch(); stopScheduler(); stopCliServer(); closeDb(); logInfo('app quit') })
+app.on('will-quit', () => { void cancelAllRuns(); void cancelAllImageRuns(); stopWatch(); stopSkillsWatch(); stopScheduler(); stopCliServer(); releaseVoice(); closeDb(); logInfo('app quit') })

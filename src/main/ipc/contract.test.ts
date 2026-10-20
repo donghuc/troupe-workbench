@@ -13,7 +13,7 @@ vi.mock('electron', () => {
     ipcMain: { handle: (ch: string) => registered.push(ch), on: () => {} },
     ipcRenderer: { invoke: (ch: string, ...a: unknown[]) => { invoked.push([ch, a]); return Promise.resolve() }, on: () => {}, removeListener: () => {} },
     contextBridge: { exposeInMainWorld: (_k: string, v: unknown) => { exposed = v } },
-    app: stub, BrowserWindow: stub, dialog: stub, shell: stub, clipboard: stub, nativeImage: stub, protocol: stub, net: stub, Notification: stub, webContents: stub, Menu: stub, systemPreferences: stub
+    app: stub, BrowserWindow: stub, dialog: stub, shell: stub, clipboard: stub, nativeImage: stub, protocol: stub, net: stub, Notification: stub, webContents: stub, Menu: stub, systemPreferences: stub, session: stub
   }
 })
 
@@ -21,7 +21,7 @@ describe('IPC contract at runtime (D-097)', () => {
   it('main registers every path exactly once, and nothing else', async () => {
     const mods = await Promise.all([
       import('./agent'), import('./collab'), import('./context'), import('./conversations'), import('./files'), import('./image'),
-      import('./memory'), import('./notes'), import('./projects'), import('./schedules'), import('./skills'), import('./system')
+      import('./memory'), import('./notes'), import('./projects'), import('./schedules'), import('./skills'), import('./system'), import('./voice')
     ])
     for (const m of mods) for (const [name, fn] of Object.entries(m)) if (name.startsWith('register') && typeof fn === 'function') (fn as () => void)()
     expect([...registered].sort()).toEqual([...INVOKE_PATHS].sort())

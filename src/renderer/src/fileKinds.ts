@@ -3,10 +3,12 @@
 // we show a note and "Show in Finder" instead of reading the bytes. Unknown extensions
 // are tried as text; the main process refuses binaries (FILE_BINARY) and huge files.
 
-export type FileKind = 'md' | 'html' | 'image' | 'video' | 'pdf' | 'csv' | 'json' | 'text' | 'unsupported'
+export type FileKind = 'md' | 'html' | 'image' | 'video' | 'audio' | 'pdf' | 'csv' | 'json' | 'text' | 'unsupported'
 
 const IMAGE = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'avif', 'ico']
 const VIDEO = ['mp4', 'webm', 'mov', 'm4v']
+// Formats Chromium plays (D-124); AIFF and others stay 'unsupported'.
+const AUDIO = ['mp3', 'm4a', 'aac', 'wav', 'ogg', 'oga', 'opus', 'flac']
 // Known binary / app formats: never read as text.
 const BINARY = new Set([
   // documents & design files
@@ -14,8 +16,8 @@ const BINARY = new Set([
   'psd', 'ai', 'sketch', 'fig', 'xd', 'indd', 'eps', 'afdesign', 'afphoto',
   // images Chromium can't show
   'heic', 'heif', 'tif', 'tiff', 'raw', 'cr2', 'nef', 'dng', 'icns',
-  // audio / other video
-  'mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg', 'aif', 'aiff', 'avi', 'mkv', 'wmv', 'flv', '3gp',
+  // audio / video Chromium can't play
+  'aif', 'aiff', 'avi', 'mkv', 'wmv', 'flv', '3gp',
   // archives & disk images
   'zip', 'gz', 'tgz', 'bz2', 'xz', '7z', 'rar', 'tar', 'dmg', 'iso', 'pkg',
   // fonts, executables, libraries, databases
@@ -35,6 +37,7 @@ export function kindOf(rel: string): FileKind {
   if (ext === 'html' || ext === 'htm') return 'html'
   if (IMAGE.includes(ext)) return 'image'
   if (VIDEO.includes(ext)) return 'video'
+  if (AUDIO.includes(ext)) return 'audio'
   if (ext === 'pdf') return 'pdf'
   if (ext === 'csv' || ext === 'tsv') return 'csv'
   if (ext === 'json') return 'json'

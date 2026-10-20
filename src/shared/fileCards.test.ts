@@ -29,3 +29,10 @@ describe('linkTargets', () => {
       .toEqual(['docs/a.md', '<my file.md>', 'https://x.io'])
   })
 })
+
+describe('audio cards (D-124)', () => {
+  it('shows m4a and mp3 as audio', () => {
+    expect(fileCardMeta('notes/standup.m4a')).toMatchObject({ subtitle: 'Audio · M4A', icon: 'mic' })
+    expect(fileCardMeta('song.mp3').icon).toBe('mic')
+  })
+})

@@ -12,6 +12,7 @@ import type { AgentTools, McpServer, ProviderId } from '../../../shared/types'
 import Switch from './settings/Switch'
 import { Button, IconButton } from './ui/Button'
 import { Segmented } from './ui/Segmented'
+import VoiceSettings from './settings/VoiceSettings'
 
 interface Props {
   agents: ProviderId[]                      // agents that are on
@@ -205,6 +206,8 @@ export default function ToolsSettings({ agents, mcpOff, setMcpOff, webAccess, se
       </div>
       </Field>
       </Section>
+
+      <VoiceSettings />
 
       {showAdd && <McpAddModal globalOnly onClose={() => setShowAdd(false)} onAdded={() => { setShowAdd(false); load() }} />}
     </Stack>

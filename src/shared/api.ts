@@ -11,6 +11,7 @@ import type { ModelLists } from './models'
 import type { Outcome } from './decisions'
 import type { CheckResult } from './contextCheck'
 import type { ProviderId as PId } from './types'
+import type { VoiceStatus, VoiceModelId, VoiceResult, VoiceDownloadEvent } from './voice'
 import type { Canvas, CanvasIndex, ImageRunInput, ImageRunDone, ImageRunEvent } from './imageCanvas'
 export interface ContextCheckReport { agent: PId; results: CheckResult[]; passed: number; total: number }
 
@@ -171,6 +172,18 @@ export interface WorkbenchApi {
     draft(purpose: string, scope: SkillScope, cwd?: string): Promise<Skill>
     reset(id: string): Promise<Skill | null>
     onChanged(cb: () => void): () => void
+  }
+  voice: {   // voice input (D-124)
+    status(): Promise<VoiceStatus>
+    download(id: VoiceModelId): Promise<void>
+    cancelDownload(id: VoiceModelId): Promise<void>
+    remove(id: VoiceModelId): Promise<void>
+    setPrefs(prefs: { model?: VoiceModelId; language?: string }): Promise<VoiceStatus>
+    prepare(): Promise<void>   // load the model while you talk
+    transcribe(pcm: ArrayBuffer): Promise<VoiceResult>   // 16 kHz mono s16le
+    cancel(): Promise<void>
+    micAccess(): Promise<string>   // 'granted' | 'denied' | 'restricted' | …
+    onEvent(cb: (e: VoiceDownloadEvent) => void): () => void
   }
   image: {   // image canvas (D-088)
     folder(): Promise<string | null>

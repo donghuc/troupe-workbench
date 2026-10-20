@@ -192,6 +192,127 @@ export function processorOf(c: Canvas, outputId: string): Card | undefined {
   return k && k.kind === 'processor' ? k : undefined
 }
 
+// ── Indexes for large canvases (image perf, 2026-10) ──────────────────────────
+// The helpers above scan cards/edges linearly; fine for one call, quadratic when every card
+// on screen calls them on every render. A CanvasIndex is built once per canvas version.
+
+export interface CardIndex {
+  byId: Map<string, Card>
+  /** `${to}|${slot}` → the edge filling that input slot */
+  inSlot: Map<string, Edge>
+  /** card id → edges leaving it */
+  outOf: Map<string, Edge[]>
+}
+
+export function indexCanvas(c: Canvas): CardIndex {
+  const byId = new Map(c.cards.map((k) => [k.id, k]))
+  const inSlot = new Map<string, Edge>()
+  const outOf = new Map<string, Edge[]>()
+  for (const e of c.edges) {
+    if (!inSlot.has(`${e.to}|${e.slot}`)) inSlot.set(`${e.to}|${e.slot}`, e)   // first wins, like edges.find
+    const l = outOf.get(e.from); if (l) l.push(e); else outOf.set(e.from, [e])
+  }
+  return { byId, inSlot, outOf }
+}
+
+/** gatherInputs with an index: O(slots) instead of O(slots × (edges + cards)). */
+export function gatherInputsIx(ix: CardIndex, processorId: string): ProcessorInputs {
+  const p = ix.byId.get(processorId)
+  if (!p || p.kind !== 'processor') return { prompt: '', refs: [] }
+  const texts: string[] = []
+  const refs: string[] = []
+  for (const slot of p.data.slots) {
+    const e = ix.inSlot.get(`${p.id}|${slot}`)
+    const src = e && ix.byId.get(e.from)
+    if (!src) continue
+    if (src.kind === 'prompt' && src.data.text.trim()) texts.push(src.data.text.trim())
+    else if (src.kind === 'media') refs.push(...src.data.files)
+    else if (src.kind === 'output') refs.push(...outputImages(src))
+  }
+  return { prompt: texts.join('\n\n'), refs: [...new Set(refs)] }
+}
+
+/**
+ * Every target a connection from `fromId` may land on, decided in one pass: the cards that can
+ * reach `fromId` (its ancestors) would close a loop. Same answers as canConnect, but O(1) per
+ * slot after an O(cards + edges) setup — canConnect ran a graph search per slot, per pointer
+ * move (121 ms a move at 500 chained cards).
+ */
+export function connectChecker(c: Canvas, fromId: string): (toId: string, slot: string) => ConnectCheck {
+  const byId = new Map(c.cards.map((k) => [k.id, k]))
+  const into = new Map<string, string[]>()
+  for (const e of c.edges) { const l = into.get(e.to); if (l) l.push(e.from); else into.set(e.to, [e.from]) }
+  const ancestors = new Set<string>([fromId])
+  const stack = [fromId]
+  while (stack.length) for (const a of into.get(stack.pop()!) ?? []) if (!ancestors.has(a)) { ancestors.add(a); stack.push(a) }
+  const from = byId.get(fromId)
+  return (toId, slot) => {
+    const to = byId.get(toId)
+    if (!from || !to) return { ok: false, reason: 'Card not found' }
+    if (from.id === to.id) return { ok: false, reason: 'A card can’t feed itself' }
+    if (!inputSlots(to).includes(slot)) return { ok: false, reason: 'No such input' }
+    if (!accepts(to.kind, from.kind)) return { ok: false, reason: `${CARD_LABEL[from.kind]} can’t connect to ${CARD_LABEL[to.kind]}` }
+    if (ancestors.has(to.id)) return { ok: false, reason: 'That would make a loop' }
+    return { ok: true }
+  }
+}
+
+/** What a card shows that depends on other cards (labels of its inputs, last run, "inputs
+ *  changed"). Computed for every card from one index; plain data, so a card whose view didn't
+ *  change keeps the same object and doesn't re-render (see stabilize). */
+export interface CardView {
+  slots?: { slot: string; label: string; filled: boolean }[]
+  lastRun?: { at: string; error?: string; ok: boolean }
+  procId?: string
+  stale?: boolean
+  feedsOn?: boolean
+  hint?: string
+}
+
+export function sourceLabel(src: Card | undefined): string {
+  if (!src) return 'Empty — drag an output here'
+  if (src.kind === 'prompt') { const t = src.data.text.trim(); return t ? `Prompt · “${t.slice(0, 28)}${t.length > 28 ? '…' : ''}”` : 'Prompt · empty' }
+  if (src.kind === 'media') return `Media · ${src.data.files.length} image${src.data.files.length === 1 ? '' : 's'}`
+  if (src.kind === 'output') { const n = outputImages(src).length; return `Output · ${n} image${n === 1 ? '' : 's'}` }
+  return CARD_LABEL[src.kind]
+}
+
+export function cardViews(c: Canvas, running: (processorId: string) => boolean, ix: CardIndex = indexCanvas(c)): Map<string, CardView> {
+  const out = new Map<string, CardView>()
+  for (const k of c.cards) {
+    if (k.kind === 'processor') {
+      const slots = k.data.slots.map((slot) => { const e = ix.inSlot.get(`${k.id}|${slot}`); const src = e && ix.byId.get(e.from); return { slot, label: sourceLabel(src), filled: !!src } })
+      let last: RunRecord | undefined
+      for (const e of ix.outOf.get(k.id) ?? []) {
+        const o = ix.byId.get(e.to)
+        if (o?.kind !== 'output') continue
+        const r = o.data.runs[o.data.runs.length - 1]
+        if (r && (!last || r.at > last.at)) last = r
+      }
+      out.set(k.id, { slots, ...(last ? { lastRun: { at: last.at, ok: last.files.length > 0, ...(last.error ? { error: last.error } : {}) } } : {}) })
+    } else if (k.kind === 'output') {
+      const e = ix.inSlot.get(`${k.id}|${OUTPUT_SLOT}`)
+      const proc = e && ix.byId.get(e.from)
+      const feedsOn = (ix.outOf.get(k.id)?.length ?? 0) > 0
+      if (!proc || proc.kind !== 'processor') { out.set(k.id, { feedsOn }); continue }
+      const inputs = gatherInputsIx(ix, proc.id)
+      const last = k.data.runs[k.data.runs.length - 1]
+      const stale = !!(last && last.inputsHash && !running(proc.id) && last.inputsHash !== inputsHash(inputs, proc.data.agent, proc.data.model, proc.data.count))
+      out.set(k.id, { procId: proc.id, stale, feedsOn, hint: inputs.prompt })
+    } else out.set(k.id, {})
+  }
+  return out
+}
+
+/** Keep the previous object for every card whose view is unchanged (value equality), so
+ *  memoized cards skip re-rendering. */
+export function stabilize<T>(prev: Map<string, T> | null, next: Map<string, T>): Map<string, T> {
+  if (!prev) return next
+  const keyOf = (v: T) => JSON.stringify(v)
+  for (const [id, v] of next) { const p = prev.get(id); if (p !== undefined && keyOf(p) === keyOf(v)) next.set(id, p) }
+  return next
+}
+
 export function validateRun(inp: ProcessorInputs): string | null {
   if (!inp.prompt.trim()) return 'Connect a Prompt card with a description first.'
   return null

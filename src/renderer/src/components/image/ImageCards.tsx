@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type DragEvent, type ReactNode } from 'react'
+import { memo, useEffect, useRef, useState, type DragEvent, type ReactNode } from 'react'
 import { OS_WORDS } from '../../../../shared/platform'
 import Icon from '../Icon'
 import { shortDate } from '../../dates'
@@ -6,22 +6,23 @@ import ProviderAvatar from '../ProviderAvatar'
 import { api } from '../../api'
 import { failed, notify } from '../../notices'
 import { presetsFor } from '../../models'
-import {
-  CARD_LABEL, gatherInputs, inputsHash, processorOf, outputImages, isVectorAgent, OUTPUT_SLOT,
-  type Canvas, type Card, type RunRecord
-} from '../../../../shared/imageCanvas'
+import { CARD_LABEL, isVectorAgent, OUTPUT_SLOT, type Card, type CardView as CardDerived } from '../../../../shared/imageCanvas'
 import type { ProviderId, ProviderInfo } from '../../../../shared/types'
-import type { CardUi } from './ImageCanvas'
-import { fileUrl, IMAGE_REF_TYPE } from './geometry'
+import type { CardUi, CardLink } from './ImageCanvas'
+import { thumbUrl, IMAGE_REF_TYPE } from './geometry'
 import { Button, IconButton } from '../ui/Button'
 
 export interface RunState { runId: string; label: string; startedAt: number; hash: string }
 
+/** What a card shows from outside itself (image perf, 2026-10): its derived view (input
+ *  labels, last run, stale) plus run and import state. Plain data, kept stable when unchanged. */
+export type CardData = CardDerived & { run?: RunState; busy?: boolean }
+
+/** Stable across renders (only agents or the folder change it): callbacks read the latest
+ *  canvas through refs, so cards don't re-render when other cards change. */
 export interface CardCtx {
-  canvas: Canvas
   root: string
   agents: ProviderInfo[]                      // image-capable agents that are on
-  running: Record<string, RunState>           // by processor id
   patch: (id: string, fn: (k: Card) => Card) => void
   remove: (id: string) => void
   addSlot: (id: string) => void
@@ -33,8 +34,8 @@ export interface CardCtx {
   deleteRun: (runId: string) => void                                   // delete a version and its outputs/ folder
   addMedia: (cardId: string, files: File[]) => Promise<void>             // import images into a Media card
   addMediaRefs: (cardId: string, rels: string[]) => Promise<void>        // copy folder images (saved/, outputs/) into a Media card
-  importing: string[]                                                  // Media cards currently importing
 }
+interface CardProps<K extends Card['kind']> { card: CardOf<K>; ui: CardUi; ctx: CardCtx; d: CardData; link: CardLink | null; lod: boolean }
 
 type CardOf<K extends Card['kind']> = Extract<Card, { kind: K }>
 
@@ -50,13 +51,15 @@ function Head({ card, ui, ctx, children }: { card: Card; ui: CardUi; ctx: CardCt
   )
 }
 
-const OutPort = ({ ui }: { ui: CardUi }) => (
-  <span className={`img-port img-port-out${ui.connectingFromHere ? ' active' : ''}`} title="Drag to connect" onPointerDown={ui.startConnect} />
+const OutPort = ({ ui, link }: { ui: CardUi; link: CardLink | null }) => (
+  <span className={`img-port img-port-out${link?.fromHere ? ' active' : ''}`} title="Drag to connect" onPointerDown={ui.startConnect} />
 )
-const InPort = ({ card, slot, ui, filled }: { card: Card; slot: string; ui: CardUi; filled: boolean }) => {
-  const st = ui.slotState(slot)
+const InPort = ({ card, slot, link, filled }: { card: Card; slot: string; link: CardLink | null; filled: boolean }) => {
+  const st = link?.slots[slot]
   return <span className={`img-port img-port-in${filled ? ' filled' : ''}${st ? ' ' + st : ''}`} data-card={card.id} data-slot={slot} />
 }
+// Below 40% zoom a card draws a light placeholder instead of its body (no images, no fields).
+const Placeholder = ({ text }: { text: string }) => <div className="img-card-body img-lod">{text}</div>
 
 export const readBase64 = (f: Blob) => new Promise<string>((res, rej) => {
   const r = new FileReader()
@@ -66,24 +69,24 @@ export const readBase64 = (f: Blob) => new Promise<string>((res, rej) => {
 })
 
 // ── Prompt ────────────────────────────────────────────────────────────────────
-function PromptCard({ card, ui, ctx }: { card: CardOf<'prompt'>; ui: CardUi; ctx: CardCtx }) {
+function PromptCard({ card, ui, ctx, link, lod }: CardProps<'prompt'>) {
   return (
     <>
       <Head card={card} ui={ui} ctx={ctx} />
-      <OutPort ui={ui} />
-      <div className="img-card-body">
+      <OutPort ui={ui} link={link} />
+      {lod ? <Placeholder text={card.data.text.trim().slice(0, 80) || 'Empty prompt'} /> : <div className="img-card-body">
         <textarea className="field-textarea img-prompt img-nowheel" placeholder="Describe the image you want…" value={card.data.text}
           onChange={(e) => { const text = e.target.value; ctx.patch(card.id, (k) => (k.kind === 'prompt' ? { ...k, data: { text } } : k)) }} />
-      </div>
+      </div>}
     </>
   )
 }
 
 // ── Media ─────────────────────────────────────────────────────────────────────
-function MediaCard({ card, ui, ctx }: { card: CardOf<'media'>; ui: CardUi; ctx: CardCtx }) {
+function MediaCard({ card, ui, ctx, d, link, lod }: CardProps<'media'>) {
   const input = useRef<HTMLInputElement>(null)
   const [over, setOver] = useState(false)
-  const busy = ctx.importing.includes(card.id)
+  const busy = !!d.busy
   const add = (files: File[]) => ctx.addMedia(card.id, files)
   // Files from Finder, or an image already in the folder (Saved panel / Output card).
   const accepts = (e: DragEvent) => e.dataTransfer.types.includes('Files') || e.dataTransfer.types.includes(IMAGE_REF_TYPE)
@@ -97,14 +100,14 @@ function MediaCard({ card, ui, ctx }: { card: CardOf<'media'>; ui: CardUi; ctx: 
   return (
     <>
       <Head card={card} ui={ui} ctx={ctx}>{files.length > 0 && <span className="img-meta">{files.length} image{files.length > 1 ? 's' : ''}</span>}</Head>
-      <OutPort ui={ui} />
-      <div className={`img-card-body img-media${over ? ' over' : ''}`}
+      <OutPort ui={ui} link={link} />
+      {lod ? <Placeholder text={files.length ? `${files.length} image${files.length > 1 ? 's' : ''}` : 'No images'} /> : <div className={`img-card-body img-media${over ? ' over' : ''}`}
         onDragOver={(e) => { if (!accepts(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setOver(true) }} onDragLeave={() => setOver(false)} onDrop={onDrop}>
         {files.length > 0 && (
           <div className="img-thumbs">
             {files.map((f) => (
               <div key={f} className="img-thumb">
-                <img src={fileUrl(ctx.root, f)} alt="" onClick={() => ctx.openImage(f)} />
+                <img src={thumbUrl(ctx.root, f, 200)} alt="" loading="lazy" decoding="async" onClick={() => ctx.openImage(f)} />
                 <button className="img-thumb-x" title="Remove" onClick={() => ctx.patch(card.id, (k) => (k.kind === 'media' ? { ...k, data: { files: k.data.files.filter((x) => x !== f) } } : k))}><Icon name="close" size="xs" /></button>
               </div>
             ))}
@@ -114,51 +117,43 @@ function MediaCard({ card, ui, ctx }: { card: CardOf<'media'>; ui: CardUi; ctx: 
           {busy ? <><span className="activity-spinner" /> Adding…</> : <><Icon name="image" size="md" /> {files.length ? 'Add more' : `Drop, paste (${OS_WORDS.mod}V) or choose images`}</>}
         </button>
         <input ref={input} type="file" accept="image/*" multiple hidden onChange={(e) => { void add([...(e.target.files ?? [])]); e.target.value = '' }} />
-      </div>
+      </div>}
     </>
   )
 }
 
 // ── Processor ─────────────────────────────────────────────────────────────────
-function sourceLabel(src: Card | undefined): string {
-  if (!src) return 'Empty — drag an output here'
-  if (src.kind === 'prompt') return src.data.text.trim() ? `Prompt · “${src.data.text.trim().slice(0, 28)}${src.data.text.trim().length > 28 ? '…' : ''}”` : 'Prompt · empty'
-  if (src.kind === 'media') return `Media · ${src.data.files.length} image${src.data.files.length === 1 ? '' : 's'}`
-  if (src.kind === 'output') { const n = outputImages(src).length; return `Output · ${n} image${n === 1 ? '' : 's'}` }
-  return CARD_LABEL[src.kind]
-}
-
 function useTick(on: boolean) {
   const [, set] = useState(0)
   useEffect(() => { if (!on) return; const t = setInterval(() => set((n) => n + 1), 1000); return () => clearInterval(t) }, [on])
 }
 
-function ProcessorCard({ card, ui, ctx }: { card: CardOf<'processor'>; ui: CardUi; ctx: CardCtx }) {
-  const run = ctx.running[card.id]
+function ProcessorCard({ card, ui, ctx, d, link, lod }: CardProps<'processor'>) {
+  const run = d.run
   useTick(!!run)
   const { agent, model, count, slots } = card.data
   const agentOn = ctx.agents.some((a) => a.id === agent)
   const models = presetsFor(agent)
   const set = (d: Partial<CardOf<'processor'>['data']>) => ctx.patch(card.id, (k) => (k.kind === 'processor' ? { ...k, data: { ...k.data, ...d } } : k))
-  const last = lastRunOf(ctx.canvas, card.id)
+  const last = d.lastRun
   return (
     <>
       <Head card={card} ui={ui} ctx={ctx}><ProviderAvatar id={agent} size="sm" /></Head>
-      <OutPort ui={ui} />
+      <OutPort ui={ui} link={link} />
       <div className="img-slots">
         {slots.map((s, i) => {
-          const e = ctx.canvas.edges.find((x) => x.to === card.id && x.slot === s)
-          const src = e && ctx.canvas.cards.find((k) => k.id === e.from)
+          const v = d.slots?.find((x) => x.slot === s)
+          const label = v?.label ?? 'Empty — drag an output here'
           return (
             <div key={s} className="img-slot" data-card={card.id} data-slot={s}>
-              <InPort card={card} slot={s} ui={ui} filled={!!src} />
-              <span className={`img-slot-label truncate${src ? '' : ' empty'}`} title={sourceLabel(src)}>{i + 1}. {sourceLabel(src)}</span>
+              <InPort card={card} slot={s} link={link} filled={!!v?.filled} />
+              <span className={`img-slot-label truncate${v?.filled ? '' : ' empty'}`} title={label}>{i + 1}. {label}</span>
               {slots.length > 1 && <IconButton className="img-slot-x" title="Remove input" onClick={() => ctx.removeSlot(card.id, s)}><Icon name="close" size="xs" /></IconButton>}
             </div>
           )
         })}
       </div>
-      <div className="img-card-body img-proc">
+      {lod ? <Placeholder text={run ? run.label : `${agent}${model ? ` · ${model}` : ''}`} /> : <div className="img-card-body img-proc">
         <button className="img-add-slot" onClick={() => ctx.addSlot(card.id)}><Icon name="plus" size="sm" /> Add input</button>
         <div className="img-proc-row">
           <label className="img-field">
@@ -192,27 +187,15 @@ function ProcessorCard({ card, ui, ctx }: { card: CardOf<'processor'>; ui: CardU
           </div>
         ) : (
           <div className="img-run-row">
-            {last?.error && !last.files.length
+            {last?.error && !last.ok
               ? <span className="img-run-error truncate" title={last.error}>{last.error}</span>
               : <span className="img-run-hint truncate">{last ? `Last run ${timeAgo(last.at)}` : 'Connects to an Output card on run'}</span>}
             <Button variant="primary" size="sm" disabled={!agentOn} onClick={() => ctx.run(card.id)}><Icon name="send" size="sm" /> Run</Button>
           </div>
         )}
-      </div>
+      </div>}
     </>
   )
-}
-
-function lastRunOf(c: Canvas, processorId: string): RunRecord | undefined {
-  let best: RunRecord | undefined
-  for (const e of c.edges) {
-    if (e.from !== processorId) continue
-    const o = c.cards.find((k) => k.id === e.to)
-    if (o?.kind !== 'output') continue
-    const r = o.data.runs[o.data.runs.length - 1]
-    if (r && (!best || r.at > best.at)) best = r
-  }
-  return best
 }
 
 function timeAgo(iso: string): string {
@@ -225,7 +208,7 @@ function timeAgo(iso: string): string {
 }
 
 // ── Output ────────────────────────────────────────────────────────────────────
-function OutputCard({ card, ui, ctx }: { card: CardOf<'output'>; ui: CardUi; ctx: CardCtx }) {
+function OutputCard({ card, ui, ctx, d, link, lod }: CardProps<'output'>) {
   const runs = card.data.runs
   const [viewId, setViewId] = useState<string | null>(null)
   const lastId = runs[runs.length - 1]?.id ?? null
@@ -233,15 +216,14 @@ function OutputCard({ card, ui, ctx }: { card: CardOf<'output'>; ui: CardUi; ctx
   const prevLast = useRef(lastId)
   useEffect(() => { if (prevLast.current !== lastId) { prevLast.current = lastId; setViewId(null) } }, [lastId])
   const shown = runs.find((r) => r.id === viewId) ?? runs[runs.length - 1]
-  const proc = processorOf(ctx.canvas, card.id)
-  const running = proc ? ctx.running[proc.id] : undefined
-  const stale = !!(shown && proc && proc.kind === 'processor' && !running && shown.id === lastId && shown.inputsHash &&
-    shown.inputsHash !== inputsHash(gatherInputs(ctx.canvas, proc.id), proc.data.agent, proc.data.model, proc.data.count))
+  const proc = d.procId
+  const running = d.run
+  const stale = !!(shown && d.stale && !running && shown.id === lastId)
   // Selecting only matters when this Output feeds another card (D-088, Hien 2026-10-05:
   // a bare check read as "approve"). Unconnected → no toggle, no selection outline.
-  const feedsOn = ctx.canvas.edges.some((e) => e.from === card.id)
+  const feedsOn = !!d.feedsOn
   const sel = new Set(feedsOn ? card.data.selected : [])
-  const hint = proc ? gatherInputs(ctx.canvas, proc.id).prompt : ''
+  const hint = d.hint ?? ''
   const toggle = (f: string) => ctx.patch(card.id, (k) => (k.kind === 'output'
     ? { ...k, data: { ...k.data, selected: k.data.selected.includes(f) ? k.data.selected.filter((x) => x !== f) : [...k.data.selected, f] } } : k))
   return (
@@ -254,9 +236,9 @@ function OutputCard({ card, ui, ctx }: { card: CardOf<'output'>; ui: CardUi; ctx
         )}
         {shown && <ProviderAvatar id={shown.agent} size="sm" />}
       </Head>
-      <InPort card={card} slot={OUTPUT_SLOT} ui={ui} filled={!!proc} />
-      <OutPort ui={ui} />
-      <div className="img-card-body img-output" data-card={card.id} data-slot={OUTPUT_SLOT}>
+      <InPort card={card} slot={OUTPUT_SLOT} link={link} filled={!!proc} />
+      <OutPort ui={ui} link={link} />
+      {lod ? <Placeholder text={shown ? `${shown.files.length} image${shown.files.length === 1 ? '' : 's'}${runs.length > 1 ? ` · v${runs.length}` : ''}` : 'No images yet'} /> : <div className="img-card-body img-output" data-card={card.id} data-slot={OUTPUT_SLOT}>
         {stale && <div className="img-stale">Inputs changed since this run — run again to update.</div>}
         {running && <div className="img-generating"><span className="activity-spinner" /> {running.label}</div>}
         {!running && !shown && <div className="img-output-empty">{proc ? 'Press Run on the Processor.' : 'Connect a Processor here.'}</div>}
@@ -265,7 +247,7 @@ function OutputCard({ card, ui, ctx }: { card: CardOf<'output'>; ui: CardUi; ctx
           <div className={`img-gallery img-nowheel${shown.files.length === 1 ? ' single' : ''}`}>
             {shown.files.map((f) => (
               <figure key={f} className={`img-shot${sel.has(f) ? ' selected' : ''}`}>
-                <img src={fileUrl(ctx.root, f)} alt="" onClick={() => ctx.openImage(f)} draggable
+                <img src={thumbUrl(ctx.root, f, shown.files.length === 1 ? 680 : 400)} alt="" loading="lazy" decoding="async" onClick={() => ctx.openImage(f)} draggable
                   onDragStart={(e) => { e.dataTransfer.setData(IMAGE_REF_TYPE, f); e.dataTransfer.effectAllowed = 'copy' }} />
                 {card.data.saved[f] && <span className="img-saved-chip" title={card.data.saved[f]}><Icon name="check" size="xs" /> Saved</span>}
                 <div className="img-shot-actions">
@@ -296,16 +278,17 @@ function OutputCard({ card, ui, ctx }: { card: CardOf<'output'>; ui: CardUi; ctx
         {feedsOn && shown && shown.files.length > 0 && (
           <div className="img-ref-hint">{sel.size ? `${sel.size} image${sel.size > 1 ? 's' : ''} sent to the next card as reference.` : 'All images of the latest run go to the next card. Hover an image and choose “Use as reference” to send only that one.'}</div>
         )}
-      </div>
+      </div>}
     </>
   )
 }
 
-export function CardView({ card, ui, ctx }: { card: Card; ui: CardUi; ctx: CardCtx }) {
-  switch (card.kind) {
-    case 'prompt': return <PromptCard card={card} ui={ui} ctx={ctx} />
-    case 'media': return <MediaCard card={card} ui={ui} ctx={ctx} />
-    case 'processor': return <ProcessorCard card={card} ui={ui} ctx={ctx} />
-    case 'output': return <OutputCard card={card} ui={ui} ctx={ctx} />
+type AnyCardProps = { card: Card; ui: CardUi; ctx: CardCtx; d: CardData; link: CardLink | null; lod: boolean }
+export const CardView = memo(function CardView(p: AnyCardProps) {
+  switch (p.card.kind) {
+    case 'prompt': return <PromptCard {...p} card={p.card} />
+    case 'media': return <MediaCard {...p} card={p.card} />
+    case 'processor': return <ProcessorCard {...p} card={p.card} />
+    case 'output': return <OutputCard {...p} card={p.card} />
   }
-}
+})

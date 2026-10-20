@@ -19,10 +19,11 @@ Troupe is a local-first Mac app for thinking with AI agents — Claude Code, Cod
 - **One conversation, several agents.** `@claude` / `@codex` / `@grok` / `@gemini` route a turn; Troupe owns continuity, so agents can be switched or combined in one thread.
 - **Bring any CLI agent.** Add OpenCode, Cursor CLI or any command-line agent in Settings ▸ Agents, test it, and use it alongside the others.
 - **Collab mode.** A lead agent drafts a task plan; agents carry out each task with a read-only reviewer gate, budgets and retries.
-- **Artifacts in place.** Markdown, HTML, images, video, CSV, JSON and PDF open in the app; files outside the project offer *Copy into project*.
+- **Artifacts in place.** Markdown, HTML, images, video, audio, CSV, JSON and PDF open in the app; files outside the project offer *Copy into project*.
 
 **Around it**
 - **Image Creation** — a node canvas (Prompt · Media · Processor · Output) for making images with Codex, Grok, Gemini, or Claude drawing SVG.
+- **Voice input** — dictate into the message box; Whisper runs on your Mac, models download once in Settings ▸ Tools ▸ Voice.
 - **Scheduled tasks, skills, notes**, per-chat permission modes (Read-only / Auto / Full access), MCP servers and Claude in Chrome, all switched on or off in Settings.
 
 > **Naming.** "AI Workbench" is the code name (package `ai-workbench` and the data folder `~/Library/Application Support/AI Workbench`). **Troupe** is the app's name.
@@ -85,6 +86,7 @@ Troupe is an agent runner, so it is worth being precise about its footprint.
 - **Troupe's own data.** One SQLite database, attachments and a rotating log in `~/Library/Application Support/AI Workbench/`. Nothing is sent anywhere by Troupe itself; the CLIs talk to their vendors as they normally would.
 - **Permission modes.** *Read-only* and *Auto* pre-approve a bounded tool set for headless runs (Auto accepts edits inside the project). *Full access* maps to `claude --permission-mode bypassPermissions` and `codex --dangerously-bypass-approvals-and-sandbox`: no sandbox, no prompts. Codex can only call MCP tools in Full access — a limitation of `codex exec`, not a choice of ours.
 - **Command line (off by default).** With Settings ▸ Tools ▸ Command line on, the `troupe` command (and bots on your Mac) can list projects and chat through a private socket in the app's folder — no network port, never Full access. See [CLI.md](CLI.md).
+- **Microphone (voice input).** Only while you record; audio stays on your Mac and is transcribed by whisper.cpp. The only download is the model you pick in Settings ▸ Tools ▸ Voice, from Hugging Face (`huggingface.co/ggerganov/whisper.cpp`), checked against its SHA-256 and kept in the app's folder.
 - **Browser.** With the Chrome switch on, Claude runs with `--chrome` and acts in your signed-in Chrome through the Claude in Chrome extension.
 
 ## Docs and decisions

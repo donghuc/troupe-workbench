@@ -19,6 +19,8 @@ import { type PendingAttachment, attachmentName, attachmentIsImage } from '../at
 import { Menu } from './ui/Menu'
 import { Button, IconButton } from './ui/Button'
 import { Segmented } from './ui/Segmented'
+import VoiceButton from './VoiceButton'
+import { insertAtCaret } from '../../../shared/voice'
 
 interface Props {
   providers: ProviderInfo[]
@@ -99,6 +101,7 @@ export default function Composer({ providers, onSend, disabled, placeholder = 'H
   const [mentionQuery, setMentionQuery] = useState<string | null>(null)
   const [mentionIndex, setMentionIndex] = useState(0)
   const taRef = useRef<HTMLTextAreaElement>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { if (picking && folderPath) api.files.listTree(folderPath).then(setTree) }, [picking, folderPath])
   useEffect(() => {
@@ -250,6 +253,15 @@ export default function Composer({ providers, onSend, disabled, placeholder = 'H
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit() }
   }
 
+  // Voice input (D-124): the words go where the caret is, for you to edit; nothing is sent.
+  const insertSpoken = (spoken: string) => {
+    const el = taRef.current
+    const cur = el?.value ?? text
+    const r = insertAtCaret(cur, el?.selectionStart ?? cur.length, el?.selectionEnd ?? cur.length, spoken)
+    setText(r.text)
+    requestAnimationFrame(() => { el?.focus(); try { el?.setSelectionRange(r.caret, r.caret) } catch { /* noop */ } })
+  }
+
   const hasFolder = (rel: string) => attachments.some((a) => a.kind === 'folder' && a.relPath === rel)
   const toggleFolder = (rel: string) =>
     setAttachments((a) => (hasFolder(rel) ? a.filter((x) => !(x.kind === 'folder' && x.relPath === rel)) : [...a, { kind: 'folder', relPath: rel }]))
@@ -273,6 +285,7 @@ export default function Composer({ providers, onSend, disabled, placeholder = 'H
 
   return (
     <div
+      ref={rootRef}
       className={`composer${dragging ? ' dragging' : ''}`}
       onDragOver={(e) => { e.preventDefault(); if (!dragging) setDragging(true) }}
       onDragLeave={(e) => { if (e.currentTarget === e.target) setDragging(false) }}
@@ -436,6 +449,7 @@ export default function Composer({ providers, onSend, disabled, placeholder = 'H
                   })}
             </Menu>
           </div>
+          <VoiceButton scope={rootRef} onText={insertSpoken} disabled={disabled} />
           {busy && onStop
             ? <button className="send-btn stop-btn" onClick={onStop} title="Stop"><Icon name="stop" size="md" /></button>
             : <button className="send-btn" disabled={(!text.trim() && !(selections.length && !memoryMode)) || disabled || (mode === 'collab' && collabBusy)} onClick={submit} title={mode === 'collab' && collabBusy ? 'A Collab run is already active' : 'Send'}><Icon name="send" size="md" /></button>}

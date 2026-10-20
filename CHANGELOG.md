@@ -18,6 +18,20 @@ Each version here matches a packaged build — the dmg is named
 > - Bumping rules: PATCH = fixes/small tweaks, MINOR = new features (backward-compatible),
 >   MAJOR = breaking changes or a data format users can't roll back from.
 
+## [Unreleased]
+
+## [2.11.0] - 2026-10-20
+
+### Added
+- Voice input: click the mic in the message box (or press ⌘⇧Space, Ctrl+Shift+Space on Windows), talk, and press again to stop — your words appear in the message for you to edit before sending; Esc throws the recording away. Speech is turned into text on your computer by Whisper; nothing is sent anywhere. Download a model once in Settings ▸ Tools ▸ Voice: Fast (60 MB), Balanced (190 MB, good for English and Vietnamese) or Best (574 MB). The first time, your Mac asks to allow the microphone.
+- Audio files (MP3, M4A, WAV, AAC, OGG, Opus, FLAC) play right in the chat, the artifact viewer and Browse files.
+
+### Changed
+- Image Creation stays smooth with hundreds of cards: panning, zooming and dragging no longer redraw every card, only cards near the view are drawn, and below 40% zoom cards show a light preview instead of their images.
+- Image Creation shows small preview copies of images on cards and in the Saved panel (made once and cached), and loads them as they come into view. Opening an image still shows the full file.
+- The pulsing dot for a chat whose agent is running is terracotta again (the open chat has no dot colour of its own).
+- Your message bubbles have their light terracotta tint again.
+
 ## [2.10.0] - 2026-10-20
 
 ### Added

@@ -1,3 +1,4 @@
+import Icon from './Icon'
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { api } from '../api'
 import { kindOf, previewRefusal } from '../fileKinds'
@@ -126,7 +127,7 @@ export default function FilePreview({ root, relPath, onOpenLink, onText }: Props
   useEffect(() => {
     let alive = true
     setText(''); setDataUrl(''); setError(null); setRefused(null); onText?.('')
-    if (kind === 'pdf' || kind === 'video' || kind === 'html' || kind === 'unsupported') return // shown by URL, or not at all
+    if (kind === 'pdf' || kind === 'video' || kind === 'audio' || kind === 'html' || kind === 'unsupported') return // shown by URL, or not at all
     const run = async () => {
       try {
         if (kind === 'image') { const d = await api.files.readDataUrl(root, relPath); if (alive) setDataUrl(d) }
@@ -149,6 +150,13 @@ export default function FilePreview({ root, relPath, onOpenLink, onText }: Props
       {kind === 'image' && dataUrl && <img className="artifact-image" src={dataUrl} alt={relPath} />}
       {kind === 'video' && <video key={relPath} className="artifact-video" src={wbUrl(root, relPath)} controls preload="metadata"
         onError={() => setError('this video format can\'t play here. Use “Open in default app”.')} />}
+      {kind === 'audio' && (
+        <div className="artifact-audio">
+          <span className="artifact-audio-ico"><Icon name="mic" size="lg" /></span>
+          <audio key={relPath} src={wbUrl(root, relPath)} controls preload="metadata"
+            onError={() => setError('this audio format can\'t play here. Use “Open in default app”.')} />
+        </div>
+      )}
       {kind === 'pdf' && <Suspense fallback={<div className="field-hint">Loading PDF viewer…</div>}><PdfViewer url={wbUrl(root, relPath)} root={root} relPath={relPath} onPageTextChange={(t) => onText?.(t)} /></Suspense>}
       {kind === 'md' && <div className="markdown-body"><MessageMarkdown onOpenArtifact={onOpenLink} root={root}>{text}</MessageMarkdown></div>}
       {kind === 'html' && (

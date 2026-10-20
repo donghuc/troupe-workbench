@@ -2,7 +2,7 @@
 // a readable title and a "Kind · EXT" subtitle — plus which files a reply links to.
 // Pure; tested in fileCards.test.ts.
 
-export type FileCardIcon = 'file' | 'globe' | 'image' | 'film'
+export type FileCardIcon = 'file' | 'globe' | 'image' | 'film' | 'mic'
 // Designed file-type thumbnails (Hien, assets/file-thumbs → renderer/src/assets/file-thumbs).
 // Types without one (code, unknown) fall back to the icon tile.
 export type FileThumb = 'markdown' | 'text' | 'doc' | 'pdf' | 'excel' | 'data' | 'slide' | 'image' | 'video' | 'html'
@@ -30,6 +30,7 @@ const KINDS: [RegExp, string, FileCardIcon][] = [
   [/^(pptx?|key|odp)$/, 'Presentation', 'file'],
   [/^(png|jpe?g|gif|webp|svg|bmp|avif)$/, 'Image', 'image'],
   [/^(mp4|webm|mov|m4v)$/, 'Video', 'film'],
+  [/^(mp3|m4a|aac|wav|ogg|oga|opus|flac|aiff?)$/, 'Audio', 'mic'],
   [/^(ts|tsx|js|jsx|py|swift|kt|java|go|rs|css|sh)$/, 'Code', 'file']
 ]
 

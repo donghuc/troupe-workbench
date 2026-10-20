@@ -18,6 +18,8 @@ Read this before changing anything. It is short on purpose; the code comments ca
 
 ## UI rules
 - Components never set outer margins; the parent owns the gaps. Forms and settings are a `<Stack>` of `<Field label hint>` and `<Section title>` (`renderer/src/components/Form.tsx`). Spacing values only from `--sp-*` tokens; no `A + B { margin }` adjacency rules.
+- Colours have one job each: the accent (terracotta) only for the single main action in a view and for text links; toggles, checkboxes and selected items use ink; delete-type actions use danger with an icon and the label; success stays green. Exceptions: a running chat's dot and your message bubble use the accent.
+- Design tokens come from `src/renderer/src/styles/tokens.figma.json`; run `npm run tokens` to regenerate `tokens.css` / `tokens.ts`. Never edit `tokens.css` by hand.
 - Helper text only where a setting needs it, one short sentence. A disabled control says why.
 - Markdown: tables size columns by words (`overflow-wrap: break-word` in cells); media takes its own row; long URLs wrap.
 

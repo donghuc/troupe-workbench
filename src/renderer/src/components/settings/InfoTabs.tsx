@@ -14,6 +14,7 @@ const COMMANDS: { k: string; d: string }[] = [
   { k: '@research', d: 'Thinking mode: one agent gathers sources, another checks them.' },
   { k: '# your note', d: 'Save the line as a dated fact in this project\'s memory instead of sending it.' },
   { k: `${OS_WORDS.mod}K`, d: 'Search across chats and messages.' },
+  { k: `${OS_WORDS.mod}${OS_WORDS.shift}Space`, d: 'Voice input: start, then stop and turn your speech into text in the message box (Esc discards). Models in Settings ▸ Tools ▸ Voice.' },
   { k: 'Shift + Enter', d: 'New line — and continues a numbered or bulleted list.' },
   { k: 'Select text', d: 'Pops a menu: Explain this · Reply · Lookup.' },
   { k: 'Compare replies', d: 'Under an @all group: one card with the verdict, agreements and disagreements; full replies fold beneath.' },

@@ -28,7 +28,8 @@ const subscriptions: Record<string, Record<string, unknown>> = {
   image: { onEvent: on(IPC.imageEvent), onDone: on(IPC.imageDone) },
   collab: { onChanged: on(IPC.collabChanged, false) },
   agents: { onEvent: on(IPC.agentSetup) },
-  customAgents: { onChanged: on(IPC.customAgentsChanged) }
+  customAgents: { onChanged: on(IPC.customAgentsChanged) },
+  voice: { onEvent: on(IPC.voiceDownload) }
 }
 for (const [ns, fns] of Object.entries(subscriptions)) Object.assign((api[ns] ??= {}), fns)
 

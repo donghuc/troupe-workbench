@@ -29,6 +29,13 @@ files:
   - '!node_modules/better-sqlite3/binding.gyp'
   - '!node_modules/better-sqlite3/prebuilds/{linux,linuxmusl,win32}-*.node'
   - '!node_modules/@napi-rs/**'
+  # Voice input (D-124): only the prebuilt whisper.cpp addon for this platform — no sources,
+  # no WASM build, no CUDA/Vulkan variants.
+  - '!node_modules/@fugood/whisper.node/{src,whisper.cpp,scripts}/**'
+  - '!node_modules/@fugood/whisper.node/CMakeLists.txt'
+  - '!node_modules/@fugood/whisper.node/lib/*.ts'
+  - '!node_modules/@fugood/node-whisper-wasm/**'
+  - '!node_modules/@fugood/node-whisper-*-{cuda,vulkan,snapdragon}/**'
   - '!node_modules/**/{README,CHANGELOG,HISTORY}*'
   - '!node_modules/**/*.{md,d.ts,map}'
 
@@ -57,6 +64,8 @@ mac:
       to: troupe
   extendInfo:
     CFBundleIconName: Troupe
+    # D-124: the system asks once before voice input uses the microphone.
+    NSMicrophoneUsageDescription: Troupe uses the microphone only while you record voice input. Speech is turned into text on this Mac.
   # No Apple Developer ID: electron-builder doesn't sign (identity: null); the afterPack hook
   # ad-hoc signs instead, so a downloaded copy isn't reported as "damaged" (2.2.1).
   # First launch still needs Privacy & Security ▸ Open Anyway (see INSTALL.md).
