@@ -20,6 +20,25 @@ Each version here matches a packaged build — the dmg is named
 
 ## [Unreleased]
 
+## [2.12.0] - 2026-10-20
+
+### Changed
+- Voice input always uses a language: the one you used last, or your system's language at first — never a guess, which turned an English sentence into Portuguese. A small EN / VI chip next to the mic switches it in one click.
+- (Windows) Voice input runs on the graphics card when there is one (Vulkan, part of every NVIDIA, AMD and Intel driver), with nothing to set up; without one it uses the processor as before. Settings ▸ Tools ▸ Voice says which, and shows how long each model took on this computer ("about 4 s per 20 s of speech").
+- Attachments: each chat keeps its own (in the project's `.workbench/attachments/<chat>/`), and agents are told to open only the ones their chat gives them. The message box says a dropped file is copied into the project where its agents can open it, and **Attachments in this project…** (in the + menu, or Manage next to the file) lists them by chat to show or delete. File names keep their Vietnamese letters.
+- Collab in Read-only now works for goals that produce files: agents read the project but don't change it — each Maker puts its files in its reply and Troupe saves them. The plan card says what the run allows and has **Switch to Auto** / **Switch to Read-only** before you approve (`troupe collab mode <run> read|auto` from the command line).
+- Collab: the Planner is told what each agent can do in this run (its mode and your Tools settings), not in general. When a task needs something no agent in the run may do — like changing files in a Read-only run — Troupe pauses with **Switch run to Auto, retry** (or the setting to turn on, or skip) instead of passing the task from agent to agent.
+- Collab: Troupe writes the plan and status log itself; agents report in their reply. A read-only Collab no longer fails trying to write PLAN.md and STATUS.md.
+
+### Fixed
+- Collab: a Reviewer gets Troupe's record of the attempt — who made it and exactly which files changed in the project while it worked — so it reviews the work instead of blocking because it can't prove the history (a folder without git, "who wrote this file?").
+- Collab: when a review moves to another agent, the status log and the wrap-up give the reviewer's real reason instead of always "couldn't open the files".
+- `troupe collab mode` says what it did ("Switched to Auto …"), and `collab status` shows the run's mode.
+- Grok could still run terminal commands in Auto and Read-only and then stopped at a permission prompt (the tool was never actually removed). Troupe now names the tools Grok may use, and the shell isn't one of them.
+- `troupe runs` shows a Collab whose chat was deleted as "deleted" instead of "started".
+- `troupe runs` showed a finished Collab as "started"; it now shows how the run stands (done, paused, stopped, error or running).
+- (Windows) `troupe send <chat> -` (the message from stdin) failed with "the value of argument "name" is not valid". The command no longer passes its arguments through PowerShell; an installed `troupe` command updates itself when Troupe starts.
+
 ## [2.11.0] - 2026-10-20
 
 ### Added

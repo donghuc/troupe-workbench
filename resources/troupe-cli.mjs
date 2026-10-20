@@ -43,6 +43,7 @@ Collab
   collab status <run|chat> [--wait SECONDS]
   collab approve <run>   collab reject <run>   collab stop <run>   collab resume <run>
   collab fix <run> <n>                  Apply the Planner's fix n
+  collab mode <run> read|auto           Switch a run before approving it, or while it's paused
   collab retry|skip|ask <run> <task n> [--note "…"]
 
   --json   machine-readable output
@@ -86,13 +87,14 @@ switch (cmd) {
     break
   case 'cat': need(2, 'troupe cat <project> <path>'); add('project', argv.shift()); add('path', argv.shift()); break
   case 'collab': {
-    need(1, 'troupe collab <start|list|status|approve|reject|stop|resume|fix|retry|skip|ask> …')
+    need(1, 'troupe collab <start|list|status|approve|reject|stop|resume|fix|retry|skip|ask|mode> …')
     const sub = argv.shift(); add('do', sub)
     switch (sub) {
       case 'start': need(2, 'troupe collab start <project> "<goal>"'); add('project', argv.shift()); add('goal', argv.shift()); break
       case 'list': if (argv.length && !argv[0].startsWith('--')) add('project', argv.shift()); break
       case 'status': case 'approve': case 'reject': case 'stop': case 'resume': need(1, `troupe collab ${sub} <run>`); add('run', argv.shift()); break
       case 'fix': need(2, 'troupe collab fix <run> <n>'); add('run', argv.shift()); add('n', argv.shift()); break
+      case 'mode': need(2, 'troupe collab mode <run> read|auto'); add('run', argv.shift()); add('mode', argv.shift()); break
       case 'retry': case 'skip': case 'ask': need(2, `troupe collab ${sub} <run> <task n>`); add('run', argv.shift()); add('task', argv.shift()); break
       default: die(`unknown collab command: ${sub} (try: troupe --help)`)
     }

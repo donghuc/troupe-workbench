@@ -210,7 +210,7 @@ export default function ConversationView({ conversation, providers, pendingSend,
   const sendWithAttachments = async (t: string, p: typeof conversation.provider, atts: PendingAttachment[], skillId?: string, model?: string, permMode?: PermissionMode, sels?: SelectionItem[], mode?: ModeId) => {
     let attachments: RunAttachment[] | undefined
     if (atts.length) {
-      const resolved = (await Promise.all(atts.map((a) => resolveAttachment(a, cwd)))).filter((x): x is RunAttachment => x !== null)
+      const resolved = (await Promise.all(atts.map((a) => resolveAttachment(a, cwd, conversation.id)))).filter((x): x is RunAttachment => x !== null)
       if (resolved.length) attachments = resolved
     }
     // Selected passages (D-065): the agent receives them under the typed text, each with
@@ -469,6 +469,7 @@ export default function ConversationView({ conversation, providers, pendingSend,
               defaultPermissionMode={permDefault}
               onPermissionModeChange={(m) => { api.conversations.setPermissionMode(conversation.id, m).catch(failed('Remember permission mode')) }}
               draftKey={conversation.id}
+              chatId={conversation.id}
             />
             <Button variant="link" className="inspect-link" onClick={() => setShowInspect(true)}>Inspect context</Button>
           </div>

@@ -17,7 +17,11 @@ const PREVIOUS_VERSIONS = new Set<string>([
   '10d7ce7e44f08fc4f733ee56634461f1129926515391770681c706d3fb00610e', // role-reviewer
   // up to 2.9.0
   '20394913a0a703f738562865d8f3f1b192688d6c6d9df13da5e5347bf08a112f', // role-planner (D-121: three jobs, reviewer choice)
-  '884c140e98dddedb46e6d6f97cd52cc492c2578451ae3dccb27e1695e4b04927'  // role-reviewer (D-121: read-only commands for shell agents; BLOCKED)
+  '884c140e98dddedb46e6d6f97cd52cc492c2578451ae3dccb27e1695e4b04927', // role-reviewer (D-121: read-only commands for shell agents; BLOCKED)
+  // up to 2.11.0 (2.11.1: Troupe writes PLAN.md and STATUS.md; agents report in their reply)
+  '538abf503c4778df2e60e36aabba5a2d6c804f1a0e46691d9a179e15fdb1307b', // collab-protocol
+  '6eb78dca78a920774234ba76913058610bfb709a61978e32bb75605e22f90355', // role-planner
+  '14ec623bcff6fa509740bd01d6147a5d44f76ac183440302b8e45f3a7089cb4f'  // role-maker
 ])
 
 /** True when `current` is an untouched earlier shipped version and differs from `canonical`. */

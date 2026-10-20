@@ -49,7 +49,8 @@ const cspPlugin = (): Plugin => ({
 })
 
 export default defineConfig({
-  main: { plugins: [externalizeDepsPlugin()] },
+  // The Windows GPU build of the voice addon is an optional dependency (D-124): keep it a runtime require too.
+  main: { plugins: [externalizeDepsPlugin({ include: ['@fugood/node-whisper-win32-x64-vulkan'] })] },
   preload: { plugins: [externalizeDepsPlugin()] },
   renderer: {
     resolve: { alias: { '@': resolve(__dirname, 'src/renderer/src') } },

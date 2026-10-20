@@ -45,7 +45,7 @@ export function missingOutputs(outputs: string[], probe: (rel: string) => { kind
   })
 }
 
-const FILE_BLOCK_START = '=== FILE: '
+export const FILE_BLOCK_START = '=== FILE: '
 const FILE_BLOCK_END = '=== END FILE ==='
 
 /** Instructions for a Maker that can only reply with text. */

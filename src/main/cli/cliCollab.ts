@@ -1,4 +1,4 @@
-import { startCollab, confirmPlan, stopCollab, resumeCollab, recoverTask, applyRepair } from '../collab/orchestrator'
+import { startCollab, confirmPlan, stopCollab, resumeCollab, recoverTask, applyRepair, setCollabMode } from '../collab/orchestrator'
 import { getCollabRun, listCollabRuns } from '../collab/collabRepo'
 import { getConversation, createConversation, listConversations } from '../conversations/conversationsRepo'
 import { getProject, listProjects } from '../projects/projectsRepo'
@@ -52,8 +52,8 @@ function describeCollab(run: CollabRun): CliCollab {
     startedAt: t.meta.startedAt ?? null, finishedAt: t.status === 'in_progress' ? null : t.meta.finishedAt ?? null,
     seconds: t.meta.startedAt ? Math.round(((t.status === 'in_progress' ? Date.now() : t.meta.finishedAt ?? Date.now()) - t.meta.startedAt) / 1000) : null
   }))
-  const fixes = (run.repair?.options ?? []).map((o, i) => ({ n: i + 1, label: o.label, recommended: i === run.repair!.recommended, needsYou: o.userStep ?? null, changesGoal: o.changesGoal }))
-  return { run: run.id, chat: run.conversationId, project: project?.name ?? '', goal: run.goal, status: run.status, reason: run.reason, tasks, fixes, summary: run.summary, wrapUp: wrapUpOf(run) }
+  const fixes = (run.repair?.options ?? []).map((o, i) => ({ n: i + 1, label: o.label, recommended: i === run.repair!.recommended, needsYou: o.userStep ?? null, changesGoal: o.changesGoal, raisesPermissions: o.action === 'mode' }))
+  return { run: run.id, chat: run.conversationId, project: project?.name ?? '', goal: run.goal, status: run.status, mode: run.permissionMode, reason: run.reason, tasks, fixes, summary: run.summary, wrapUp: wrapUpOf(run) }
 }
 /** D-121: the Planner's wrap-up message for this run, if one was written. */
 function wrapUpOf(run: CollabRun): string {
@@ -132,6 +132,18 @@ export async function runCollabCommand(q: Params, deps: Deps, closed: () => bool
       if (!run.repair || !run.repair.options[n - 1]) throw new CliError(run.repair ? `Pick a fix from 1 to ${run.repair.options.length}.` : 'There is no fix waiting on this run.', 409)
       return result(applyRepair(senderForRun(), run.id, n - 1))
     }
+    case 'mode': {
+      // D-127: Read-only ⇄ Auto only (never Full access), before approving or while paused.
+      const run = findCollab(q.get('run') ?? '')
+      const m = (q.get('mode') ?? '').trim().toLowerCase()
+      if (m !== 'read' && m !== 'auto') throw new CliError('Use: troupe collab mode <run> read|auto (Full access is never available here).')
+      if (!['awaiting_confirmation', 'needs_attention'].includes(run.status)) throw new CliError(`Switch the mode before approving or while paused; the run is ${run.status.replace('_', ' ')}.`, 409)
+      const was = run.permissionMode
+      const r = result(setCollabMode(run.id, m))
+      const word = m === 'auto' ? 'Auto (agents can change files)' : 'Read-only (Troupe saves agents\' files from their replies)'
+      // D-128: say what happened — the reply used to be the plain status, with nothing about the mode.
+      return { ...r, text: `${was === m ? 'Already' : 'Switched to'} ${word}.\n\n${r.text}` }
+    }
     case 'retry':
     case 'skip':
     case 'ask': {
@@ -142,6 +154,6 @@ export async function runCollabCommand(q: Params, deps: Deps, closed: () => bool
       return result(recoverTask(senderForRun(), run.id, taskId(run, q.get('task')), action))
     }
     default:
-      throw new CliError('Collab commands: start, list, status, approve, reject, stop, resume, fix, retry, skip, ask.', 404)
+      throw new CliError('Collab commands: start, list, status, approve, reject, stop, resume, fix, retry, skip, ask, mode.', 404)
   }
 }

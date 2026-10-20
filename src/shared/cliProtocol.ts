@@ -110,7 +110,7 @@ export interface RunLogEntry {
   agents: string[]
   startedAt: number
   finishedAt: number
-  state: 'done' | 'error' | 'stopped' | 'started'
+  state: 'done' | 'error' | 'stopped' | 'started' | 'running' | 'paused' | 'deleted'
   error: string | null
   files: string[]                   // files the agents edited (project-relative where possible)
 }
@@ -163,10 +163,25 @@ export function filesChanged(metas: (Record<string, unknown> | null)[], root?: s
   return out
 }
 
+/**
+ * A Collab run is logged once, when it starts (state 'started'); its outcome lives in the
+ * database. `troupe runs` reports the run's current state instead of that first line
+ * (Zoey's Windows test, 2026-10-20: finished runs still said "started").
+ */
+export function collabLogState(status: string, reason: string): Pick<RunLogEntry, 'state' | 'error'> {
+  switch (status) {
+    case 'done': return { state: 'done', error: null }
+    case 'stopped': return { state: 'stopped', error: reason || null }
+    case 'failed': return { state: 'error', error: reason || 'Failed.' }
+    case 'needs_attention': return { state: 'paused', error: reason || null }
+    default: return { state: 'running', error: null }   // planning, awaiting_confirmation, running
+  }
+}
+
 export function runsText(rs: RunLogEntry[]): string {
   if (!rs.length) return 'No runs in that period.'
   return rs.map((r) => {
-    const mark = r.state === 'done' ? 'done' : r.state === 'started' ? 'started' : r.state.toUpperCase()
+    const mark = ['done', 'started', 'running', 'paused', 'deleted'].includes(r.state) ? r.state : r.state.toUpperCase()
     const files = r.files.length ? `  · ${r.files.length} file${r.files.length === 1 ? '' : 's'} changed` : ''
     return `${when(r.finishedAt)}  ${mark.padEnd(7)}  ${r.source.padEnd(8)}  ${r.project} · ${r.title}${r.kind === 'collab' ? ' (Collab)' : ''}  [${r.agents.join(', ')}]${files}\n  run ${r.run}${r.error ? `\n  error: ${r.error}` : ''}`
   }).join('\n')
@@ -183,10 +198,11 @@ export function describeSchedule(kind: string, intervalMin: number, atMin: numbe
 }
 
 export interface CliCollabTask { n: number; title: string; status: string; kind?: string; agent: string; reviewer: string; attempts: number; tries: string; produces: string; findings: string[]; files: string[]; startedAt: number | null; finishedAt: number | null; seconds: number | null }
-export interface CliCollab { run: string; chat: string; project: string; goal: string; status: string; reason: string; tasks: CliCollabTask[]; fixes: { n: number; label: string; recommended: boolean; needsYou: string | null; changesGoal?: boolean }[]; summary: string; wrapUp: string }
+export interface CliCollab { run: string; chat: string; project: string; goal: string; status: string; mode: string; reason: string; tasks: CliCollabTask[]; fixes: { n: number; label: string; recommended: boolean; needsYou: string | null; changesGoal?: boolean; raisesPermissions?: boolean }[]; summary: string; wrapUp: string }
 export function collabText(c: CliCollab): string {
   const human = (s: string) => s.replace(/_/g, ' ')
-  const lines = [`collab ${c.run}: ${human(c.status)}${c.reason ? ` — ${c.reason}` : ''}`, `goal: ${c.goal}`, `chat ${c.chat} in ${c.project}`]
+  const modeWord = c.mode === 'read' ? 'Read-only' : c.mode === 'full' ? 'Full access' : 'Auto'
+  const lines = [`collab ${c.run}: ${human(c.status)}${c.reason ? ` — ${c.reason}` : ''}`, `goal: ${c.goal}`, `mode: ${modeWord}`, `chat ${c.chat} in ${c.project}`]
   if (c.tasks.length) {
     lines.push('', 'tasks:')
     for (const t of c.tasks) {
@@ -197,7 +213,7 @@ export function collabText(c: CliCollab): string {
   }
   if (c.fixes.length) {
     lines.push('', 'fixes (troupe collab fix <run> <n>):')
-    for (const f of c.fixes) lines.push(`  ${f.n}. ${f.label}${f.recommended ? ' (recommended)' : ''}${f.changesGoal ? ' (changes the goal — ask the user)' : ''}${f.needsYou ? ` — you first: ${f.needsYou}` : ''}`)
+    for (const f of c.fixes) lines.push(`  ${f.n}. ${f.label}${f.recommended ? ' (recommended)' : ''}${f.changesGoal ? ' (changes the goal — ask the user)' : ''}${f.raisesPermissions ? ' (lets agents change files — ask the user)' : ''}${f.needsYou ? ` — you first: ${f.needsYou}` : ''}`)
   }
   if (c.status === 'awaiting_confirmation') lines.push('', 'Plan ready. Approve: troupe collab approve <run> · Reject: troupe collab reject <run>')
   if (c.wrapUp) lines.push('', 'wrap-up:', c.wrapUp.trim())

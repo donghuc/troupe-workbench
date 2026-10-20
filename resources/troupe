@@ -45,6 +45,7 @@ Collab
   collab status <run|chat> [--wait SECONDS]
   collab approve <run>   collab reject <run>   collab stop <run>   collab resume <run>
   collab fix <run> <n>                  Apply the Planner's fix n
+  collab mode <run> read|auto           Switch a run before approving it, or while it's paused
   collab retry|skip|ask <run> <task n> [--note "…"]
 
   --json   machine-readable output
@@ -79,13 +80,14 @@ case "$cmd" in
   files)  need $# 1 "troupe files <project> [folder]"; add project "$1"; shift
           if [ $# -ge 1 ] && [ "${1#--}" = "$1" ]; then add path "$1"; shift; fi ;;
   cat)    need $# 2 "troupe cat <project> <path>"; add project "$1"; add path "$2"; shift 2 ;;
-  collab) need $# 1 "troupe collab <start|list|status|approve|reject|stop|resume|fix|retry|skip|ask> …"
+  collab) need $# 1 "troupe collab <start|list|status|approve|reject|stop|resume|fix|retry|skip|ask|mode> …"
           sub="$1"; shift; add do "$sub"
           case "$sub" in
             start) need $# 2 'troupe collab start <project> "<goal>"'; add project "$1"; add goal "$2"; shift 2 ;;
             list)  if [ $# -ge 1 ] && [ "${1#--}" = "$1" ]; then add project "$1"; shift; fi ;;
             status|approve|reject|stop|resume) need $# 1 "troupe collab $sub <run>"; add run "$1"; shift ;;
             fix)   need $# 2 "troupe collab fix <run> <n>"; add run "$1"; add n "$2"; shift 2 ;;
+            mode)  need $# 2 "troupe collab mode <run> read|auto"; add run "$1"; add mode "$2"; shift 2 ;;
             retry|skip|ask) need $# 2 "troupe collab $sub <run> <task n>"; add run "$1"; add task "$2"; shift 2 ;;
             *) die "unknown collab command: $sub (try: troupe --help)" ;;
           esac ;;

@@ -306,6 +306,14 @@ export interface CollabTaskMeta {
   tries?: CollabTry[]    // D-121: every attempt, kept across retries, reassignments and reworks (attempts resets)
   blockedReviewers?: ProviderId[]  // D-121: reviewers that couldn't open the files for this task
   lastFailKind?: 'review' | 'unchanged'  // D-121: what the last failure was, for the unchanged-files check
+  recorded?: CollabRecord   // D-128: what Troupe saw happen during the last Maker attempt
+}
+/** D-128: Troupe's own record of a Maker attempt, given to Reviewers as fact. */
+export interface CollabRecord {
+  by: ProviderId
+  savedByTroupe: boolean     // files saved from the reply (Read-only run or text-only agent)
+  added: string[]; changed: string[]; removed: string[]
+  complete: boolean          // false: the project was too big to list, so the lists are empty
 }
 /** One attempt at a task (D-121), for the wrap-up and `troupe collab status`. */
 export interface CollabTry { agent: ProviderId; result?: 'passed' | 'failed' | 'blocked'; why?: string }
@@ -316,7 +324,8 @@ export type CollabRecoverAction =
   | { type: 'repair'; note?: string }
 export interface CollabRepairOption {
   label: string
-  action: 'retry' | 'reassign' | 'rewrite' | 'skip' | 'rework'
+  action: 'retry' | 'reassign' | 'rewrite' | 'skip' | 'rework' | 'mode'   // 'mode' (D-127): Troupe's own fix, never from the Planner
+  mode?: 'auto'
   changesGoal: boolean
   taskSeq?: number    // D-121 'rework' (final review failed): the work task to redo, 0-based
   goal?: string       // D-121: the corrected goal, when the goal itself is the problem (applied only by the user)

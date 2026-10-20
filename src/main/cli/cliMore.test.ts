@@ -156,7 +156,10 @@ describe('attachments (D-118)', () => {
     const atts = started[0].attachments as { path: string; content?: string; image?: boolean }[]
     expect(atts[0]).toMatchObject({ content: 'buy VTI', viewable: true })
     expect(atts[1]).toMatchObject({ image: true })
-    expect(readdirSync(join(proj, '.workbench', 'attachments')).length).toBe(2)
+    // D-126: in the new chat's own folder
+    const chat = (r.json as { chat: string }).chat
+    expect(atts[0].path.startsWith(`.workbench/attachments/${chat}/`)).toBe(true)
+    expect(readdirSync(join(proj, '.workbench', 'attachments', chat)).length).toBe(2)
     expect(existsSync(join(proj, atts[1].path))).toBe(true)
   })
   it('refuses relative paths, missing files and credentials', async () => {
@@ -211,6 +214,12 @@ describe('Collab from the command line (D-118)', () => {
     await runCliCommand('collab', P({ do: 'retry', run, task: '1', note: 'use ISO dates' }))
     expect(collabCalls).toEqual(['start', 'confirm', 'repair:0', expect.stringMatching(/^recover:.+:retry:use ISO dates$/)])
     expect((await runCliCommand('collab', P({ do: 'fix', run, n: '5' }))).status).toBe(409)
+    // `runs` reports the run's state now, not the 'started' line logged at the start
+    expect((await runCliCommand('runs', P({ since: '1d' }))).json).toMatchObject([{ run, state: 'paused', error: 'Task 1 failed twice' }])
+    repo.updateCollabRun(run, { status: 'done', repair: null })
+    const done = await runCliCommand('runs', P({ since: '1d' }))
+    expect(done.json).toMatchObject([{ run, state: 'done' }])
+    expect(done.text).toMatch(/done\s+cli/)
     expect((await runCliCommand('collab', P({ do: 'start', project: 'finance', goal: 'x', mode: 'full' }))).status).toBe(400)
   })
 })
@@ -278,22 +287,22 @@ describe('Windows troupe client and token (D-120)', () => {
 
     // The installed wrapper (troupe.cmd → troupe-run.ps1 → client): on Windows through cmd, elsewhere
     // the .ps1 under pwsh when it's installed. Node stands in for Troupe.exe.
-    const { installCommandWin } = await import('./cliInstall')
+    const { installCommandWin, WIN_ARGS_MARK } = await import('./cliInstall')
     const binDir = mkdtempSync(join(tmpdir(), 'tb-'))
     const inst = installCommandWin(process.execPath, client, sock, tokenFile, binDir, '')
     const win = process.platform === 'win32'
     const pwsh = win ? null : (process.env.PATH ?? '').split(':').map((d) => join(d, 'pwsh')).find((f) => existsSync(f))
     if (win || pwsh) {
       const run = (args: string[], input?: string): Promise<{ code: number; out: string; err: string }> => new Promise((resolve) => {
-        const [file, pre] = win ? ['cmd.exe', ['/d', '/c', inst.path]] : [pwsh!, ['-NoProfile', '-File', join(binDir, 'troupe-run.ps1')]]
-        const c = execFile(file, [...pre, ...args], (e, out, err) =>
+        const [file, pre] = win ? ['cmd.exe', ['/d', '/c', inst.path]] : [pwsh!, ['-NoProfile', '-Command', "& (Join-Path $env:TROUPE_BIN 'troupe-run.ps1'); exit $LASTEXITCODE", WIN_ARGS_MARK]]   // what troupe.cmd runs
+        const c = execFile(file, [...pre, ...args], { env: { ...process.env, TROUPE_BIN: binDir + '/' } }, (e, out, err) =>
           resolve({ code: e ? (typeof (e as { code?: unknown }).code === 'number' ? (e as { code: number }).code : 1) : 0, out, err }))
         if (input !== undefined) c.stdin?.end(input); else c.stdin?.end()
       })
       // A tool that leaves stdin open must not hang the wrapper (only `send … -` reads it).
       const open = await new Promise<number>((resolve) => {
-        const [file, pre] = win ? ['cmd.exe', ['/d', '/c', inst.path]] : [pwsh!, ['-NoProfile', '-File', join(binDir, 'troupe-run.ps1')]]
-        const c = execFile(file, [...pre, 'projects'], { timeout: 15000 }, (e) => resolve(e ? 1 : 0))
+        const [file, pre] = win ? ['cmd.exe', ['/d', '/c', inst.path]] : [pwsh!, ['-NoProfile', '-Command', "& (Join-Path $env:TROUPE_BIN 'troupe-run.ps1'); exit $LASTEXITCODE", WIN_ARGS_MARK]]   // what troupe.cmd runs
+        const c = execFile(file, [...pre, 'projects'], { timeout: 15000, env: { ...process.env, TROUPE_BIN: binDir + '/' } }, (e) => resolve(e ? 1 : 0))
         void c   // stdin deliberately left open
       })
       expect(open).toBe(0)

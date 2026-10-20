@@ -1,4 +1,5 @@
 import { api } from './api'
+import { attachmentRel } from '../../shared/attachmentPaths'
 
 // A file staged in the composer before send — either picked from the project
 // tree or dropped in from anywhere.
@@ -35,7 +36,7 @@ const toBase64 = (file: File) => new Promise<string>((resolve, reject) => {
 // PDFs get their text extracted app-side (macOS PDFKit) and inlined, so the agent
 // doesn't depend on poppler or shell access to read them (D-044). Returns null if
 // it can't be resolved (a binary with no project folder to store it in).
-export async function resolveAttachment(a: PendingAttachment, cwd?: string): Promise<RunAttachment | null> {
+export async function resolveAttachment(a: PendingAttachment, cwd?: string, chatId?: string): Promise<RunAttachment | null> {
   const name = attachmentName(a)
   const isImg = IMAGE.test(name)
   const isText = TEXT.test(name)
@@ -48,8 +49,7 @@ export async function resolveAttachment(a: PendingAttachment, cwd?: string): Pro
     if (a.kind === 'folder') { if (!cwd) return null; return { path: a.relPath, content: await api.files.readFile(cwd, a.relPath), viewable: true } }
     const content = await a.file.text()
     if (cwd) {
-      const safe = a.file.name.replace(/[^\w.\-]+/g, '_')
-      const rel = `.workbench/attachments/${Date.now()}-${safe}`
+      const rel = attachmentRel(chatId, a.file.name)   // D-126: this chat's folder
       try { await api.files.writeFile(cwd, rel, content); return { path: rel, content, viewable: true } } catch { /* fall back to inline-only */ }
     }
     return { path: a.file.name, content }
@@ -66,8 +66,7 @@ export async function resolveAttachment(a: PendingAttachment, cwd?: string): Pro
   } else {
     const b64 = await toBase64(a.file)
     if (cwd) {
-      const safe = a.file.name.replace(/[^\w.\-]+/g, '_')
-      path = `.workbench/attachments/${Date.now()}-${safe}`
+      path = attachmentRel(chatId, a.file.name)
       await api.files.writeBinary(cwd, path, b64)
     } else {
       path = await api.attachments.saveBinary(b64, a.file.name)

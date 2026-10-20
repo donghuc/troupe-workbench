@@ -16,7 +16,11 @@ import {
   replaceTasks, getTask, updateTask, listCollabRuns
 } from './collabRepo'
 import { extractJson, findingToText } from './parse'
-import { scopePaths, missingOutputs, filesFromReply, textMakerInstructions } from '../../shared/collabFiles'
+import { scopePaths, missingOutputs, filesFromReply, textMakerInstructions, FILE_BLOCK_START } from '../../shared/collabFiles'
+import { abilityIn, describeAbility, runLimits, needOfTool, needOfText, runBlocker, NEED_WORD, type Ability, type RunSettings, type Need } from '../../shared/collabAbilities'
+import { SHELL_SANDBOX_SETTING, sandboxOn } from '../../shared/shellSandbox'
+import { snapshot, diffSnapshots, type Snapshot } from './projectSnapshot'
+import type { PermissionMode } from '../../shared/agent'
 import { createProvider } from '../providers/registry'
 import { ensureInside } from '../filesystem/fsService'
 import { nextRunnable, tasksToRetry, defaultOutputDir, sanitizeOutputDir, retargetScope } from '../../shared/collabPlan'
@@ -67,7 +71,7 @@ function plannerContract(runDir: string, suggestedOut: string): string {
     '',
     '---',
     `Where things go: \`${runDir}/\` is the app's bookkeeping folder — only PLAN.md and STATUS.md live there. It is hidden in the app, so NEVER put deliverables under \`.workbench/\`. Choose one visible project folder for everything the tasks produce and set it as "outputDir" (suggested: \`${suggestedOut}\`; reuse an existing project folder if the goal names one). Every task's scope names paths inside outputDir (or existing project files it edits).`,
-    `Write the plan to \`${runDir}/PLAN.md\` (human-readable). Then end your reply with ONLY a fenced \`\`\`json block, no prose after it:`,
+    `Do not write PLAN.md or STATUS.md yourself — the app writes both from your JSON (a read-only run can't write them anyway). End your reply with ONLY a fenced \`\`\`json block, no prose after it:`,
     '```json',
     `{ "outputDir": "${suggestedOut}", "conflicts": [], "tasks": [ { "title": "...", "kind": "work", "provider": "claude-code", "model": "haiku", "reviewer": "codex", "scope": "files or area this task owns", "acceptance": "how anyone can tell it is done and correct", "dependsOn": [] } ] }`,
     '"conflicts": list, in one plain sentence each, anything in the goal that contradicts itself or can\'t all be met (e.g. "the goal asks for 5 questions but also says to write only 4"), and decisions only the user can make before work starts. Leave it empty when there are none. Do NOT quietly pick a side in a task: the user sees these before approving and can edit the goal.',
@@ -81,7 +85,7 @@ function makerContract(runDir: string): string {
   return [
     '',
     '---',
-    `Append your handoff to \`${runDir}/STATUS.md\`. Then end your reply with ONLY a fenced \`\`\`json block, no prose after it:`,
+    `Do not write \`${runDir}/STATUS.md\` — the app records your handoff there from the JSON below. End your reply with ONLY a fenced \`\`\`json block, no prose after it:`,
     '```json',
     '{ "status": "done", "filesChanged": ["path", "..."], "verify": "exact steps for the reviewer to verify" }',
     '```',
@@ -110,7 +114,8 @@ function reviewerContract(runDir: string): string {
     '{ "verdict": "PASS", "findings": [] }',
     '```',
     'verdict is "PASS" only if every acceptance criterion is met with no blocking issue; otherwise "FAIL" with a numbered, specific findings list (each tied to a file or a reproduction step). You do not edit the work.',
-    'If you could not check the work at all — you could not open the files, or a tool you need was refused — use "verdict": "BLOCKED" and say in findings what stopped you. That is not the Maker\'s fault: never FAIL for it.'
+    'If you could not check the work at all — you could not open the files, or a tool you need was refused — use "verdict": "BLOCKED" and say in findings what stopped you. That is not the Maker\'s fault: never FAIL for it.',
+    'Who made the work and which files changed are settled by Troupe\'s record above. Not having git history, not knowing who wrote a file, or not being able to prove nothing else changed is NOT a reason to BLOCK or FAIL — judge the files against the acceptance criteria.'
   ].join('\n')
 }
 
@@ -206,9 +211,10 @@ function completedContext(run: CollabRun): string {
   const lines = passed.map((t) => {
     const h = t.handoff!
     const files = h.filesChanged?.length ? h.filesChanged.join(', ') : '(none noted)'
-    return `- **${t.title}** — files: ${files}${h.verify ? ` · to check: ${h.verify}` : ''}`
+    const rec = recordText(t)
+    return `- **${t.title}** — files: ${files}${h.verify ? ` · to check: ${h.verify}` : ''}${rec ? `\n  ${rec.slice(2)}` : ''}`
   })
-  return ['## Work already completed by earlier tasks', ...lines,
+  return ['## Work already completed by earlier tasks (with what Troupe recorded — facts)', ...lines,
     '', 'Open those files directly if your task builds on them. Do not read the full status log.'].join('\n')
 }
 
@@ -218,15 +224,21 @@ function completedContext(run: CollabRun): string {
 // deliverables are saved from its reply.
 function capsOf(id: ProviderId) { try { return createProvider(id)?.getCapabilities() ?? null } catch { return null } }
 const canWriteFiles = (id: ProviderId): boolean => !!capsOf(id)?.fileWrite
-function abilitiesOf(id: ProviderId): string {
-  const c = capsOf(id)
-  if (!c || !c.fileWrite) return 'text replies only: cannot open project files, browse the web or run tools. Troupe pastes the task\'s input files into its prompt and saves its deliverables from the reply'
-  return ['reads and writes files', c.shell ? 'runs shell commands' : '', c.web ? 'can browse the web' : ''].filter(Boolean).join(', ')
+// D-127: what an agent can do in THIS run — its own capabilities cut by the run's mode and the
+// Tools settings. The Planner sees this, not the agent's general abilities.
+function runSettings(run: CollabRun, mode: PermissionMode = run.permissionMode): RunSettings {
+  return { mode, webOn: getSetting('agent_web_access') !== '0', shellOn: getSetting('agent_shell_access') !== '0', sandboxOn: sandboxOn(getSetting(SHELL_SANDBOX_SETTING)), windows: process.platform === 'win32' }
 }
-function agentsForPlanner(): string {
-  const ids = enabledProviderIds(getSetting(DISABLED_AGENTS_SETTING))
-  return ['Agents available for work tasks (do not assign any other provider):', ...ids.map((id) => `- "${id}" (${providerLabel(id, id)}): ${abilitiesOf(id)}.`),
-    'Only give a text-only agent a task it can do from the text it is given: no web research, link checking or running anything; one or a few output files named in the scope; inputs named as "(read-only: path, …)" in the scope.'].join('\n')
+const enabledAgents = (): ProviderId[] => enabledProviderIds(getSetting(DISABLED_AGENTS_SETTING)).filter(isProviderId) as ProviderId[]
+const abilityOf = (run: CollabRun, id: ProviderId, mode?: PermissionMode): Ability => abilityIn(id, capsOf(id), runSettings(run, mode))
+/** A Maker that can't change files itself in this run (text-only agent, or a Read-only run): Troupe saves its files from its reply. */
+const replyFiles = (run: CollabRun, id: ProviderId): boolean => !abilityOf(run, id).write
+function abilitiesOf(run: CollabRun, id: ProviderId): string { return describeAbility(abilityOf(run, id)) }
+function agentsForPlanner(run: CollabRun): string {
+  const ids = enabledAgents()
+  return ['Agents available for work tasks, and what each can do in THIS run (do not assign any other provider):', ...ids.map((id) => `- "${id}" (${providerLabel(id, id)}): ${abilitiesOf(run, id)}.`),
+    runLimits(runSettings(run), ids.map((id) => abilityOf(run, id))),
+    'Only give an agent that can\'t open files a task it can do from the text it is given: no web research, link checking or running anything; one or a few output files named in the scope; inputs named as "(read-only: path, …)" in the scope.'].join('\n')
 }
 const makerProviderOf = (run: CollabRun, task: CollabTask): ProviderId =>
   task.provider && enabledProviderIds(getSetting(DISABLED_AGENTS_SETTING)).includes(task.provider) ? task.provider : run.providerId
@@ -290,7 +302,7 @@ function runPlanner(runId: string): void {
     `You are the Planner for a Collab run. Goal:`, '', run.goal, '',
     `Read the shared files under \`${relRunDir(run)}/\` if they exist.`,
     plannerContract(relRunDir(run), defaultOutputDir(run.goal, run.createdAt)),
-    agentsForPlanner()
+    agentsForPlanner(run)
   ].join('\n')
   bumpRuns(runId)
   const rid = startRun(sender, {
@@ -421,6 +433,27 @@ function step(runId: string): void {
   else runMaker(runId, runnable.id)
 }
 
+// D-128: the project as it was when each task's current Maker attempt started (in memory only;
+// after a restart the record says the change list is unknown).
+const makerSnaps = new Map<string, Snapshot | null>()
+function recordAttempt(run: CollabRun, task: CollabTask): void {
+  const before = makerSnaps.get(task.id)
+  const after = before ? snapshot(run.projectCwd) : null
+  const d = before && after ? diffSnapshots(before, after) : { added: [], changed: [], removed: [] }
+  const maker = makerProviderOf(run, task)
+  updateTask(task.id, { meta: { ...(getTask(task.id)?.meta ?? task.meta), recorded: { by: maker, savedByTroupe: replyFiles(run, maker), ...d, complete: !!(before && after) } } })
+}
+const fileList = (fs: string[], max = 15): string => fs.length ? fs.slice(0, max).map((f) => `\`${f}\``).join(', ') + (fs.length > max ? ` and ${fs.length - max} more` : '') : 'none'
+/** The record as facts for a Reviewer or the wrap-up. */
+function recordText(t: CollabTask): string {
+  const r = t.meta.recorded
+  if (!r) return ''
+  const who = `${providerLabelOf(r.by)}${r.savedByTroupe ? ' (its files were saved by Troupe from its reply)' : ''}`
+  if (!r.complete) return `- Made by ${who}. Troupe couldn't list every file that changed (the project is too large to compare).`
+  const parts = [r.added.length ? `added ${fileList(r.added)}` : '', r.changed.length ? `changed ${fileList(r.changed)}` : '', r.removed.length ? `removed ${fileList(r.removed)}` : ''].filter(Boolean)
+  return `- Made by ${who}. While it worked, the project ${parts.length ? parts.join('; ') : 'had no file changes'} — nothing else changed (build, dependency and .workbench folders aren't compared).`
+}
+
 function runMaker(runId: string, taskId: string): void {
   const run = getCollabRun(runId); if (!run || run.status !== 'running') return
   if (!lockFor(run)) { pause(runId, 'This conversation is busy with another turn. Resume when it finishes.'); return }
@@ -430,10 +463,14 @@ function runMaker(runId: string, taskId: string): void {
   const makerProvider = makerProviderOf(run, task)
   // D-121: fingerprint the outputs before this attempt, to catch "says done, wrote nothing".
   ensureOutputDirs(run, task)
+  makerSnaps.set(taskId, snapshot(run.projectCwd))   // D-128: what the project looked like before
   updateTask(taskId, { status: 'in_progress', attempts: task.attempts + 1, meta: { ...task.meta, startHash: outputsHash(run, task), tries: startTry(task, makerProvider) } })
   emitChanged()
   const retry = task.lastVerdict?.verdict === 'FAIL'
-  const textOnly = !canWriteFiles(makerProvider)
+  // D-127: an agent that can't open files gets its inputs pasted; one that can't CHANGE files
+  // (text-only, or any agent in a Read-only run) returns its files in the reply and Troupe saves them.
+  const cannotRead = !canWriteFiles(makerProvider)
+  const textOnly = replyFiles(run, makerProvider)
   const outputs = scopePaths(task.scope).outputs
   const prompt = [
     `You are the Maker for this Collab task.`, '',
@@ -443,7 +480,8 @@ function runMaker(runId: string, taskId: string): void {
     task.scope ? `**Scope (only touch this):** ${task.scope}` : '',
     task.acceptance ? `**Acceptance criteria:** ${task.acceptance}` : '',
     run.outputDir && !textOnly ? `**Deliverables folder:** \`${run.outputDir}/\` — put what you produce there (Troupe has created it and the folders your files go in), never under \`.workbench/\`.` : '',
-    textOnly ? inlineInputs(run, task) : completedContext(run),
+    cannotRead ? inlineInputs(run, task) : completedContext(run),
+    textOnly && !cannotRead ? 'This run is Read-only: you can open and read project files, but not change them or run commands. Put each deliverable in your reply as shown below; Troupe saves it.' : '',
     planChangesContext(run, task.id),
     task.meta.note ? `\n**Note from the user — follow it, it overrides earlier instructions:** ${task.meta.note}` : '',
     'If the goal and this task\'s acceptance criteria contradict each other, do not pick one silently: follow the acceptance criteria and explain the conflict in your handoff ("status": "blocked" if you cannot satisfy both).',
@@ -470,7 +508,13 @@ function onMakerDone(runId: string, taskId: string, messageId: string | null, er
   const reply = messageId ? getMessage(messageId)?.content ?? '' : ''
   if (messageId) {
     const h = extractJson<CollabHandoff>(reply)
-    if (h) updateTask(taskId, { handoff: { status: h.status || 'done', filesChanged: Array.isArray(h.filesChanged) ? h.filesChanged : [], verify: h.verify || '' } })
+    if (h) {
+      const files = Array.isArray(h.filesChanged) ? h.filesChanged : []
+      updateTask(taskId, { handoff: { status: h.status || 'done', filesChanged: files, verify: h.verify || '' } })
+      // The app keeps STATUS.md (agents may not be able to write it: read-only runs, Zoey 2026-10-20).
+      const t = getTask(taskId)
+      appendStatus(run, `## ${today()} · Maker (${providerLabelOf(makerProviderOf(run, t!))}) · ${t?.title ?? 'task'} — ${h.status || 'done'}\n\n- Files: ${files.length ? files.map((f) => `\`${f}\``).join(', ') : '(none noted)'}${h.verify ? `\n- To check: ${h.verify}` : ''}\n\n---`)
+    }
   }
   // D-121: the agent stopped at a permission prompt it can't get answered in a background run.
   // Say exactly that (not "deliverable missing"), and go to the Planner: retrying the same
@@ -479,11 +523,18 @@ function onMakerDone(runId: string, taskId: string, messageId: string | null, er
   const bt = getTask(taskId)
   if (blocked && bt?.kind === 'work') {
     const who = providerLabel(makerProviderOf(run, bt), makerProviderOf(run, bt))
+    // D-127: a tool nobody in this run may use is the run's limit, not this agent's — handing the
+    // task to another agent hits the same wall (Read-only test, 2026-10-20: Claude → Grok → Claude).
+    if (runLimited(run, bt, needOfTool(blocked[1]), `${who} stopped asking permission for \`${blocked[1]}\``)) return
     const finding = `${who} was blocked asking permission for ${blocked[1]}: a background run can't answer a permission prompt, so it stopped before finishing. Retrying ${who} unchanged will stop at the same prompt — give the task to another agent, or change it so it doesn't need ${blocked[1]}.`
     appendStatus(run, `## ${today()} · App · ${bt.title} — ${who} blocked at a permission prompt (${blocked[1]})\n\n---`)
     onTaskFailed(runId, taskId, { verdict: 'FAIL', findings: [finding] }, `${who} was blocked asking permission for ${blocked[1]} on “${bt.title}”.`, { stuck: `blocked asking permission for ${blocked[1]}` })
     return
   }
+  // D-127: a Maker blocked by the run's own limits (Read-only, a Tools setting) — before the
+  // deliverables check, which would otherwise retry it for a missing file it was never allowed to make.
+  if (bt?.kind === 'work' && bt.handoff?.status?.toLowerCase() === 'blocked' &&
+    runLimited(run, bt, needOfText(bt.handoff.verify || ''), `${providerLabel(makerProviderOf(run, bt), makerProviderOf(run, bt))} reported it is blocked: ${bt.handoff.verify || 'no reason given'}`)) return
   if (!deliverablesGate(run, taskId, reply)) return
   // D-111: a Maker that says it is blocked won't be helped by a review or a plain retry —
   // go straight to the Planner (no Reviewer run spent).
@@ -498,7 +549,7 @@ function onMakerDone(runId: string, taskId: string, messageId: string | null, er
   // exactly as it was before this attempt fails now — no Reviewer run spent on unchanged work.
   // Only on a first attempt or after a real Reviewer FAIL: after any other failure (the review
   // couldn't be done, or this same check), leaving the file as it is can be correct (test 7).
-  if (t?.kind === 'work' && t.meta.startHash && canWriteFiles(makerProviderOf(run, t)) && (t.meta.lastFailKind === 'review' || (t.attempts <= 1 && !t.lastVerdict))) {
+  if (t?.kind === 'work' && t.meta.startHash && !replyFiles(run, makerProviderOf(run, t)) && (t.meta.lastFailKind === 'review' || (t.attempts <= 1 && !t.lastVerdict))) {
     const outs = scopePaths(t.scope).outputs
     if (outs.length && outputsHash(run, t) === t.meta.startHash) {
       const files = outs.map((p) => `\`${p}\``).join(', ')
@@ -509,6 +560,7 @@ function onMakerDone(runId: string, taskId: string, messageId: string | null, er
       return
     }
   }
+  if (t?.kind === 'work') recordAttempt(run, t)
   runReviewer(runId, taskId, false)
 }
 
@@ -542,9 +594,11 @@ function deliverablesGate(run: CollabRun, taskId: string, reply: string): boolea
   let missing = missingOutputs(outputs, probe)
   const maker = makerProviderOf(run, task)
   const who = providerLabel(maker, maker)
-  if (missing.length && !canWriteFiles(maker)) {
+  if (replyFiles(run, maker)) {
+    // Every output the reply carries in a FILE block is saved (in a Read-only run that includes
+    // existing files the task edits); with no blocks, the whole reply only fills a MISSING file.
     const saved: string[] = []
-    for (const f of filesFromReply(reply, missing)) {
+    for (const f of filesFromReply(reply, reply.includes(FILE_BLOCK_START) ? outputs : missing)) {
       try {
         const abs = ensureInside(run.projectCwd, f.path)
         mkdirSync(join(abs, '..'), { recursive: true }); writeFileSync(abs, f.content, 'utf8'); saved.push(f.path)
@@ -553,12 +607,12 @@ function deliverablesGate(run: CollabRun, taskId: string, reply: string): boolea
     if (saved.length) {
       const h = task.handoff
       updateTask(taskId, { handoff: { status: h?.status || 'done', filesChanged: [...new Set([...(h?.filesChanged ?? []), ...saved])], verify: h?.verify || '' } })
-      appendStatus(run, `## ${today()} · App · ${task.title} — saved ${saved.map((p) => `\`${p}\``).join(', ')} from ${who}'s reply (text-only agent)\n\n---`)
+      appendStatus(run, `## ${today()} · App · ${task.title} — saved ${saved.map((p) => `\`${p}\``).join(', ')} from ${who}'s reply (${canWriteFiles(maker) ? 'Read-only run' : 'text-only agent'})\n\n---`)
       missing = missingOutputs(outputs, probe)
     }
   }
   if (!missing.length) return true
-  const findings = missing.map((p) => `Deliverable missing: \`${p}\` ${p.endsWith('/') ? 'has no files' : 'was not written'} (checked by the app before review). Write it${canWriteFiles(maker) ? '' : ` — reply with it in a "=== FILE: ${p} ===" block`}.`)
+  const findings = missing.map((p) => `Deliverable missing: \`${p}\` ${p.endsWith('/') ? 'has no files' : 'was not written'} (checked by the app before review). Write it${!replyFiles(run, maker) ? '' : ` — reply with it in a "=== FILE: ${p} ===" block`}.`)
   appendStatus(run, `## ${today()} · App check · task ${task.seq + 1} — ${task.title} · FAIL\n\n${findings.map((f, i) => `${i + 1}. ${f}`).join('\n')}\n\n---`)
   onTaskFailed(run.id, taskId, { verdict: 'FAIL', findings }, `${who} didn't produce ${missing.map((p) => `“${p}”`).join(', ')} after ${task.attempts} tries on “${task.title}”.`)
   return false
@@ -569,6 +623,32 @@ function deliverablesGate(run: CollabRun, taskId: string, reply: string): boolea
 // back to its Maker — unless it failed the same way again, which means retrying
 // unchanged won't help: then the Planner is asked for a repair. Otherwise the run
 // pauses and the card offers: retry with a note, reassign, skip, or ask the Planner.
+/**
+ * D-127: the task needs something no agent in this run has (write, shell, web) — because of the
+ * run's mode or a Tools setting. The Planner can't fix that by changing agents, so Troupe pauses
+ * with its own fix: switch the run to Auto (when that would give someone the ability), or turn the
+ * setting on and retry, or skip. Raising permissions always waits for the user's click.
+ */
+function runLimited(run: CollabRun, task: CollabTask, need: Need | null, what: string): boolean {
+  if (!need) return false
+  const ids = enabledAgents()
+  const block = runBlocker(need, ids.map((id) => abilityOf(run, id)), ids.map((id) => abilityOf(run, id, 'auto')))
+  if (!block) return false
+  endTry(task.id, 'blocked', what)
+  updateTask(task.id, { status: 'failed', lastVerdict: { verdict: 'FAIL', findings: [what] } })
+  const readOnly = run.permissionMode === 'read'
+  const settingStep = need === 'shell' ? 'Turn on Shell commands in Settings ▸ Tools' : need === 'web' ? 'Turn on Web access in Settings ▸ Tools' : ''
+  const options: CollabRepairOption[] = []
+  if (readOnly && block.mode) options.push({ label: 'Switch run to Auto, retry', action: 'mode', mode: 'auto', changesGoal: false })
+  else if (settingStep) options.push({ label: 'Retry after the setting', action: 'retry', changesGoal: false, userStep: settingStep })
+  options.push({ label: 'Skip this task', action: 'skip', changesGoal: true, note: `Skipped: no agent in this run can ${NEED_WORD[need]}.` })
+  const summary = `No agent in this ${readOnly ? 'Read-only' : ''} run can ${NEED_WORD[need]}, so another agent would hit the same limit.`.replace('this  run', 'this run')
+  appendStatus(run, `## ${today()} · App · ${task.title} — ${what}. ${summary}\n\n---`)
+  updateCollabRun(run.id, { repair: { taskId: task.id, summary, options, recommended: 0 } })
+  pause(run.id, `“${task.title}” needs to ${NEED_WORD[need]}, which this run doesn't allow${readOnly ? ' (it is Read-only)' : ''}. Pick a fix below.`)
+  return true
+}
+
 function onTaskFailed(runId: string, taskId: string, verdict: CollabVerdict, pausedWhy: string, opts?: { stuck?: string }): void {
   const task = getTask(taskId); if (!task) return
   const run0 = getCollabRunBare(runId); if (!run0) return
@@ -681,7 +761,7 @@ function repairContract(isReview = false): string {
     'Options can only change THIS task: who does it (reassign), its title/scope/acceptance (rewrite), an instruction for its Maker (retry + note), or skipping it. They cannot create files, add tasks or change other tasks — Troupe has no way to do that. If the real fix needs the user to act outside Troupe first (add a missing file, sign in to an agent, install something), say so in "userStep" on a retry/reassign option (e.g. "userStep": "Add README.md to the project folder") — never write a label that promises Troupe will do it.',
     'Keep it short — the user reads this on a small card. "summary": ONE sentence, at most 25 words, plain language. Give 1–3 options; usually one clear best fix is enough, put it first or set "recommended". Labels at most 6 words ("Give T1 to Claude"). "userStep": one short sentence. Do not repeat the same fix with different agents — offer the single best agent. Prefer fixes that keep the goal intact: a different agent that can do the task (see abilities), clearer scope/acceptance, or a concrete instruction. Never offer to retry unchanged.',
     'Every option must be something that can be applied now, from the card. If the cause is in Troupe or an agent\'s setup (an agent can\'t read files, a tool is refused), say so in "summary" and offer reassign or rewrite — never "retry after fixing X" when X needs a change to Troupe\'s code or settings.',
-    'If a finding says the agent "was blocked asking permission" for a tool, that agent cannot use the tool in a background run: never offer a plain retry with it — give the task to another agent, or rewrite the task so it doesn\'t need that tool (e.g. sources the user provides).',
+    'Use the agents\' abilities IN THIS RUN (listed below) — not what they can do elsewhere. If a finding says the agent "was blocked asking permission" for a tool, that agent can\'t use it here: give the task to an agent that CAN in this run, or rewrite the task so it doesn\'t need it. If no agent here can, don\'t move it between agents — say so in "summary" and offer a rewrite or skip (Troupe offers the user the run-mode switch itself).',
     '"changesGoal": true ONLY when what gets delivered changes (different content, a dropped output, weaker acceptance). Giving the task to another agent is NOT a goal change, even if the user named the agent.',
     'If the failures come from the GOAL itself (it contradicts itself or the acceptance criteria — e.g. it says to write 4 questions while acceptance needs 5), renaming the task or switching agents will not help, because the next Maker reads the same goal. Then make the recommended option say so, with "changesGoal": true and "goal": the full corrected goal text — the user confirms it before anything changes.'
   ].join('\n')
@@ -704,7 +784,7 @@ function startRepair(runId: string, taskId: string, opts: { auto: boolean; note?
     '', '## Plan status',
     ...tasks.map((t) => `- ${TASK_NUM(t)} “${t.title}” — ${t.status}${t.provider ? ` · ${t.provider}` : ''}`),
     '', `## The failing task: ${TASK_NUM(task)} “${task.title}”`,
-    `- Agent: "${maker}" (${abilitiesOf(maker)})`,
+    `- Agent: "${maker}" (in this run: ${abilitiesOf(run, maker)})`,
     task.scope ? `- Scope: ${task.scope}` : '',
     task.acceptance ? `- Acceptance: ${task.acceptance}` : '',
     `- Attempts: ${task.attempts}${task.meta.sameFails ? ` · same failure ${task.meta.sameFails} times in a row` : ''}`,
@@ -712,7 +792,7 @@ function startRepair(runId: string, taskId: string, opts: { auto: boolean; note?
     '', '## Latest findings', ...(task.lastVerdict?.findings ?? ['(none)']).map((f, i) => `${i + 1}. ${f}`),
     ...outputState(run, task),
     opts.note ? `\n## The user says\n${opts.note}` : '',
-    '', agentsForPlanner(),
+    '', agentsForPlanner(run),
     repairContract(task.kind === 'review')
   ].filter((l) => l !== '').join('\n')
   bumpRuns(runId, { retry: true })
@@ -789,6 +869,16 @@ function applyRepairOption(runId: string, taskId: string, o: CollabRepairOption,
       return
     }
   }
+  if (o.action === 'mode' && o.mode === 'auto') {
+    // D-127: raise the run to Auto (only ever from the user's click), then retry the task.
+    if (!byPlanner) {
+      setRunPermission(runId, 'auto')
+      appendStatus(run, `## ${today()} · You · run switched to Auto\n\n---`)
+    }
+    updateTask(taskId, { status: 'pending', attempts: 0, lastVerdict: null, meta: addHistory(meta, `retried after the run was switched to Auto (${by})`) })
+    resumeAfterChange(runId)
+    return
+  }
   if (o.action === 'skip') {
     updateTask(taskId, { status: 'skipped', meta: addHistory({ ...meta, skipNote: o.note }, `skipped (${by}): ${o.label}`) })
   } else if (o.action === 'reassign' && o.provider) {
@@ -805,6 +895,22 @@ function applyRepairOption(runId: string, taskId: string, o: CollabRepairOption,
   }
   appendStatus(run, `## ${today()} · Plan change · ${task.title} — ${o.label} (${by})${o.userStep ? `\n\nDone by the user first: ${o.userStep}` : ''}\n\n---`)
   resumeAfterChange(runId)
+}
+
+function setRunPermission(runId: string, mode: PermissionMode): void {
+  getDb().prepare('UPDATE collab_runs SET permission_mode = ?, updated_at = ? WHERE id = ?').run(mode, Date.now(), runId)
+}
+
+/** D-127: switch a run between Read-only and Auto before approving it, or while it's paused. Never to Full access. */
+export function setCollabMode(runId: string, mode: 'read' | 'auto'): CollabRun | null {
+  const run = getCollabRunBare(runId); if (!run) return null
+  if (mode !== 'read' && mode !== 'auto') throw new Error('A Collab run can be switched only between Read-only and Auto.')
+  if (!['awaiting_confirmation', 'needs_attention'].includes(run.status)) throw new Error('Switch the mode before running, or while the run is paused.')
+  if (run.permissionMode === mode) return getCollabRun(runId)
+  setRunPermission(runId, mode)
+  appendStatus(run, `## ${today()} · You · run switched to ${mode === 'auto' ? 'Auto' : 'Read-only'}\n\n---`)
+  emitChanged()
+  return getCollabRun(runId)
 }
 
 /** The user picked one of the Planner's repair options on the card. */
@@ -836,6 +942,8 @@ function runReviewer(runId: string, taskId: string, _isFinal: boolean): void {
       : `**Task:** ${task.title}`,
     !isWholeGoal && task.acceptance ? `**Acceptance criteria:** ${task.acceptance}` : '',
     isWholeGoal ? completedContext(run) : handoffLine,
+    // D-128: Troupe's record — facts, so the review is about the work, not about proving its history.
+    !isWholeGoal && task.meta.recorded ? ['', '## What Troupe recorded for this attempt (facts — no need to verify them)', recordText(task)].join('\n') : '',
     planChangesContext(run, isWholeGoal ? null : task.id),
     'Open the files named above and verify against the acceptance criteria. Do not read the full status log.',
     readHint(reviewerOf(run, task)),
@@ -912,6 +1020,8 @@ export function reviewerCouldNotCheck(findings: string[]): boolean {
 }
 
 /** The Reviewer couldn't check the work: move the review to another agent and run it again. */
+// D-128: say what actually stopped the reviewer (the wrap-up retold every block as "couldn't open the files").
+const shortReason = (r: string): string => { const one = r.replace(/\s+/g, ' ').trim(); return one.length > 140 ? one.slice(0, 137) + '…' : one }
 function reviewBlocked(runId: string, taskId: string, why: string[]): void {
   const run = getCollabRun(runId); const task = getTask(taskId); if (!run || !task) return
   const was = reviewerOf(run, task)
@@ -923,10 +1033,10 @@ function reviewBlocked(runId: string, taskId: string, why: string[]): void {
   appendStatus(run, `## ${today()} · App · ${task.title} — ${providerLabelOf(was)} couldn't check the work: ${reason}${next ? ` Review moved to ${providerLabelOf(next)}; the Maker's work stands.` : ''}\n\n---`)
   if (!next) {
     updateTask(taskId, { meta: { ...task.meta, blockedReviewers: [...tried] } })
-    pause(runId, `No agent could review “${task.title}”: ${providerLabelOf(was)} couldn't open the files (${reason}). The work itself wasn't found faulty — skip the review, or turn on another agent in Settings ▸ Agents and Resume.`)
+    pause(runId, `No agent could review “${task.title}”: ${providerLabelOf(was)} couldn't complete the review (${reason}). The work itself wasn't found faulty — skip the review, or turn on another agent in Settings ▸ Agents and Resume.`)
     return
   }
-  updateTask(taskId, { meta: addHistory({ ...task.meta, reviewer: next, blockedReviewers: [...tried] }, `review moved to ${providerLabelOf(next)}: ${providerLabelOf(was)} couldn't open the files`) })
+  updateTask(taskId, { meta: addHistory({ ...task.meta, reviewer: next, blockedReviewers: [...tried] }, `review moved to ${providerLabelOf(next)}: ${providerLabelOf(was)} couldn't complete the review — ${shortReason(reason)}`) })
   emitChanged()
   runReviewer(runId, taskId, false)
 }
@@ -990,13 +1100,14 @@ function wrapUpPrompt(run: CollabRun, ending: 'done' | 'stopped'): string {
     // wrap-up once said Grok "was never tested" after Grok had failed twice and Claude took over.
     const tries = t.kind === 'work' && t.meta.tries?.length ? `\n  attempts, in order: ${triesText(t.meta.tries, (a) => providerLabelOf(a))}` : ''
     const changes = t.meta.history?.length ? `\n  plan changes: ${t.meta.history.join('; ')}` : ''
-    return `- ${TASK_NUM(t)} “${t.title}” — ${t.status.replace('_', ' ')} · ${who}${t.kind === 'work' ? ` · reviewed by ${providerLabelOf(reviewerOf(run, t))}` : ''}${files}${why}${tries}${changes}`
+    const rec = t.kind === 'work' ? recordText(t) : ''
+    return `- ${TASK_NUM(t)} “${t.title}” — ${t.status.replace('_', ' ')} · ${who}${t.kind === 'work' ? ` · reviewed by ${providerLabelOf(reviewerOf(run, t))}` : ''}${files}${why}${tries}${changes}${rec ? `\n  record: ${rec.slice(2)}` : ''}`
   }
   return [
     `You are the Planner. Write the WRAP-UP for a Collab run that ${ending === 'stopped' ? 'the user STOPPED before it finished' : 'has finished'}. Goal:`, '', run.goal, '',
     '## Tasks', ...tasks.map(line),
     run.outputDir ? `\nDeliverables folder: \`${run.outputDir}/\`` : '',
-    '', 'The attempts and plan changes above are the record of what happened — report them as they are (who tried, what failed, who took over); do not guess.',
+    '', 'The attempts, plan changes and records above are what happened — report them as they are (who tried, what failed, who took over, and the exact reason a review moved); do not guess or paraphrase a reason into another one.',
     'Open the deliverables to judge them (read only — do not edit any file, do not read STATUS.md in full).',
     'Reply in markdown with exactly these four sections, under 200 words in total, no JSON:',
     '## Outcome', `One or two sentences on what the run actually delivered, judged against the goal — not a restatement of the goal.${ending === 'stopped' ? ' Say what got done, what did not, and where it stopped.' : ''}`,

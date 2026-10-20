@@ -84,6 +84,8 @@ export function workFolderRules(cwd: string | undefined, addDirs: string[] = [])
     // D-103: "save everything inside the project" made agents point Xcode's DerivedData and
     // other build caches into the project (3 GB in one project). Deliverables only.
     'This is for things you make for the user. Build output, dependency installs and caches — Xcode DerivedData, Gradle or npm build folders, simulator data, package caches — stay at the tool\'s default location outside the project; never point them into the project (for example, no -derivedDataPath inside it).',
-    'Search and read only inside the project folder' + (addDirs.length ? ' and the additional folders' : '') + '. Do not scan the home folder, Desktop, Documents or Downloads, and do not use AppleScript or open other apps to look for files.'
+    'Search and read only inside the project folder' + (addDirs.length ? ' and the additional folders' : '') + '. Do not scan the home folder, Desktop, Documents or Downloads, and do not use AppleScript or open other apps to look for files.',
+    // D-126: attachments are copied into the project per chat; another chat's are not yours to read.
+    'Files under .workbench/attachments/ were attached in individual chats: open only the ones this conversation gives you or links to, never browse or search that folder.'
   ].join(' ')
 }

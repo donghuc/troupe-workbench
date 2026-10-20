@@ -114,7 +114,9 @@ describe('providers through CliProcess (D-096)', () => {
     const evs = await collect(new GrokProvider().run(req({ permissionMode: 'auto' })))
     const argv = recorded('grok').argv
     expect(argv.slice(argv.indexOf('--permission-mode'), argv.indexOf('--permission-mode') + 4)).toEqual(['--permission-mode', 'acceptEdits', '--allow', 'Edit'])
-    expect(argv[argv.indexOf('--disallowed-tools') + 1]).toContain('run_terminal_command')
+    // D-127: the tools Grok may have are named; the shell isn't among them
+    expect(argv[argv.indexOf('--tools') + 1]).toContain('write')
+    expect(argv[argv.indexOf('--tools') + 1]).not.toContain('run_terminal_command')
     expect(evs.filter((e) => e.type === 'text_delta').map((e: any) => e.text).join('')).toMatch(/Grok stopped before finishing \(`cancelled`\)/)
   })
   it('Custom (text): prompt as one argument, context preamble, plain text streamed', async () => {
@@ -165,9 +167,11 @@ describe('providers through CliProcess (D-096)', () => {
   })
   it('Custom: a preset binary must really be that agent', async () => {
     const { findPresetBin } = await import('./CustomCliProvider')
+    // Only the fake bin folder on PATH: a real Cursor install on the machine must not change the answer.
+    const env = { ...process.env, PATH: bin }
     fake('agent', [])   // a generic name, not linked to anything that says "cursor"
-    expect(findPresetBin('cursor', ['cursor-agent', 'agent'], process.env)).toBeNull()
+    expect(findPresetBin('cursor', ['cursor-agent', 'agent'], env)).toBeNull()
     fake('cursor-agent', [])
-    expect(findPresetBin('cursor', ['cursor-agent', 'agent'], process.env)).toBe('cursor-agent')
+    expect(findPresetBin('cursor', ['cursor-agent', 'agent'], env)).toBe('cursor-agent')
   })
 })

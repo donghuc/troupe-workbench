@@ -1,3 +1,4 @@
+import { failed } from '../notices'
 import { Badge } from './ui/Badge'
 import { OS_WORDS } from '../../../shared/platform'
 import { confirmDialog } from './ui/ConfirmDialog'
@@ -232,6 +233,18 @@ export default function CollabCard({ run, providers, onOpenFile }: { run: Collab
         <div className="collab-reason warn collab-checks">
           <strong>Check before running</strong>
           <ul>{run.reason.split('\n').filter(Boolean).map((l, i) => <li key={i}>{l}</li>)}</ul>
+        </div>
+      )}
+
+      {/* D-127: what the run may do, switchable before it starts (never to Full access). */}
+      {editing && (run.permissionMode === 'read' || run.permissionMode === 'auto') && (
+        <div className="collab-mode">
+          {run.permissionMode === 'read'
+            ? 'Read-only: agents read the project but can’t change files or run commands; Troupe saves their deliverables from their replies.'
+            : 'Auto: agents change files in the project; commands follow Settings ▸ Tools.'}
+          <Button variant="link" disabled={busy} onClick={() => { setBusy(true); api.collab.setMode(run.id, run.permissionMode === 'read' ? 'auto' : 'read').catch(failed('Switch mode')).finally(() => setBusy(false)) }}>
+            {run.permissionMode === 'read' ? 'Switch to Auto' : 'Switch to Read-only'}
+          </Button>
         </div>
       )}
 

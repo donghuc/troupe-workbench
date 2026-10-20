@@ -7,19 +7,24 @@ import { cpus } from 'os'
 import { join } from 'path'
 import {
   VOICE_MODELS, DEFAULT_VOICE_MODEL, voiceModelUrl, voiceLanguage,
-  VOICE_MAX_BYTES, VOICE_MODEL_SETTING, VOICE_LANGUAGE_SETTING, type VoiceModel, type VoiceModelId, type VoiceDownloadEvent, type VoiceStatus, type VoiceResult
+  VOICE_MAX_BYTES, VOICE_MODEL_SETTING, VOICE_LANGUAGE_SETTING, VOICE_SPEED_SETTING, per20s, type VoiceModel, type VoiceModelId, type VoiceDownloadEvent, type VoiceStatus, type VoiceResult
 } from '../../shared/voice'
 
 /** The part of @fugood/whisper.node we use (loaded lazily: it's a native module). */
 export interface WhisperCtx {
   transcribeData(pcm: ArrayBuffer, opts: { language?: string; temperature?: number; maxThreads?: number }): { stop: () => Promise<void>; promise: Promise<{ result: string; language?: string; isAborted: boolean }> }
   release(): Promise<void>
+  /** Set by the loader: whether this context runs on the graphics card. */
+  backend?: 'gpu' | 'cpu'
 }
 export interface VoiceDeps {
   dir: string
   fetch: (url: string, init: { signal: AbortSignal }) => Promise<Response>
   initWhisper: (modelPath: string) => Promise<WhisperCtx>
   getSetting: (key: string) => string | null
+  setSetting?: (key: string, value: string) => void
+  /** The system's language ("vi-VN"), used until you pick a dictation language. */
+  systemLocale?: () => string
   emit: (e: VoiceDownloadEvent) => void
   /** Release the loaded model after this long unused (it holds a few hundred MB). */
   idleMs?: number
@@ -41,6 +46,14 @@ export function createVoiceService(deps: VoiceDeps) {
   let current: { stop: () => Promise<void> } | null = null
   let queue: Promise<unknown> = Promise.resolve()
   let idle: ReturnType<typeof setTimeout> | null = null
+  let backend: 'gpu' | 'cpu' | null = null
+
+  // How long this computer takes per second of speech, per model (shown in Settings).
+  const speeds = (): Record<string, number> => { try { return JSON.parse(deps.getSetting(VOICE_SPEED_SETTING) ?? '{}') ?? {} } catch { return {} } }
+  const recordSpeed = (id: string, msPerSec: number) => {
+    if (!deps.setSetting || !Number.isFinite(msPerSec) || msPerSec < 0) return
+    deps.setSetting(VOICE_SPEED_SETTING, JSON.stringify({ ...speeds(), [id]: Math.max(1, Math.round(msPerSec)) }))
+  }
 
   const pathOf = (m: VoiceModel) => join(deps.dir, m.file)
   const installed = async (m: VoiceModel): Promise<boolean> => {
@@ -49,12 +62,14 @@ export function createVoiceService(deps: VoiceDeps) {
 
   async function status(): Promise<VoiceStatus> {
     const sel = find(deps.getSetting(VOICE_MODEL_SETTING))?.id ?? (find(DEFAULT_VOICE_MODEL) ?? catalog[0]).id
+    const sp = speeds()
     const models = await Promise.all(catalog.map(async (m) => ({
       id: m.id, label: m.label, bytes: m.bytes, note: m.note,
-      installed: await installed(m), downloading: downloads.has(m.id), received: downloads.get(m.id)?.received ?? 0
+      installed: await installed(m), downloading: downloads.has(m.id), received: downloads.get(m.id)?.received ?? 0,
+      secPer20s: typeof sp[m.id] === 'number' ? per20s(sp[m.id]) : null
     })))
     const active = models.find((m) => m.id === sel && m.installed)?.id ?? models.find((m) => m.installed)?.id ?? null
-    return { models, selected: sel, active, language: voiceLanguage(deps.getSetting(VOICE_LANGUAGE_SETTING)), folder: deps.dir }
+    return { models, selected: sel, active, language: voiceLanguage(deps.getSetting(VOICE_LANGUAGE_SETTING), deps.systemLocale?.() ?? ''), folder: deps.dir, backend }
   }
 
   /** Download a model to `<file>.part`, check its SHA-256, then move it into place. */
@@ -121,7 +136,7 @@ export function createVoiceService(deps: VoiceDeps) {
     if (loaded?.path === path) return loaded.ctx
     await release()
     loading = deps.initWhisper(path)
-    try { const ctx = await loading; loaded = { path, ctx }; return ctx } finally { loading = null }
+    try { const ctx = await loading; loaded = { path, ctx }; backend = ctx.backend ?? backend; return ctx } finally { loading = null }
   }
 
   const keepWarm = () => {
@@ -157,8 +172,10 @@ export function createVoiceService(deps: VoiceDeps) {
       try {
         const r = await job.promise
         const ms = Date.now() - t0
-        deps.log?.('voice: transcribed', { model: m.id, audioSec: Math.round(pcm.byteLength / 3200) / 10, loadMs, ms, language: r.language, aborted: r.isAborted })
+        const audioSec = pcm.byteLength / 32_000
+        deps.log?.('voice: transcribed', { model: m.id, backend, audioSec: Math.round(audioSec * 10) / 10, loadMs, ms, language: st.language, aborted: r.isAborted })
         if (r.isAborted) return { text: '', ms }
+        if (audioSec >= 3) recordSpeed(m.id, (ms - loadMs) / audioSec)
         return { text: r.result ?? '', language: r.language, ms }
       } finally {
         current = null

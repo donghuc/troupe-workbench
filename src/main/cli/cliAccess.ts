@@ -2,10 +2,10 @@ import { app, powerSaveBlocker } from 'electron'
 import { join } from 'path'
 import { getSetting } from '../database/settingsRepo'
 import { startCliServer, stopCliServer, cliServerOpen } from './cliServer'
-import { installCommand, installCommandWin, type InstallResult } from './cliInstall'
+import { installCommand, installCommandWin, winWrapperFor, winScriptFor, WRAPPER_MARK, type InstallResult } from './cliInstall'
 import { execFileSync } from 'child_process'
 import { randomBytes } from 'crypto'
-import { writeFileSync, unlinkSync } from 'fs'
+import { writeFileSync, unlinkSync, existsSync, readFileSync } from 'fs'
 import { userInfo } from 'os'
 import { buildEnv, resetLoginPath } from '../providers/env'
 import { powershellExe } from '../agents/setupRules'
@@ -39,6 +39,7 @@ export async function refreshCliAccess(): Promise<void> {
         const token = randomBytes(32).toString('hex')
         writeFileSync(tokenFile(), token, { mode: 0o600 })   // %APPDATA% is readable only by this user
         await startCliServer(cliSocketPath(), { pipe: true, token })
+        refreshInstalledWin()
       } else await startCliServer(cliSocketPath())
       keepAwake(true)
     } catch (e) { logError('[cli] could not open the socket', String(e)) }
@@ -58,9 +59,26 @@ export function installCli(): InstallResult {
   return installCommand(cliScriptPath(), buildEnv().PATH ?? '')
 }
 
+const winBinDir = (): string => join(process.env.LOCALAPPDATA || join(app.getPath('home'), 'AppData', 'Local'), 'Troupe', 'bin')
+
+/** An app update can change the wrapper (2.11.1: arguments no longer go through PowerShell);
+ *  rewrite an installed copy of ours so nobody has to click Reinstall. Never touches PATH. */
+function refreshInstalledWin(): void {
+  try {
+    const cmd = join(winBinDir(), 'troupe.cmd')
+    if (!existsSync(cmd)) return
+    const cur = readFileSync(cmd, 'utf8')
+    if (!cur.includes(WRAPPER_MARK)) return
+    const ps1 = join(winBinDir(), 'troupe-run.ps1')
+    const ps1Now = existsSync(ps1) ? readFileSync(ps1, 'utf8') : ''
+    if (cur === winWrapperFor() && ps1Now === '\ufeff' + winScriptFor(process.execPath, cliScriptPath(), cliSocketPath(), tokenFile())) return
+    installCommandWin(process.execPath, cliScriptPath(), cliSocketPath(), tokenFile(), winBinDir(), '')
+  } catch (e) { logError('[cli] could not update troupe.cmd', String(e)) }
+}
+
 /** Windows: write troupe.cmd to %LOCALAPPDATA%\\Troupe\\bin and put that folder on the user PATH. */
 function installCliWin(): InstallResult {
-  const dir = join(process.env.LOCALAPPDATA || join(app.getPath('home'), 'AppData', 'Local'), 'Troupe', 'bin')
+  const dir = winBinDir()
   const r = installCommandWin(process.execPath, cliScriptPath(), cliSocketPath(), tokenFile(), dir, '')
   // [Environment]::SetEnvironmentVariable updates the registry and tells Windows, so new
   // terminals see it. The folder goes in through an env var, never into the script text.

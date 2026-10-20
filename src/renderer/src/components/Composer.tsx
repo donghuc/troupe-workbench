@@ -20,6 +20,7 @@ import { Menu } from './ui/Menu'
 import { Button, IconButton } from './ui/Button'
 import { Segmented } from './ui/Segmented'
 import VoiceButton from './VoiceButton'
+import AttachmentsModal from './AttachmentsModal'
 import { insertAtCaret } from '../../../shared/voice'
 
 interface Props {
@@ -35,6 +36,8 @@ interface Props {
   defaultPermissionMode?: PermissionMode | null
   onPermissionModeChange?: (mode: PermissionMode) => void
   draftKey?: string
+  /** The chat this composer sends to (for its attachment list, D-126). */
+  chatId?: string
   busy?: boolean
   onStop?: () => void
   // Text appended to the input, and/or selected passages added as a chip (D-065).
@@ -54,7 +57,7 @@ const PERM_OPTS: { v: PermissionMode; l: string; d: string }[] = [
   { v: 'full', l: 'Full access', d: 'No restrictions' }
 ]
 
-export default function Composer({ providers, onSend, disabled, placeholder = 'How can I help you today?', autoFocus, defaultProvider, folderPath, enableSkills, defaultModel, defaultPermissionMode, onPermissionModeChange, draftKey, busy, onStop, inject, onQuickMemory, onProviderChange, onStartCollab, collabAvailable, collabBusy }: Props) {
+export default function Composer({ providers, onSend, disabled, placeholder = 'How can I help you today?', autoFocus, defaultProvider, folderPath, enableSkills, defaultModel, defaultPermissionMode, onPermissionModeChange, draftKey, chatId, busy, onStop, inject, onQuickMemory, onProviderChange, onStartCollab, collabAvailable, collabBusy }: Props) {
   const [text, setText] = useState(() => (draftKey ? getDraft(draftKey) : ''))
   const [mode, setMode] = useState<'chat' | 'collab'>('chat')
   const [providerId, setProviderId] = useState<ProviderId>(defaultProvider ?? providers[0]?.id ?? 'claude-code')
@@ -78,6 +81,7 @@ export default function Composer({ providers, onSend, disabled, placeholder = 'H
   useEffect(() => { if (defaultPermissionMode) setPermModeRaw(defaultPermissionMode) }, [defaultPermissionMode])
   const [permOpen, setPermOpen] = useState(false)
   const [attachOpen, setAttachOpen] = useState(false)
+  const [manageAttach, setManageAttach] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [pmOpen, setPmOpen] = useState(false)
   // The agent/model menu is rendered in a portal at fixed coordinates so no scrolling
@@ -326,6 +330,10 @@ export default function Composer({ providers, onSend, disabled, placeholder = 'H
               <button onClick={() => removeAt(i)} aria-label="Remove">✕</button>
             </span>
           ))}
+          {/* D-126: say where dropped files go, and who can read them. */}
+          {folderPath && attachments.some((a) => a.kind === 'file') && (
+            <span className="attach-shared">Copied into this project — its agents can open it. <Button variant="link" onClick={() => setManageAttach(true)}>Manage</Button></span>
+          )}
         </div>
       )}
       {mode === 'collab' && collabBusy && (
@@ -391,6 +399,7 @@ export default function Composer({ providers, onSend, disabled, placeholder = 'H
             <Menu open={attachOpen} onClose={() => setAttachOpen(false)} className="attach-menu">
                 <button onClick={() => { setAttachOpen(false); fileInputRef.current?.click() }}>Upload files…</button>
                 {folderPath && <button onClick={() => { setAttachOpen(false); setPicking(true) }}>From project folder</button>}
+                {folderPath && <button onClick={() => { setAttachOpen(false); setManageAttach(true) }}>Attachments in this project…</button>}
             </Menu>
           </div>
           {onStartCollab && (
@@ -455,6 +464,8 @@ export default function Composer({ providers, onSend, disabled, placeholder = 'H
             : <button className="send-btn" disabled={(!text.trim() && !(selections.length && !memoryMode)) || disabled || (mode === 'collab' && collabBusy)} onClick={submit} title={mode === 'collab' && collabBusy ? 'A Collab run is already active' : 'Send'}><Icon name="send" size="md" /></button>}
         </div>
       </div>
+
+      {manageAttach && folderPath && <AttachmentsModal root={folderPath} chatId={chatId} onClose={() => setManageAttach(false)} />}
 
       {picking && folderPath && (
         <Modal title="Attach files to this message" onClose={() => setPicking(false)} footer={<Button onClick={() => setPicking(false)}>Done</Button>}>

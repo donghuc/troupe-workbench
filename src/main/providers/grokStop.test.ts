@@ -4,7 +4,7 @@ vi.mock('../util/logger', () => ({ logInfo: () => {}, logError: () => {}, logWar
 import { mkdtempSync, mkdirSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-const { grokStopNote, grokModeRule, grokPermFlags, grokBlockedTool, withGrokDependants, learnGrokRequirements } = await import('./GrokProvider')
+const { grokStopNote, grokModeRule, grokPermFlags, grokPermFlagsLegacy, grokToolsListRejected, grokBlockedTool, withGrokDependants, learnGrokRequirements } = await import('./GrokProvider')
 const { PERMISSION_BLOCKED_RE } = await import('../../shared/collabRecovery')
 
 describe('Grok stop reasons and the Auto rule (D-121)', () => {
@@ -35,14 +35,23 @@ describe('Grok stop reasons and the Auto rule (D-121)', () => {
     const note = grokStopNote('cancelled', 'auto', 'web_fetch')
     expect(PERMISSION_BLOCKED_RE.exec(note)?.[1]).toBe('web_fetch')
   })
-  it('pre-approves what each mode needs and removes what would still ask (D-121)', () => {
-    const auto = grokPermFlags('auto', { web: true })
+  it('names the tools Grok may have in Read-only and Auto — no shell, which --disallowed-tools never removed (D-127)', () => {
+    const auto = grokPermFlags('auto', { web: true }).join(' ')
+    expect(auto).toBe('--permission-mode acceptEdits --allow Edit --allow MCPTool --allow WebFetch --allow WebSearch --tools read_file,list_dir,grep,todo_write,write,search_replace,search_tool,use_tool,image_gen,image_edit,image_to_video,reference_to_video,web_fetch')
+    const read = grokPermFlags('read', { web: true }).join(' ')
+    expect(read).toBe('--permission-mode plan --tools read_file,list_dir,grep,todo_write')
+    expect(grokPermFlags('read', { web: true, allowWeb: true }).at(-1)).toContain('web_fetch')
+    for (const m of ['auto', 'read']) expect(grokPermFlags(m, { web: true }).join(' ')).not.toContain('run_terminal_command')
+    expect(grokToolsListRejected('all good')).toBe(false)
+  })
+  it('pre-approves what each mode needs and removes what would still ask (D-121, the fallback)', () => {
+    const auto = grokPermFlagsLegacy('auto', { web: true })
     expect(auto.join(' ')).toBe('--permission-mode acceptEdits --allow Edit --allow MCPTool --allow WebFetch --allow WebSearch --disallowed-tools ask_user_question,enter_plan_mode,scheduler_create,scheduler_delete,run_terminal_command,exit_plan_mode,scheduler_list')
-    expect(grokPermFlags('auto', { web: false }).at(-1)).toContain('web_fetch,web_search')
-    const read = grokPermFlags('read', { web: true, allowWeb: true })
+    expect(grokPermFlagsLegacy('auto', { web: false }).at(-1)).toContain('web_fetch,web_search')
+    const read = grokPermFlagsLegacy('read', { web: true, allowWeb: true })
     expect(read.slice(0, 6)).toEqual(['--permission-mode', 'plan', '--allow', 'WebFetch', '--allow', 'WebSearch'])
     expect(read.at(-1)).toContain('write,search_replace')
-    expect(grokPermFlags('read', { web: true }).at(-1)).toContain('web_fetch')
+    expect(grokPermFlagsLegacy('read', { web: true }).at(-1)).toContain('web_fetch')
     expect(grokPermFlags('full', { web: true }).slice(0, 2)).toEqual(['--permission-mode', 'bypassPermissions'])
   })
 
@@ -55,6 +64,6 @@ describe('Grok stop reasons and the Auto rule (D-121)', () => {
     expect(learnGrokRequirements('some other error')).toEqual([])
     expect(learnGrokRequirements(err)).toEqual(['scheduler_list', 'exit_plan_mode', 'monitor'])
     expect(learnGrokRequirements(err)).toEqual([])                       // already known: no second retry
-    expect(grokPermFlags('auto', { web: true }).at(-1)).toContain('monitor')
+    expect(grokPermFlagsLegacy('auto', { web: true }).at(-1)).toContain('monitor')
   })
 })

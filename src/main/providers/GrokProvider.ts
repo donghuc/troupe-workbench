@@ -93,6 +93,11 @@ export class GrokProvider implements AgentProvider {
     // D-121: grok refuses to start a session when a tool we removed is required by one we kept
     // (test 6: exit_plan_mode needs enter_plan_mode; scheduler_list needs the scheduler). Its
     // error names each unsatisfied tool: remove those too, remember them, and start once more.
+    if (res.code && req.toolProfile !== 'image' && !this.cancelled && grokToolsListRejected(`${res.stderr}\n${res.stdout}`)) {
+      logInfo('[grok] --tools list refused; using the older flags', JSON.stringify({ stderr: res.stderr.slice(0, 300) }))
+      const again = argsFor(grokPermFlags(mode, { web: getSetting('agent_web_access') !== '0', allowWeb: !!req.allowWeb }))
+      res = await this.exec(resumeSessionId ? [...again, '--resume', resumeSessionId] : again, req.cwd)
+    }
     if (res.code && req.toolProfile !== 'image' && !this.cancelled) {
       const learned = learnGrokRequirements(`${res.stderr}\n${res.stdout}`)
       if (learned.length) {
@@ -227,7 +232,33 @@ export function grokModeRule(mode: string, toolProfile?: string): string {
  * Never in a headless run: ask_user_question / enter_plan_mode (both wait for a person) and
  * the scheduler (it would create grok-side scheduled jobs).
  */
+// D-127: Grok's session logs (2026-10-20) show `--disallowed-tools run_terminal_command` never
+// took effect — the shell was offered in every session, and in a Read-only Collab Grok used it and
+// stopped at its prompt. So Read-only and Auto name the tools Grok may have (`--tools`, as the image
+// profile already does) instead of listing what to remove. Names as Grok reports them.
+const GROK_READ_TOOLS = ['read_file', 'list_dir', 'grep', 'todo_write']
+const GROK_WRITE_TOOLS = ['write', 'search_replace']
+const GROK_MCP_TOOLS = ['search_tool', 'use_tool']
+const GROK_IMAGE_TOOLS = ['image_gen', 'image_edit', 'image_to_video', 'reference_to_video']
+let grokToolsListUnsupported = false
+
 export function grokPermFlags(mode: string, opts: { web: boolean; allowWeb?: boolean }): string[] {
+  if (mode === 'full' || grokToolsListUnsupported) return grokPermFlagsLegacy(mode, opts)
+  const web = mode === 'read' ? opts.web && !!opts.allowWeb : opts.web
+  const allow = mode === 'read' ? [] : ['Edit', 'MCPTool']
+  if (web) allow.push('WebFetch', 'WebSearch')
+  const tools = [...GROK_READ_TOOLS, ...(mode === 'read' ? [] : [...GROK_WRITE_TOOLS, ...GROK_MCP_TOOLS, ...GROK_IMAGE_TOOLS]), ...(web ? ['web_fetch'] : [])]
+  return ['--permission-mode', mode === 'read' ? 'plan' : 'acceptEdits', ...allow.flatMap((r) => ['--allow', r]), '--tools', tools.join(',')]
+}
+/** Grok rejected the `--tools` list (an older or newer CLI with other tool names): fall back for the rest of the session. */
+export function grokToolsListRejected(output: string): boolean {
+  if (grokToolsListUnsupported || !/(--tools|unknown tool|invalid tool|no such tool|not a valid tool)/i.test(output)) return false
+  grokToolsListUnsupported = true
+  return true
+}
+
+/** The D-121 flags: pre-approve, and remove what would still ask (shell removal doesn't hold — see above). */
+export function grokPermFlagsLegacy(mode: string, opts: { web: boolean; allowWeb?: boolean }): string[] {
   const never = ['ask_user_question', 'enter_plan_mode', 'scheduler_create', 'scheduler_delete']
   const finish = (remove: string[]) => withGrokDependants(remove).join(',')
   if (mode === 'full') return ['--permission-mode', 'bypassPermissions', '--disallowed-tools', finish(never)]

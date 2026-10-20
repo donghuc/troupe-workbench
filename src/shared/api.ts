@@ -11,6 +11,7 @@ import type { ModelLists } from './models'
 import type { Outcome } from './decisions'
 import type { CheckResult } from './contextCheck'
 import type { ProviderId as PId } from './types'
+import type { ProjectAttachment } from './attachmentPaths'
 import type { VoiceStatus, VoiceModelId, VoiceResult, VoiceDownloadEvent } from './voice'
 import type { Canvas, CanvasIndex, ImageRunInput, ImageRunDone, ImageRunEvent } from './imageCanvas'
 export interface ContextCheckReport { agent: PId; results: CheckResult[]; passed: number; total: number }
@@ -53,6 +54,8 @@ export interface WorkbenchApi {
   attachments: {
     saveBinary(base64: string, name: string): Promise<string>
     extractPdf(absPath: string): Promise<string>
+    list(root: string): Promise<ProjectAttachment[]>            // D-126
+    remove(root: string, relPath: string): Promise<void>
   }
   outcomes: {   // decisions log (D-081)
     draft(conversationId: string, messageId?: string): Promise<Outcome>
@@ -211,6 +214,7 @@ export interface WorkbenchApi {
     start(input: CollabStartInput): Promise<CollabRun>
     confirmPlan(runId: string, editedTasks?: CollabTaskDraft[]): Promise<CollabRun | null>
     stop(runId: string): Promise<CollabRun | null>
+    setMode(runId: string, mode: 'read' | 'auto'): Promise<CollabRun | null>   // D-127: before approving, or while paused
     resume(runId: string, opts?: { raiseBudget?: boolean }): Promise<CollabRun | null>
     /** D-109: fix a failed task on a paused run — retry with a note, reassign, skip, or ask the Planner. */
     recover(runId: string, taskId: string, action: CollabRecoverAction): Promise<CollabRun | null>

@@ -6,7 +6,7 @@ import { senderForRun, broadcastConversationsChanged } from '../agent/headless'
 import { readRunLog } from '../agent/runLog'
 import { listSchedules, getSchedule } from '../schedules/schedulesRepo'
 import { runScheduleNow } from '../schedules/scheduler'
-import { listCollabRuns } from '../collab/collabRepo'
+import { listCollabRuns, getCollabRunBare } from '../collab/collabRepo'
 import { listTree, readTextFile } from '../filesystem/fsService'
 import { resolveProjectMemory } from '../context/memoryDelivery'
 import { getSetting } from '../database/settingsRepo'
@@ -14,12 +14,12 @@ import { enabledProviderIds, providerLabel, DISABLED_AGENTS_SETTING } from '../.
 import { presetsFor, parseDisabledModels, DISABLED_MODELS_SETTING } from '../../shared/models'
 import { modelLists } from '../tools/codexModels'
 import { logInfo } from '../util/logger'
-import { attachFiles } from './cliAttach'
+import { attachFiles, checkAttachments } from './cliAttach'
 import { runCollabCommand } from './cliCollab'
 import type { Conversation, Message, ProviderId, FileNode } from '../../shared/types'
 import {
   CliError, pickOne, parseMode, parseThink, parseSince, titleFrom, clampLast, clampWait, encodeRunId, decodeRunId,
-  projectsText, chatsText, messagesText, statusText, runsText, schedulesText, searchText, describeSchedule,
+  projectsText, chatsText, messagesText, statusText, runsText, collabLogState, schedulesText, searchText, describeSchedule,
   filesChanged, isSecretPath, CLI_MAX_MESSAGE,
   type CliProject, type CliChat, type CliMessage, type CliStatus, type CliSchedule, type CliSearchHit
 } from '../../shared/cliProtocol'
@@ -129,8 +129,11 @@ async function send(q: Params, closed: () => boolean): Promise<CliResult> {
     while (isBusy(chat.id) && Date.now() < until && !closed()) await sleep(1000)
     if (isBusy(chat.id)) throw busyError()
   }
-  const attachments = await attachFiles(q.getAll('attach'), project.folderPath)
+  // Check the files first (a bad path must not leave an empty new chat), then copy them into the chat's folder.
+  const attachPaths = q.getAll('attach')
+  await checkAttachments(attachPaths)
   if (!chat) { chat = createConversation(project.id, titleFrom(message), agent); broadcastConversationsChanged() }
+  const attachments = attachPaths.length ? await attachFiles(attachPaths, project.folderPath, chat.id) : []
   try {
     startTurn(senderForRun(), {
       conversationId: chat.id, text: message, defaultProvider: agent,
@@ -198,6 +201,14 @@ function runs(q: Params): CliResult {
   const project = q.get('project')?.trim() ? findProject(q.get('project')!).name : null
   const source = q.get('source')?.trim().toLowerCase() || null
   const list = readRunLog(since).filter((e) => (!project || e.project === project) && (!source || e.source === source))
+    .map((e) => {
+      if (e.kind !== 'collab') return e
+      const run = getCollabRunBare(e.run)
+      // Its chat was deleted, and the run with it: nothing left to look up.
+      if (!run) return { ...e, state: 'deleted' as const, error: 'The run and its chat were deleted.' }
+      const st = collabLogState(run.status, run.reason)
+      return { ...e, ...st, finishedAt: st.state === 'running' ? e.finishedAt : run.updatedAt }
+    })
   return ok(list, runsText(list))
 }
 

@@ -152,6 +152,11 @@ button { font-family: inherit; font-size: var(--fs-sm); border: none; background
    The recording dot is red by convention (D-122 exception) — it's the only red that isn't a destructive action. */
 .mic-btn { width: 32px; height: 32px; display: grid; place-items: center; border-radius: var(--r-md); color: var(--text-secondary); }
 .mic-btn:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); }
+.voice-lang-wrap { position: relative; display: inline-flex; }
+.voice-lang-chip { height: 24px; min-width: 30px; padding: 0 var(--sp-1-5); border-radius: var(--r-sm); border: 1px solid var(--border-default); font-size: var(--fs-xs); font-weight: var(--fw-medium); letter-spacing: 0.02em; color: var(--text-secondary); }
+.voice-lang-chip:hover { background: var(--bg-hover); color: var(--text-primary); }
+.voice-lang-menu { min-width: 180px; max-height: 320px; overflow-y: auto; }
+.voice-lang-menu .perm-opt { flex-direction: row; align-items: center; justify-content: space-between; width: 100%; }
 .mic-btn:disabled { opacity: var(--opacity-40); cursor: default; }
 .voice-pill { display: inline-flex; align-items: center; gap: var(--sp-1-5); height: 32px; padding: 0 var(--sp-1) 0 var(--sp-3); border-radius: var(--r-full); background: var(--bg-sunken); font-size: var(--fs-sm); color: var(--text-secondary); }
 .voice-pill.recording { color: var(--text-primary); }
@@ -1414,6 +1419,7 @@ select.field-input {
 .collab-budget { font-size: var(--fs-xs); color: var(--text-tertiary); margin-right: var(--sp-2); }
 .collab-goal { font-size: var(--fs-sm); color: var(--text-secondary); margin-bottom: var(--sp-2-5); white-space: pre-wrap; }
 .collab-note { font-size: var(--fs-sm); color: var(--text-tertiary); }
+.collab-mode { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-2); font-size: var(--fs-sm); color: var(--text-secondary); }
 .collab-reason { font-size: var(--fs-sm); color: var(--text-secondary); background: var(--bg-hover); border-radius: var(--r-sm); padding: var(--sp-2) var(--sp-2-5); margin-bottom: var(--sp-2-5); }
 .collab-reason.warn { color: var(--warning); }
 .collab-links { display: flex; flex-wrap: wrap; gap: var(--sp-3); margin: calc(-1 * var(--sp-1)) 0 var(--sp-2-5); font-size: var(--fs-sm); }
@@ -1982,3 +1988,13 @@ select.field-input {
 /* Image Creation: zoomed-out placeholders (below 40%): no images or fields, same height */
 .img-card.lod { overflow: hidden; }
 .img-lod { padding: var(--sp-3); font-size: var(--fs-sm); color: var(--text-tertiary); overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+
+/* D-126: attachments are shared with the project's agents — say so, and list them. */
+.attach-shared { display: inline-flex; align-items: center; gap: var(--sp-1); font-size: var(--fs-xs); color: var(--text-tertiary); }
+.attach-shared .link-btn { font-size: var(--fs-xs); }
+.attach-group-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); padding-bottom: var(--sp-1-5); border-bottom: 1px solid var(--border-subtle); }
+.attach-group-title { font-size: var(--fs-sm); font-weight: var(--fw-medium); color: var(--text-primary); min-width: 0; }
+.attach-row { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-1-5) 0; color: var(--text-secondary); }
+.attach-row-name { flex: 1; min-width: 0; font-size: var(--fs-sm); color: var(--text-primary); }
+.attach-row-meta { font-size: var(--fs-xs); color: var(--text-tertiary); white-space: nowrap; }
+

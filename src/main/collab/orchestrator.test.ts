@@ -252,7 +252,7 @@ describe('Collab orchestrator (D-121)', () => {
     expect(t.meta.tries!.at(-1)).toMatchObject({ agent: 'grok', result: 'blocked' })
     const r = runs[runs.length - 1]
     expect(role(r)).toBe('repair')                                     // first failure: straight to the Planner
-    expect(r.params.prompt).toContain('never offer a plain retry with it')
+    expect(r.params.prompt).toContain('give the task to an agent that CAN in this run')
   })
 
   it('an agent error ends the try (no "in progress" on a failed task)', () => {
@@ -282,7 +282,7 @@ describe('Collab orchestrator (D-121)', () => {
     expect(runs.filter((r) => role(r) === 'maker').length).toBe(makersBefore)
     const t = repo.getCollabRun(id)!.tasks![0]
     expect(t.lastVerdict).toBeNull()
-    expect(t.meta.history!.at(-1)).toMatch(/review moved to .*: Codex couldn't open the files/)
+    expect(t.meta.history!.at(-1)).toMatch(/review moved to .*: Codex couldn't complete the review — /)
     finish(json({ verdict: 'BLOCKED', findings: ['Cannot open files either'] }))
     expect(role(runs[runs.length - 1])).toBe('reviewer')                     // a third agent, if one is on
   })
@@ -312,5 +312,78 @@ describe('Collab orchestrator (D-121)', () => {
     const l = await runCliCommand('collab', P({ do: 'list' }))
     expect((l.json as { run: string }[]).map((x) => x.run)).toEqual([id])
     expect(existsSync(join(proj, '.workbench', 'collab', id, 'PLAN.md'))).toBe(true)
+  })
+})
+
+describe('Read-only runs and run limits (D-127)', () => {
+  const startRead = () => orch.startCollab(sender, { conversationId: chat, cwd: proj, providerId: 'claude-code', goal: 'Write a 5-question quiz', permissionMode: 'read' }).id
+
+  it('tells the Planner what agents can do in THIS run, and Read-only Makers return their files for Troupe to save', () => {
+    const id = startRead()
+    expect(runs[0].params.prompt).toContain('This run is Read-only. No agent in it can change project files')
+    expect(runs[0].params.prompt).toContain('reads files; cannot change them')
+    finish(plan(TWO))
+    orch.confirmPlan(sender, id)
+    const maker = runs[1]
+    expect(maker.params.prompt).toContain('This run is Read-only: you can open and read project files')
+    expect(maker.params.prompt).toContain('=== FILE: quiz/q.md ===')
+    // an existing file the task replaces is saved too, when the reply carries a FILE block
+    mkdirSync(join(proj, 'quiz'), { recursive: true }); writeFileSync(join(proj, 'quiz/q.md'), 'old\n')
+    finish('=== FILE: quiz/q.md ===\n1. a\n2. b\n=== END FILE ===\n' + handoff)
+    expect(readFileSync(join(proj, 'quiz/q.md'), 'utf8')).toBe('1. a\n2. b\n')
+    expect(role(runs[2])).toBe('reviewer')
+  })
+
+  it('a refusal no agent in the run could get past pauses with "Switch run to Auto" — not the Planner moving agents', () => {
+    const id = startRead()
+    finish(plan(TWO))
+    orch.confirmPlan(sender, id)
+    const before = runs.length
+    finish(json({ status: 'blocked', filesChanged: [], verify: 'The run is read-only; it needs Auto mode to write quiz/q.md.' }))
+    expect(runs.length).toBe(before)                        // no Planner repair run
+    const run = repo.getCollabRun(id)!
+    expect(run.status).toBe('needs_attention')
+    expect(run.repair?.options[0]).toMatchObject({ action: 'mode', mode: 'auto', label: 'Switch run to Auto, retry' })
+    expect(run.repair?.options.map((o) => o.action)).toEqual(['mode', 'skip'])
+    orch.applyRepair(sender, id, 0)
+    expect(repo.getCollabRun(id)!.permissionMode).toBe('auto')
+    expect(role(runs[runs.length - 1])).toBe('maker')          // the task runs again, now in Auto
+    expect(runs[runs.length - 1].params.prompt).not.toContain('This run is Read-only')
+  })
+
+  it('switches mode only before running or while paused, never to Full access', () => {
+    const id = startRead()
+    expect(() => orch.setCollabMode(id, 'auto')).toThrow(/before running|paused/)   // still planning
+    finish(plan(TWO))
+    expect(orch.setCollabMode(id, 'auto')!.permissionMode).toBe('auto')
+    expect(() => orch.setCollabMode(id, 'full' as never)).toThrow(/Read-only and Auto/)
+  })
+})
+
+describe('Reviewers get Troupe\'s record (D-128)', () => {
+  it('names the Maker and the files that changed, and a moved review keeps its real reason', async () => {
+    const id = start()
+    writeFileSync(join(proj, 'notes.txt'), 'untouched')   // there before the Maker started: not in the record
+    finish(plan(TWO))
+    orch.confirmPlan(sender, id)
+    finish(handoff, { 'quiz/q.md': '1. a\n2. b\n3. c\n4. d\n5. e\n' })
+    const rev = runs[runs.length - 1]
+    expect(role(rev)).toBe('reviewer')
+    expect(rev.params.prompt).toContain('## What Troupe recorded for this attempt (facts — no need to verify them)')
+    expect(rev.params.prompt).toMatch(/Made by Claude[^.]*\. While it worked, the project added `quiz\/q\.md` — nothing else changed/)
+    expect(rev.params.prompt).toContain('Not having git history, not knowing who wrote a file')
+    finish(json({ verdict: 'BLOCKED', findings: ['Cannot prove no other files changed: the folder is not a git repository.'] }))
+    const t = repo.getCollabRun(id)!.tasks![0]
+    expect(t.meta.history?.at(-1)).toMatch(/couldn't complete the review — Cannot prove no other files changed/)
+    expect(t.meta.history?.at(-1)).not.toMatch(/couldn't open the files/)
+  })
+
+  it('troupe collab mode says what it did and shows the mode', async () => {
+    const id = start()
+    finish(plan(TWO))
+    const r = await runCliCommand('collab', P({ do: 'mode', run: id, mode: 'read' }))
+    expect(r.text).toMatch(/^Switched to Read-only/)
+    expect(r.text).toContain('mode: Read-only')
+    expect((await runCliCommand('collab', P({ do: 'mode', run: id, mode: 'read' }))).text).toMatch(/^Already Read-only/)
   })
 })

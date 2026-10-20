@@ -16,7 +16,7 @@ const stream = (buf: Buffer) => new Response(new ReadableStream({
   start(c) { for (let i = 0; i < buf.length; i += 4096) c.enqueue(new Uint8Array(buf.subarray(i, i + 4096))); c.close() }
 }))
 
-function setup(over: { fetchBody?: Buffer; settings?: Record<string, string> } = {}) {
+function setup(over: { fetchBody?: Buffer; settings?: Record<string, string>; locale?: string } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'voice-'))
   const events: VoiceDownloadEvent[] = []
   const log: string[] = []
@@ -25,16 +25,20 @@ function setup(over: { fetchBody?: Buffer; settings?: Record<string, string> } =
       log.push(`transcribe ${path.split('/').pop()} ${pcm.byteLength} ${opts.language}`)
       return { stop: async () => { log.push('stop') }, promise: Promise.resolve({ result: ' hello there ', language: 'en', isAborted: false }) }
     },
-    release: async () => { log.push(`release ${path.split('/').pop()}`) }
+    release: async () => { log.push(`release ${path.split('/').pop()}`) },
+    backend: 'gpu'
   })
+  const settings: Record<string, string> = { ...over.settings }
   const svc = createVoiceService({
     dir, models: MODELS, idleMs: 10_000,
     fetch: async () => stream(over.fetchBody ?? body),
     initWhisper: async (p) => { log.push(`load ${p.split('/').pop()}`); return fakeCtx(p) },
-    getSetting: (k) => over.settings?.[k] ?? null,
+    getSetting: (k) => settings[k] ?? null,
+    setSetting: (k, v) => { settings[k] = v },
+    systemLocale: () => over.locale ?? 'en-US',
     emit: (e) => events.push(e)
   })
-  return { dir, svc, events, log }
+  return { dir, svc, events, log, settings }
 }
 
 describe('voice service (D-124)', () => {
@@ -48,7 +52,7 @@ describe('voice service (D-124)', () => {
     expect(st.selected).toBe('small')
     expect(st.active).toBe('small')
     expect(st.models.find((m) => m.id === 'small')?.installed).toBe(true)
-    expect(st.language).toBe('auto')
+    expect(st.language).toBe('en')   // never Whisper's guess
   })
 
   it('throws away a download whose bytes don’t match', async () => {
@@ -83,6 +87,22 @@ describe('voice service (D-124)', () => {
     expect(log).toEqual(['load base.bin'])
     await svc.transcribe(new ArrayBuffer(3200))
     expect(log.filter((l) => l.startsWith('load'))).toHaveLength(1)
+    await svc.release()
+  })
+
+  it('remembers how fast this computer is, says what runs it, and dictates in the system language until one is picked', async () => {
+    const { svc, settings } = setup({ locale: 'vi-VN' })
+    await svc.download('base')
+    expect((await svc.status()).language).toBe('vi')
+    expect((await svc.status()).backend).toBeNull()
+    expect((await svc.status()).models[0].secPer20s).toBeNull()
+    await svc.transcribe(new ArrayBuffer(32_000 * 5))   // 5 s of audio
+    const st = await svc.status()
+    expect(st.backend).toBe('gpu')
+    expect(typeof st.models[0].secPer20s).toBe('number')
+    expect(JSON.parse(settings.voice_speed)).toHaveProperty('base')
+    settings.voice_language = 'en'
+    expect((await svc.status()).language).toBe('en')
     await svc.release()
   })
 

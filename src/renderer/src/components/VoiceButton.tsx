@@ -2,8 +2,9 @@ import { useEffect, useRef, useState, type RefObject } from 'react'
 import Icon from './Icon'
 import { api } from '../api'
 import { notify, openSettings, reportError } from '../notices'
-import { cleanTranscript, formatElapsed, VOICE_MAX_SECONDS } from '../../../shared/voice'
-import { onVoiceStatus, registerVoiceTarget, startRecording, VOICE_SHORTCUT_LABEL, type Recording } from '../voice'
+import { cleanTranscript, formatElapsed, VOICE_MAX_SECONDS, VOICE_LANGUAGES } from '../../../shared/voice'
+import { Menu } from './ui/Menu'
+import { onVoiceStatus, refreshVoiceStatus, registerVoiceTarget, startRecording, VOICE_SHORTCUT_LABEL, type Recording } from '../voice'
 
 interface Props {
   /** The composer around this button: focusing it makes the shortcut talk to this button. */
@@ -28,7 +29,15 @@ export default function VoiceButton({ scope, onText, disabled }: Props) {
   const onTextRef = useRef(onText)
   onTextRef.current = onText
 
-  useEffect(() => onVoiceStatus((s) => setReady(!!s.active)), [])
+  const [lang, setLang] = useState('en')
+  const [langOpen, setLangOpen] = useState(false)
+  useEffect(() => onVoiceStatus((s) => { setReady(!!s.active); setLang(s.language) }), [])
+  // Dictation always has a language (never Whisper's guess); the chip switches it in one click.
+  const pickLang = (code: string) => {
+    setLangOpen(false); setLang(code)
+    api.voice.setPrefs({ language: code }).then(() => refreshVoiceStatus()).catch((e: unknown) => reportError('Voice language', e))
+  }
+  const langInfo = VOICE_LANGUAGES.find((l) => l.code === lang) ?? VOICE_LANGUAGES[0]
 
   const stopAndTranscribe = async () => {
     const r = rec.current; rec.current = null
@@ -117,14 +126,31 @@ export default function VoiceButton({ scope, onText, disabled }: Props) {
     )
   }
   return (
-    <button
-      className="mic-btn"
-      onClick={toggle}
-      disabled={disabled || phase === 'starting'}
-      title={ready === false ? 'Voice input — download a model in Settings ▸ Tools ▸ Voice' : `Voice input (${VOICE_SHORTCUT_LABEL})`}
-      aria-label="Voice input"
-    >
-      <Icon name="mic" size="md" />
-    </button>
+    <>
+      {ready && (
+        <span className="voice-lang-wrap">
+          <button className="voice-lang-chip" onClick={() => setLangOpen((o) => !o)} title={`Dictation language: ${langInfo.label}`} aria-label={`Dictation language: ${langInfo.label}`} aria-haspopup="menu" aria-expanded={langOpen}>
+            {langInfo.short}
+          </button>
+          <Menu open={langOpen} onClose={() => setLangOpen(false)} className="perm-menu voice-lang-menu">
+            {VOICE_LANGUAGES.map((l) => (
+              <button key={l.code} className={`perm-opt ${l.code === lang ? 'active' : ''}`} onClick={() => pickLang(l.code)}>
+                <span className="perm-opt-l">{l.label}</span>
+                {l.code === lang && <Icon name="check" size="sm" />}
+              </button>
+            ))}
+          </Menu>
+        </span>
+      )}
+      <button
+        className="mic-btn"
+        onClick={toggle}
+        disabled={disabled || phase === 'starting'}
+        title={ready === false ? 'Voice input — download a model in Settings ▸ Tools ▸ Voice' : `Voice input in ${langInfo.label} (${VOICE_SHORTCUT_LABEL})`}
+        aria-label="Voice input"
+      >
+        <Icon name="mic" size="md" />
+      </button>
+    </>
   )
 }

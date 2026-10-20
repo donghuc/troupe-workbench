@@ -43,7 +43,7 @@ export default function VoiceSettings() {
 
   return (
     <Section title="Voice">
-      <Field hint={`Click the mic in the message box or press ${VOICE_SHORTCUT_LABEL}; press again to stop, Esc to discard. Speech is turned into text on this ${OS_WORDS.computer} — only the model is downloaded, once.`}>
+      <Field hint={`Click the mic in the message box or press ${VOICE_SHORTCUT_LABEL}; press again to stop, Esc to discard. Speech is turned into text on this ${OS_WORDS.computer} — only the model is downloaded, once.${st.backend === 'gpu' ? ' Runs on the graphics card.' : st.backend === 'cpu' ? ' Runs on the processor (no usable graphics card found), so larger models are slow.' : ''}`}>
         <div className="settings-group" role="group" aria-label="Voice models">
           {st.models.map((m) => {
             const got = progress[m.id] ?? m.received
@@ -60,7 +60,7 @@ export default function VoiceSettings() {
                         <div className="settings-row-sub">Downloading {formatMb(got)} of {formatMb(m.bytes)}</div>
                         <div className="voice-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label={`${m.label} model download`}><span style={{ width: `${pct}%` }} /></div>
                       </>
-                    : <div className="settings-row-sub">{m.note}</div>}
+                    : <div className="settings-row-sub">{m.note}{speedNote(m.secPer20s, m.id, st.backend)}</div>}
                 </div>
                 {m.downloading
                   ? <Button size="sm" onClick={() => api.voice.cancelDownload(m.id).catch(failed('Cancel download'))}>Cancel</Button>
@@ -76,11 +76,18 @@ export default function VoiceSettings() {
         <Segmented size="sm" label="Voice model" value={st.selected} onChange={(v) => void setPrefs({ model: v })}
           options={st.models.map((m) => ({ value: m.id, label: m.label }))} />
       </Field>
-      <Field label="Language" htmlFor="voice-lang" hint="Pick one if detection guesses wrong; Detect handles one language per recording best.">
+      <Field label="Language" htmlFor="voice-lang" hint="Also on the chip next to the mic, so switching between two languages is one click.">
         <select id="voice-lang" className="collab-kind-sel voice-lang" value={st.language} onChange={(e) => void setPrefs({ language: e.target.value })}>
           {VOICE_LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
         </select>
       </Field>
     </Section>
   )
+}
+
+/** "· about 4 s per 20 s of speech here", once this computer has used the model. */
+function speedNote(sec: number | null, id: string, backend: VoiceStatus['backend']): string {
+  if (sec !== null) return ` · about ${sec} s per 20 s of speech on this ${OS_WORDS.computer}`
+  if (id === 'turbo' && backend === 'cpu') return ' · slow without a graphics card'
+  return ''
 }

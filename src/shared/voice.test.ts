@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cleanTranscript, insertAtCaret, toPcm16, voiceLanguage, formatElapsed, VOICE_MODELS, DEFAULT_VOICE_MODEL } from './voice'
+import { cleanTranscript, insertAtCaret, toPcm16, voiceLanguage, per20s, formatElapsed, VOICE_MODELS, DEFAULT_VOICE_MODEL } from './voice'
 
 describe('voice helpers (D-124)', () => {
   it('converts float samples to 16-bit little-endian PCM, clipping', () => {
@@ -26,9 +26,13 @@ describe('voice helpers (D-124)', () => {
   })
 
   it('knows its languages and models', () => {
+    // Never Whisper's own detection: the last language used, else the system's, else English.
     expect(voiceLanguage('vi')).toBe('vi')
-    expect(voiceLanguage('xx')).toBe('auto')
-    expect(voiceLanguage(null)).toBe('auto')
+    expect(voiceLanguage('auto', 'vi-VN')).toBe('vi')
+    expect(voiceLanguage(null, 'en-GB')).toBe('en')
+    expect(voiceLanguage(null, 'pt-BR')).toBe('en')
+    expect(voiceLanguage('xx')).toBe('en')
+    expect(per20s(150)).toBe(3)
     expect(VOICE_MODELS.some((m) => m.id === DEFAULT_VOICE_MODEL)).toBe(true)
     expect(VOICE_MODELS.every((m) => /^[0-9a-f]{64}$/.test(m.sha256) && m.bytes > 0)).toBe(true)
     expect(formatElapsed(65)).toBe('1:05')

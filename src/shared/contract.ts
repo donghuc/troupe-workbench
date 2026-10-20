@@ -50,6 +50,8 @@ export const INVOKE_PATHS = [
 
   'attachments.saveBinary',
   'attachments.extractPdf',
+  'attachments.list',
+  'attachments.remove',
 
   'schedules.list',
   'schedules.create',
@@ -172,6 +174,7 @@ export const INVOKE_PATHS = [
   'collab.start',
   'collab.confirmPlan',
   'collab.stop',
+  'collab.setMode',
   'collab.resume',
   'collab.recover',
   'collab.applyRepair',

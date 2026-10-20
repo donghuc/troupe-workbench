@@ -1,6 +1,7 @@
 import { handle } from './handle'
 import { listTree, readTextFile, readDataUrl, writeTextFile, writeBinary, searchFiles, readPdfText, existingFiles } from '../filesystem/fsService'
 import { saveAttachmentBinary, extractAttachmentPdf } from '../attachments/attachmentStore'
+import { listProjectAttachments, removeProjectAttachment } from '../attachments/projectAttachments'
 import { startWatch, stopWatch } from '../filesystem/watcher'
 import { assertProjectRoot, assertKnownAbsolute } from '../security/roots'
 import { expectString } from '../security/pathGuard'
@@ -25,4 +26,6 @@ export function registerFileIpc(): void {
   handle('attachments.saveBinary', (_e, base64: string, name: string) => saveAttachmentBinary(S(base64, 'data'), S(name, 'name')))
   // Absolute path: only files in the app's attachment store or a project folder.
   handle('attachments.extractPdf', (_e, absPath: string) => extractAttachmentPdf(assertKnownAbsolute(absPath)))
+  handle('attachments.list', (_e, root: string) => listProjectAttachments(R(root)))
+  handle('attachments.remove', (_e, root: string, relPath: string) => removeProjectAttachment(R(root), S(relPath, 'path')))
 }

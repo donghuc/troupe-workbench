@@ -57,6 +57,7 @@ troupe collab start "Workbench sandbox" "Build a rebalancing sheet"   # the Plan
 troupe collab status <run|chat> --wait 600   # plan, task progress, and fixes when it's stuck
 troupe collab approve <run>                  # run the plan        (troupe collab reject <run> to drop it)
 troupe collab fix <run> <n>                  # apply the Planner's fix n
+troupe collab mode <run> read|auto           # switch Read-only ⇄ Auto before approving, or while paused
 troupe collab retry <run> <task n> --note "use ISO dates"   # or: skip, ask (ask the Planner)
 troupe collab resume <run>     troupe collab stop <run>     troupe collab list [project]   # all projects when none is named
 ```
@@ -102,6 +103,7 @@ data, settings or database directly. Run `troupe --help` for every command.
 - When it's stuck, show me the reason and the fixes; apply one with `troupe collab fix <run> <n>`
   only after I choose — except a fix marked (recommended) that doesn't change the goal.
   A fix marked "(changes the goal — ask the user)" is always my call.
+- Switching a run to Auto (`troupe collab mode <run> auto`, or the fix "Switch run to Auto, retry") lets agents change files: always ask me first.
 - When it finishes or is stopped, show me the wrap-up from `troupe collab status <run>`.
 - Commands answer within 90 s; if one says "Troupe didn't answer", tell me — don't retry in a loop.
 

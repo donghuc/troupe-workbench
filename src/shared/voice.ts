@@ -26,21 +26,27 @@ export const voiceModelUrl = (m: VoiceModel): string => `https://huggingface.co/
 export const VOICE_MODEL_SETTING = 'voice_model'
 export const VOICE_LANGUAGE_SETTING = 'voice_language'
 
-/** Whisper language codes offered in Settings; 'auto' lets Whisper detect it per recording. */
-export const VOICE_LANGUAGES: readonly { code: string; label: string }[] = [
-  { code: 'auto', label: 'Detect automatically' },
-  { code: 'en', label: 'English' },
-  { code: 'vi', label: 'Vietnamese' },
-  { code: 'zh', label: 'Chinese' },
-  { code: 'ja', label: 'Japanese' },
-  { code: 'ko', label: 'Korean' },
-  { code: 'th', label: 'Thai' },
-  { code: 'id', label: 'Indonesian' },
-  { code: 'fr', label: 'French' },
-  { code: 'de', label: 'German' },
-  { code: 'es', label: 'Spanish' }
+/** Languages you can dictate in. Always one of these — never Whisper's own detection, which
+ *  turned an English sentence into broken Portuguese (Hien's Windows test, 2026-10-20). */
+export const VOICE_LANGUAGES: readonly { code: string; label: string; short: string }[] = [
+  { code: 'en', label: 'English', short: 'EN' },
+  { code: 'vi', label: 'Vietnamese', short: 'VI' },
+  { code: 'zh', label: 'Chinese', short: 'ZH' },
+  { code: 'ja', label: 'Japanese', short: 'JA' },
+  { code: 'ko', label: 'Korean', short: 'KO' },
+  { code: 'th', label: 'Thai', short: 'TH' },
+  { code: 'id', label: 'Indonesian', short: 'ID' },
+  { code: 'fr', label: 'French', short: 'FR' },
+  { code: 'de', label: 'German', short: 'DE' },
+  { code: 'es', label: 'Spanish', short: 'ES' }
 ]
-export const voiceLanguage = (v: string | null | undefined): string => (VOICE_LANGUAGES.some((l) => l.code === v) ? v! : 'auto')
+const known = (v: string | null | undefined): v is string => !!v && VOICE_LANGUAGES.some((l) => l.code === v)
+/** The language to dictate in: the one last used, else the system's ("vi-VN" → vi), else English. */
+export function voiceLanguage(saved: string | null | undefined, systemLocale = ''): string {
+  if (known(saved)) return saved
+  const sys = systemLocale.toLowerCase().split(/[-_]/)[0]
+  return known(sys) ? sys : 'en'
+}
 
 /** Whisper wants 16 kHz mono. A recording is capped at 10 minutes. */
 export const VOICE_SAMPLE_RATE = 16_000
@@ -93,12 +99,20 @@ export interface VoiceDownloadEvent {
 }
 
 export interface VoiceStatus {
-  models: { id: VoiceModelId; label: string; bytes: number; note: string; installed: boolean; downloading: boolean; received: number }[]
+  models: { id: VoiceModelId; label: string; bytes: number; note: string; installed: boolean; downloading: boolean; received: number
+    /** Seconds this computer took per 20 s of speech last time, or null before the first use. */
+    secPer20s: number | null }[]
   selected: VoiceModelId
   /** The model voice input will use: the selected one if it's on disk, else any installed one. */
   active: VoiceModelId | null
   language: string
   folder: string
+  /** What runs Whisper here: 'gpu' (Metal, Vulkan) or 'cpu'; null until a model has loaded. */
+  backend: 'gpu' | 'cpu' | null
 }
 
 export interface VoiceResult { text: string; language?: string; ms: number }
+
+/** Seconds of work per 20 s of speech, measured on this computer — shown next to each model. */
+export const per20s = (msPerAudioSec: number): number => Math.max(1, Math.round((msPerAudioSec * 20) / 1000))
+export const VOICE_SPEED_SETTING = 'voice_speed'   // JSON { modelId: ms per second of audio }
