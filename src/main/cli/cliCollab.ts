@@ -1,12 +1,14 @@
 import { startCollab, confirmPlan, stopCollab, resumeCollab, recoverTask, applyRepair } from '../collab/orchestrator'
 import { getCollabRun, listCollabRuns } from '../collab/collabRepo'
 import { getConversation, createConversation, listConversations } from '../conversations/conversationsRepo'
-import { getProject } from '../projects/projectsRepo'
+import { getProject, listProjects } from '../projects/projectsRepo'
+import { listMessages } from '../conversations/messagesRepo'
 import { senderForRun, broadcastConversationsChanged } from '../agent/headless'
 import { appendRunLog } from '../agent/runLog'
 import { logInfo } from '../util/logger'
 import { providerLabel } from '../../shared/providers'
 import { scopePaths } from '../../shared/collabFiles'
+import { triesText } from '../../shared/collabChecks'
 import { CliError, parseMode, titleFrom, clampWait, collabText, type CliCollab } from '../../shared/cliProtocol'
 import type { CollabRun, ProviderId, Project } from '../../shared/types'
 
@@ -38,12 +40,29 @@ function describeCollab(run: CollabRun): CliCollab {
   const conv = getConversation(run.conversationId)
   const project = conv ? getProject(conv.projectId) : null
   const tasks = (run.tasks ?? []).map((t, i) => ({
-    n: i + 1, title: t.title, status: t.status, agent: providerLabel(t.provider ?? run.providerId),
-    attempts: t.attempts, produces: scopePaths(t.scope).outputs.join(', '),
-    findings: t.lastVerdict?.verdict === 'FAIL' ? t.lastVerdict.findings : [], files: t.handoff?.filesChanged ?? []
+    // D-121: a review task has no Maker — its only agent is the reviewer (test 6 read as
+    // "Claude made and reviewed T3").
+    n: i + 1, title: t.title, status: t.status, kind: t.kind,
+    agent: t.kind === 'review' ? '' : providerLabel(t.provider ?? run.providerId),
+    reviewer: providerLabel(t.meta.reviewer ?? run.providerId),
+    // D-121: every attempt, not just since the last reassignment (attempts resets then)
+    attempts: Math.max(t.attempts, t.meta.tries?.length ?? 0), tries: triesText(t.meta.tries, (a) => providerLabel(a), false), produces: scopePaths(t.scope).outputs.join(', '),
+    findings: t.lastVerdict?.verdict === 'FAIL' ? t.lastVerdict.findings : [], files: t.handoff?.filesChanged ?? [],
+    // D-121: per-task timing
+    startedAt: t.meta.startedAt ?? null, finishedAt: t.status === 'in_progress' ? null : t.meta.finishedAt ?? null,
+    seconds: t.meta.startedAt ? Math.round(((t.status === 'in_progress' ? Date.now() : t.meta.finishedAt ?? Date.now()) - t.meta.startedAt) / 1000) : null
   }))
-  const fixes = (run.repair?.options ?? []).map((o, i) => ({ n: i + 1, label: o.label, recommended: i === run.repair!.recommended, needsYou: o.userStep ?? null }))
-  return { run: run.id, chat: run.conversationId, project: project?.name ?? '', goal: run.goal, status: run.status, reason: run.reason, tasks, fixes, summary: run.summary }
+  const fixes = (run.repair?.options ?? []).map((o, i) => ({ n: i + 1, label: o.label, recommended: i === run.repair!.recommended, needsYou: o.userStep ?? null, changesGoal: o.changesGoal }))
+  return { run: run.id, chat: run.conversationId, project: project?.name ?? '', goal: run.goal, status: run.status, reason: run.reason, tasks, fixes, summary: run.summary, wrapUp: wrapUpOf(run) }
+}
+/** D-121: the Planner's wrap-up message for this run, if one was written. */
+function wrapUpOf(run: CollabRun): string {
+  const ms = listMessages(run.conversationId)
+  for (let i = ms.length - 1; i >= 0; i--) {
+    const c = ms[i].metadata?.collab as { runId?: string; role?: string } | undefined
+    if (c?.runId === run.id && c.role === 'wrapup') return ms[i].content
+  }
+  return ''
 }
 const result = (run: CollabRun | null) => {
   if (!run) throw new CliError('That Collab run no longer exists.', 404)
@@ -75,10 +94,12 @@ export async function runCollabCommand(q: Params, deps: Deps, closed: () => bool
       return result(run)
     }
     case 'list': {
-      const project = deps.findProject(q.get('project') ?? '')
-      const runs = listConversations(project.id).flatMap((c) => listCollabRuns(c.id)).sort((a, b) => b.createdAt - a.createdAt).slice(0, 20)
+      // D-121: no project = every project's runs (`collab list --json` read "--json" as the project).
+      const name = (q.get('project') ?? '').trim()
+      const projects = name ? [deps.findProject(name)] : listProjects()
+      const runs = projects.flatMap((p) => listConversations(p.id)).flatMap((c) => listCollabRuns(c.id)).sort((a, b) => b.createdAt - a.createdAt).slice(0, 20)
       const json = runs.map((r) => ({ run: r.id, chat: r.conversationId, status: r.status, goal: r.goal, updatedAt: r.updatedAt }))
-      return { status: 200, json, text: json.length ? json.map((r) => `${r.run}  ${r.status.replace('_', ' ')}  ${r.goal.split('\n')[0].slice(0, 80)}`).join('\n') : 'No Collab runs in this project.' }
+      return { status: 200, json, text: json.length ? json.map((r) => `${r.run}  ${r.status.replace('_', ' ')}  ${r.goal.split('\n')[0].slice(0, 80)}`).join('\n') : name ? 'No Collab runs in this project.' : 'No Collab runs yet.' }
     }
     case 'status': {
       let run = findCollab(q.get('run') ?? '')

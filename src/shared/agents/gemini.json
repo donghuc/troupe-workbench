@@ -3,7 +3,8 @@
   "label": "Gemini",
   "detect": ["agy"],
   "needs": "Needs a Google account",
-  "install": { "cmd": "curl -fsSL https://antigravity.google/cli/install.sh | bash", "host": "antigravity.google" },
-  "signIn": { "cmd": "agy", "terminal": true },
-  "docs": "https://github.com/donghuc/troupe-workbench/blob/main/INSTALL.md"
+  "install": {"cmd": "curl -fsSL https://antigravity.google/cli/install.sh | bash", "host": "antigravity.google"},
+  "signIn": {"cmd": "agy", "terminal": true},
+  "docs": "https://github.com/donghuc/troupe-workbench/blob/main/INSTALL.md",
+  "win": {"install": null, "unsupported": "Not available on Windows yet: the agy CLI stops responding when another app runs it (Google's antigravity-cli issue #318)."}
 }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { OS_WORDS } from '../../../../shared/platform'
 import Icon from '../Icon'
 import { api } from '../../api'
 import { failed, notify } from '../../notices'
@@ -27,7 +28,7 @@ export default function SavedPanel({ root, version, onOpen, onClose }: Props) {
         <span className="img-saved-title">Saved</span>
         {files && files.length > 0 && <span className="img-meta">{files.length}</span>}
         <span className="md-head-spacer" />
-        <IconButton title="Show the saved folder in Finder" onClick={() => api.system.revealItem(root, SAVED_DIR).catch(failed('Show in Finder'))}><Icon name="folder-open" size="md" /></IconButton>
+        <IconButton title={`Show the saved folder in ${OS_WORDS.fileManager}`} onClick={() => api.system.revealItem(root, SAVED_DIR).catch(failed(OS_WORDS.showInFolder))}><Icon name="folder-open" size="md" /></IconButton>
         <IconButton title="Close" onClick={onClose}><Icon name="close" size="md" /></IconButton>
       </div>
       <div className="img-saved-body">
@@ -43,7 +44,7 @@ export default function SavedPanel({ root, version, onOpen, onClose }: Props) {
                 <div className="img-shot-actions">
                   {!/\.svg$/i.test(f.name) && <button title="Copy image" onClick={() => api.system.copyImage(root, f.relPath).then((ok: boolean) => ok && notify('Image copied')).catch(failed('Copy image'))}><Icon name="copy" size="sm" /></button>}
                   <button title="Open in its own window" onClick={() => api.system.openArtifactWindow(root, f.relPath).catch(failed('Open window'))}><Icon name="popout" size="sm" /></button>
-                  <button title="Show in Finder" onClick={() => api.system.revealItem(root, f.relPath).catch(failed('Show in Finder'))}><Icon name="folder-open" size="sm" /></button>
+                  <button title={OS_WORDS.showInFolder} onClick={() => api.system.revealItem(root, f.relPath).catch(failed(OS_WORDS.showInFolder))}><Icon name="folder-open" size="sm" /></button>
                 </div>
                 <figcaption className="truncate">{f.name}</figcaption>
               </figure>

@@ -1,5 +1,5 @@
-import { execFile } from 'child_process'
 import { buildEnv } from '../providers/env'
+import { execFileCli } from '../platform/proc'
 import { parseAgyModels, type ModelPreset } from '../../shared/models'
 import { logInfo } from '../util/logger'
 
@@ -11,8 +11,9 @@ let inflight: Promise<ModelPreset[]> | null = null
 
 export function refreshGeminiModels(): Promise<ModelPreset[]> {
   if (inflight) return inflight
+  if (process.platform === 'win32') return Promise.resolve([])   // Gemini is off on Windows (D-120)
   inflight = new Promise<ModelPreset[]>((resolve) => {
-    execFile('agy', ['models'], { env: buildEnv(), timeout: 30000 }, (err, out) => {
+    execFileCli('agy', ['models'], { env: buildEnv(), timeout: 30000 }, (err, out) => {
       const list = err ? null : parseAgyModels(String(out))
       if (list && list.length) { cache = { at: Date.now(), list }; logInfo('[gemini] models', JSON.stringify(list.map((m) => m.v))) }
       inflight = null

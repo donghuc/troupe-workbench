@@ -45,3 +45,21 @@ describe('same failure, worded differently (real T1 log, D-111)', () => {
     expect(nextSameFails(s3, 3, failSig(other))).toBe(1)
   })
 })
+
+describe('parseRepair — rework and goal fixes (D-121)', () => {
+  const isAgent = () => true
+  const isWork = (seq: number) => seq === 0 || seq === 1
+  it('reads a rework of a work task by its plan number; drops one naming a review or unknown task', () => {
+    const r = parseRepair({ summary: 's', recommended: 0, options: [
+      { label: 'Redo T2', action: 'rework', task: 2, note: 'add Q5' },
+      { label: 'Redo T3', action: 'rework', task: 3 },
+      { label: 'Redo T9', action: 'rework', task: 9 }
+    ] }, 'review', isAgent, isWork)!
+    expect(r.options).toHaveLength(1)
+    expect(r.options[0]).toMatchObject({ action: 'rework', taskSeq: 1, note: 'add Q5' })
+  })
+  it('an option carrying a corrected goal always counts as a goal change', () => {
+    const r = parseRepair({ summary: 's', options: [{ label: 'Ask for 5', action: 'retry', changesGoal: false, goal: 'Write 5 questions' }] }, 't1', isAgent)!
+    expect(r.options[0]).toMatchObject({ changesGoal: true, goal: 'Write 5 questions' })
+  })
+})

@@ -108,6 +108,15 @@ describe('providers through CliProcess (D-096)', () => {
     expect(evs.at(-1)?.type).toBe('complete')
     expect(recorded('grok').argv).toContain('-p')
   })
+  it('Grok in Auto pre-approves its file tools; a cancelled turn says so (D-121)', async () => {
+    fake('grok', [{ text: 'I will write facts.md now.', stopReason: 'cancelled', sessionId: 'k2' }])
+    const { GrokProvider } = await import('./GrokProvider')
+    const evs = await collect(new GrokProvider().run(req({ permissionMode: 'auto' })))
+    const argv = recorded('grok').argv
+    expect(argv.slice(argv.indexOf('--permission-mode'), argv.indexOf('--permission-mode') + 4)).toEqual(['--permission-mode', 'acceptEdits', '--allow', 'Edit'])
+    expect(argv[argv.indexOf('--disallowed-tools') + 1]).toContain('run_terminal_command')
+    expect(evs.filter((e) => e.type === 'text_delta').map((e: any) => e.text).join('')).toMatch(/Grok stopped before finishing \(`cancelled`\)/)
+  })
   it('Custom (text): prompt as one argument, context preamble, plain text streamed', async () => {
     fake('mytool', ['Four.'])
     const { CustomCliProvider } = await import('./CustomCliProvider')

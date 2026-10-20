@@ -3,8 +3,9 @@
   "label": "OpenCode",
   "detect": ["opencode"],
   "needs": "Free models to start; or use your own API key (DeepSeek, OpenAI, Anthropic…)",
-  "install": { "cmd": "curl -fsSL https://opencode.ai/install | bash", "host": "opencode.ai" },
-  "signIn": { "cmd": "opencode auth login", "terminal": true },
+  "install": {"cmd": "curl -fsSL https://opencode.ai/install | bash", "host": "opencode.ai"},
+  "signIn": {"cmd": "opencode auth login", "terminal": true},
   "docs": "https://opencode.ai/docs/cli/",
-  "agent": { "command": "opencode run {prompt}", "output": "text", "modelFlag": "--model", "readOnlyArgs": "--agent plan" }
+  "agent": {"command": "opencode run {prompt}", "output": "text", "modelFlag": "--model", "readOnlyArgs": "--agent plan"},
+  "win": {"install": null}
 }

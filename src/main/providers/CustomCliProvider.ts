@@ -1,4 +1,5 @@
 import { accessSync, constants, realpathSync } from 'fs'
+import { whichWin } from '../platform/proc'
 import { join, isAbsolute } from 'path'
 import { workFolderRules } from '../../shared/contextBudget'
 import { buildRun, type CustomAgent } from '../../shared/customAgents'
@@ -17,6 +18,7 @@ import { claudeEvents, newClaudeState } from './claudeEvents'
 
 /** Where `bin` resolves on the merged PATH, or null. No execution — just a lookup. */
 export function whichBin(bin: string, env: NodeJS.ProcessEnv = buildEnv()): string | null {
+  if (process.platform === 'win32') return whichWin(bin, env)
   const ok = (p: string) => { try { accessSync(p, constants.X_OK); return true } catch { return false } }
   if (bin.includes('/')) return isAbsolute(bin) && ok(bin) ? bin : null
   for (const dir of (env.PATH ?? '').split(':')) if (dir && ok(join(dir, bin))) return join(dir, bin)

@@ -42,7 +42,7 @@ export default function ContextInspector({ conversationId, providerId, onClose }
           <div key={s.name} className="ctx-section">
             <div className="ctx-section-head">
               <span className="ctx-name">{s.name}</span>
-              {b && <Badge className="ctx-badge" tone={b.cls === 'injected' ? 'accent' : 'neutral'} appearance={b.cls === 'none' ? 'outline' : 'soft'}>{b.label}</Badge>}
+              {b && <Badge className="ctx-badge" tone={b.cls === 'injected' ? 'info' : 'neutral'} appearance={b.cls === 'none' ? 'outline' : 'soft'}>{b.label}</Badge>}
               <span className="ctx-size">{s.chars.toLocaleString()} chars · ~{s.approxTokens.toLocaleString()} tokens</span>
             </div>
             {s.warning && <p className="ctx-warning">{s.warning}</p>}

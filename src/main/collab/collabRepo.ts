@@ -101,14 +101,16 @@ export interface CollabRunPatch {
   spent?: CollabSpent
   outputDir?: string
   repair?: CollabRepair | null
+  goal?: string            // D-121: only when the user accepts a fix that corrects the goal
+  budget?: CollabBudget    // D-121: sized to the plan on approval
 }
 export function updateCollabRun(id: string, patch: CollabRunPatch): CollabRun | null {
   const cur = getCollabRunBare(id)
   if (!cur) return null
   const next = { ...cur, ...patch }
   getDb().prepare(
-    `UPDATE collab_runs SET status = ?, reason = ?, summary = ?, spent_json = ?, output_dir = ?, repair_json = ?, updated_at = ? WHERE id = ?`
-  ).run(next.status, next.reason, next.summary, JSON.stringify(next.spent), next.outputDir ?? '', next.repair ? JSON.stringify(next.repair) : null, Date.now(), id)
+    `UPDATE collab_runs SET status = ?, reason = ?, summary = ?, spent_json = ?, output_dir = ?, repair_json = ?, goal = ?, budget_json = ?, updated_at = ? WHERE id = ?`
+  ).run(next.status, next.reason, next.summary, JSON.stringify(next.spent), next.outputDir ?? '', next.repair ? JSON.stringify(next.repair) : null, next.goal, JSON.stringify(next.budget), Date.now(), id)
   return getCollabRun(id)
 }
 
@@ -142,16 +144,17 @@ export function replaceTasks(runId: string, drafts: CollabTaskDraft[]): CollabTa
     return ids.includes(d) ? d : null
   }
   const okProvider = (p?: string): string | null => (isProviderId(p) ? p : null)
+  const metaOf = (d: CollabTaskDraft): string => JSON.stringify(okProvider(d.reviewer) ? { reviewer: d.reviewer } : {})
   const tx = db.transaction(() => {
     db.prepare('DELETE FROM collab_tasks WHERE run_id = ?').run(runId)
     const ins = db.prepare(
-      `INSERT INTO collab_tasks (id, run_id, seq, title, kind, provider, model, scope, acceptance, depends_on, status, attempts, last_verdict, maker_run_id, reviewer_run_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, NULL, NULL, NULL)`
+      `INSERT INTO collab_tasks (id, run_id, seq, title, kind, provider, model, scope, acceptance, depends_on, status, attempts, last_verdict, maker_run_id, reviewer_run_id, meta)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, NULL, NULL, NULL, ?)`
     )
     drafts.forEach((d, i) => {
       const deps = (d.dependsOn ?? []).map(resolveDep).filter((x, j, a): x is string => !!x && x !== ids[i] && a.indexOf(x) === j)
       ins.run(ids[i], runId, i, (d.title ?? '').trim() || `Task ${i + 1}`, d.kind ?? 'work',
-              okProvider(d.provider), d.model ?? null, d.scope ?? '', d.acceptance ?? '', JSON.stringify(deps))
+              okProvider(d.provider), d.model ?? null, d.scope ?? '', d.acceptance ?? '', JSON.stringify(deps), metaOf(d))
     })
   })
   tx()
@@ -176,6 +179,14 @@ export function updateTask(id: string, patch: CollabTaskPatch): CollabTask | nul
   const cur = getTask(id)
   if (!cur) return null
   const next = { ...cur, ...patch }
+  // D-121: per-task timing, stamped here so every path that changes a status records it.
+  if (patch.status && patch.status !== cur.status) {
+    const meta = { ...(next.meta ?? {}) }
+    if (patch.status === 'in_progress' && !meta.startedAt) meta.startedAt = Date.now()
+    if (patch.status === 'passed' || patch.status === 'failed' || patch.status === 'skipped') meta.finishedAt = Date.now()
+    if (patch.status === 'pending') delete meta.finishedAt
+    next.meta = meta
+  }
   getDb().prepare(
     `UPDATE collab_tasks SET status = ?, attempts = ?, last_verdict = ?, handoff = ?, maker_run_id = ?, reviewer_run_id = ?, meta = ?, provider = ?, model = ?, title = ?, scope = ?, acceptance = ? WHERE id = ?`
   ).run(next.status, next.attempts, next.lastVerdict ? JSON.stringify(next.lastVerdict) : null,

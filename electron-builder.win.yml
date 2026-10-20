@@ -1,0 +1,41 @@
+# Windows build (D-120): for Hien's own PC — an unsigned per-user NSIS installer, built by
+# CI as a download (never a public release asset). Kept apart from electron-builder.yml so
+# the macOS build config is untouched. Build:
+#   electron-builder -c electron-builder.win.yml --win nsis --x64 -c.npmRebuild=false
+# (better-sqlite3 13 ships an N-API prebuild for win32-x64, so nothing is compiled.)
+extends: electron-builder.yml
+
+# `files` here is added after electron-builder.yml's allow-list (later patterns win):
+# swap the macOS better-sqlite3 prebuilds for the win32-x64 one.
+files:
+  - '!node_modules/better-sqlite3/prebuilds/darwin-*.node'
+  - node_modules/better-sqlite3/prebuilds/win32-x64.node
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.png
+  extraResources:
+    # The `troupe` command: troupe.cmd (written by Settings ▸ Tools ▸ Command line) runs this.
+    - from: resources/troupe-cli.mjs
+      to: troupe-cli.mjs
+    # PDF text: pdf.js run by Troupe itself (macOS uses PDFKit).
+    - from: resources/pdf-text.mjs
+      to: pdf-text.mjs
+    - from: node_modules/pdfjs-dist/legacy/build/
+      to: pdfjs/
+      filter:
+        - pdf.mjs
+        - pdf.worker.mjs
+    - from: build/tray.png
+      to: tray.png
+  artifactName: ${productName}-Setup-${version}-${arch}.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Troupe

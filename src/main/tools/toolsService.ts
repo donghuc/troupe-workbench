@@ -1,6 +1,7 @@
 import { app } from 'electron'
-import { execFile } from 'child_process'
-import { readFileSync, writeFileSync, mkdirSync, copyFileSync, renameSync, existsSync } from 'fs'
+import { renameSyncRetry } from '../platform/winFs'
+import { execFileCli } from '../platform/proc'
+import { readFileSync, writeFileSync, mkdirSync, copyFileSync, existsSync } from 'fs'
 import { homedir } from 'os'
 import { join, dirname } from 'path'
 import { buildEnv } from '../providers/env'
@@ -27,7 +28,7 @@ export async function refreshLiveMcpNames(cwd?: string): Promise<void> { try { r
 
 function claudeMcp(cwd?: string): Promise<McpServer[]> {
   return new Promise((resolve) => {
-    execFile('claude', ['mcp', 'list'], { env: buildEnv(), cwd, timeout: 20000 }, (err, stdout, stderr) => {
+    execFileCli('claude', ['mcp', 'list'], { env: buildEnv(), cwd, timeout: 20000 }, (err, stdout, stderr) => {
       if (err && !stdout) { resolve([]); return }
       const servers = parseClaudeMcp((stdout || '') + '\n' + (stderr || ''))
       rememberMcpNames(servers)
@@ -76,7 +77,7 @@ export async function listAgentTools(provider: ProviderId, cwd?: string): Promis
 
 function runClaude(args: string[], cwd?: string): Promise<McpMutationResult> {
   return new Promise((resolve) => {
-    execFile('claude', args, { env: buildEnv(), cwd, timeout: 30000 }, (err, stdout, stderr) => {
+    execFileCli('claude', args, { env: buildEnv(), cwd, timeout: 30000 }, (err, stdout, stderr) => {
       if (err) resolve({ ok: false, error: (stderr || stdout || err.message).trim() })
       else resolve({ ok: true })
     })
@@ -101,7 +102,7 @@ function applyCodexEdit(name: string, input: CodexServerInput | null): string | 
     if (existsSync(p)) copyFileSync(p, `${p}.bak`)
     const tmp = `${p}.workbench-tmp`
     writeFileSync(tmp, plan.next, 'utf8')
-    renameSync(tmp, p)
+    renameSyncRetry(tmp, p)
     logInfo(`[codex-config] ${input ? 'added' : 'removed'} MCP server "${name}" (previous file kept as config.toml.bak)`)
     return null
   } catch (e) {

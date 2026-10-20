@@ -1,6 +1,7 @@
 import { confirmDialog } from './ui/ConfirmDialog'
 import { useEffect, useRef, useState } from 'react'
 import Icon from './Icon'
+import { shortDate } from '../dates'
 import MasterDetail from './MasterDetail'
 import { api } from '../api'
 import type { Note, Project } from '../../../shared/types'
@@ -21,7 +22,7 @@ const when = (t: number) => {
   if (d < 60) return 'just now'
   if (d < 3600) return `${Math.floor(d / 60)}m ago`
   if (d < 86400) return `${Math.floor(d / 3600)}h ago`
-  return new Date(t).toLocaleDateString()
+  return shortDate(t)
 }
 
 export default function NotesView({ projects, onNoteToChat, onNoteToProject }: Props) {
@@ -108,7 +109,7 @@ export default function NotesView({ projects, onNoteToChat, onNoteToProject }: P
             <IconButton title="More" aria-expanded={menuOpen} onClick={() => { setPickChat(false); setMenuOpen((v) => !v) }}><Icon name="more-vertical" size="md" /></IconButton>
             <Menu open={menuOpen} onClose={() => setMenuOpen(false)}>
               <MenuItem onClick={() => { setMenuOpen(false); toProject() }}>Turn into project</MenuItem>
-              <MenuItem danger onClick={() => { setMenuOpen(false); del(selected) }}>Delete</MenuItem>
+              <MenuItem danger onClick={() => { setMenuOpen(false); del(selected) }}><Icon name="trash" size="sm" />Delete</MenuItem>
             </Menu>
           </span>
         </>

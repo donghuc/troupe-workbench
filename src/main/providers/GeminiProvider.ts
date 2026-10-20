@@ -1,5 +1,5 @@
 import { workFolderRules } from '../../shared/contextBudget'
-import { execFile } from 'child_process'
+import { execFileCli } from '../platform/proc'
 import { logInfo, logError } from '../util/logger'
 import type { AgentProvider } from './AgentProvider'
 import type { AgentRequest, AgentEvent, ProviderCapabilities, ProviderAvailability } from '../../shared/agent'
@@ -19,8 +19,11 @@ export class GeminiProvider implements AgentProvider {
   private proc = new CliProcess()
 
   isAvailable(): Promise<ProviderAvailability> {
+    // D-120: agy -p hangs when it isn't run from a terminal on Windows (antigravity-cli #318),
+    // which is exactly how Troupe runs it — so it stays off there, installed or not.
+    if (process.platform === 'win32') return Promise.resolve({ installed: false, authenticated: false, detail: 'Not available on Windows yet' })
     return new Promise((resolve) => {
-      execFile('agy', ['--version'], { env: buildEnv(), timeout: 15000 }, (err: any, out, errOut) => {
+      execFileCli('agy', ['--version'], { env: buildEnv(), timeout: 15000 }, (err: any, out, errOut) => {
         // Only a missing binary means "not installed"; a non-zero exit (unknown flag) still proves it's there.
         if (err && (err.code === 'ENOENT' || err.errno === -2)) { resolve({ installed: false, authenticated: false, detail: 'agy (Antigravity CLI) not found on PATH' }); return }
         // No machine-readable sign-in check; a signed-out agy surfaces as a run error.
@@ -39,6 +42,7 @@ export class GeminiProvider implements AgentProvider {
   }
 
   async *run(req: AgentRequest, resumeSessionId?: string): AsyncIterable<AgentEvent> {
+    if (process.platform === 'win32') { yield { type: 'error', message: 'Gemini is not available on Windows yet.', fatal: true }; return }
     const ctx = req.context
     // No system-prompt flag → context goes in a delimited preamble, like Codex/Grok (D-003).
     const memory = memoryDelivery('gemini', req.cwd ?? null, ctx?.memory ?? '') === 'injected' ? ctx?.memory : undefined

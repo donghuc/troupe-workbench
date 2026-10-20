@@ -1,4 +1,5 @@
 import { confirmDialog } from './ui/ConfirmDialog'
+import { OS_WORDS, IS_WINDOWS } from '../../../shared/platform'
 import { useEffect, useState } from 'react'
 import Icon from './Icon'
 import McpAddModal from './McpAddModal'
@@ -66,7 +67,7 @@ export default function ToolsSettings({ agents, mcpOff, setMcpOff, webAccess, se
           <div className="settings-row-title" title={m.name}>{d.label}</div>
           {m.detail && <div className="settings-row-sub truncate" title={m.detail}>{m.detail}</div>}
           {on && m.status === 'pending' && (
-            <div className="settings-row-sub">Sign in once in Terminal: run <code>claude</code>, type <code>/mcp</code>, pick this server, Authenticate. Troupe reuses the login.</div>
+            <div className="settings-row-sub">Sign in once in {OS_WORDS.terminal}: run <code>claude</code>, type <code>/mcp</code>, pick this server, Authenticate. Troupe reuses the login.</div>
           )}
         </div>
         <span className="tool-status">{on ? (m.status === 'pending' ? 'sign in' : m.status) : 'off'}</span>
@@ -163,8 +164,10 @@ export default function ToolsSettings({ agents, mcpOff, setMcpOff, webAccess, se
           <div className="settings-row settings-row-nested">
             <div className="settings-row-text">
               <div className="settings-row-title">Sandbox in Auto</div>
-              <div className="settings-row-sub">In Auto, Claude's commands can only change files in the project and reach package registries, GitHub and the sites below. Full access skips the sandbox.</div>
-              {shellSandbox && (
+              <div className="settings-row-sub">{IS_WINDOWS
+                ? "Claude Code has no sandbox on Windows, so while this is on, Auto doesn't run shell commands. Turn it off to let Auto run them unsandboxed; Full access always can."
+                : "In Auto, Claude's commands can only change files in the project and reach package registries, GitHub and the sites below. Full access skips the sandbox."}</div>
+              {shellSandbox && !IS_WINDOWS && (
                 <textarea
                   className="global-instr-input shell-domains-input"
                   aria-label="Other sites shell commands may reach"
@@ -189,12 +192,12 @@ export default function ToolsSettings({ agents, mcpOff, setMcpOff, webAccess, se
       </Section>
 
       <Section title="Command line">
-      <Field hint="Lets tools on this Mac, like Grok Bot, list projects and chat through the troupe command. Runs use Read-only or Auto, never Full access.">
+      <Field hint={`Lets tools on this ${OS_WORDS.computer}, like Grok Bot, list projects and chat through the troupe command. Runs use Read-only or Auto, never Full access.`}>
       <div className="settings-group" role="group" aria-label="Command line">
         <div className="settings-row">
           <div className="settings-row-text">
             <div className="settings-row-title">Allow command-line access</div>
-            <div className="settings-row-sub">Only while Troupe is open, and only for your user on this Mac.</div>
+            <div className="settings-row-sub">Only while Troupe is open, and only for your user on this {OS_WORDS.computer}.</div>
           </div>
           <Switch on={cliAccess} label="Allow command-line access" onChange={setCliAccess} />
         </div>
@@ -221,7 +224,7 @@ function CliInstallRow() {
       <div className="settings-row-text">
         <div className="settings-row-title">troupe command</div>
         <div className={`settings-row-sub${result ? ' ok' : ''}`}>
-          {result ? <>Installed at <code>{result.path}</code>{result.onPath ? '' : ' — not on your PATH, so call it by this full path.'}</> : 'Adds the troupe command to your Mac. Run troupe --help to start.'}
+          {result ? <>Installed at <code>{result.path}</code>{result.onPath ? (IS_WINDOWS ? ' — open a new terminal to use it.' : '') : ' — not on your PATH, so call it by this full path.'}</> : `Adds the troupe command to your ${OS_WORDS.computer}. Run troupe --help to start.`}
         </div>
       </div>
       <Button size="sm" disabled={busy} onClick={install}>{result ? 'Reinstall' : 'Install'}</Button>

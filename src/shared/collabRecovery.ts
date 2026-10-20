@@ -47,10 +47,10 @@ export function nextSameFails(prevSig: string | undefined, prevCount: number | u
 /** A task is stuck when the same failure came back this many times in a row. */
 export const STALL_AFTER = 2
 
-const ACTIONS = new Set(['retry', 'reassign', 'rewrite', 'skip'])
+const ACTIONS = new Set(['retry', 'reassign', 'rewrite', 'skip', 'rework'])
 
 /** Validate a Planner repair reply; drops options that can't be applied. */
-export function parseRepair(raw: unknown, taskId: string, isAgent: (id: string) => boolean): CollabRepair | null {
+export function parseRepair(raw: unknown, taskId: string, isAgent: (id: string) => boolean, isWorkTask: (seq: number) => boolean = () => false): CollabRepair | null {
   if (!raw || typeof raw !== 'object') return null
   const r = raw as Record<string, unknown>
   const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : undefined)
@@ -71,8 +71,17 @@ export function parseRepair(raw: unknown, taskId: string, isAgent: (id: string) 
       ...(str(x.scope) ? { scope: str(x.scope) } : {}),
       ...(str(x.acceptance) ? { acceptance: str(x.acceptance) } : {}),
       ...(str(x.note) ? { note: str(x.note) } : {}),
-      ...(str(x.userStep) ? { userStep: str(x.userStep) } : {})
+      ...(str(x.userStep) ? { userStep: str(x.userStep) } : {}),
+      ...(str(x.goal) ? { goal: str(x.goal) } : {})
     }
+    // D-121: 'rework' names a work task by its 1-based plan number (final review fixes only)
+    if (opt.action === 'rework') {
+      const n = Number(x.task)
+      if (!Number.isInteger(n) || !isWorkTask(n - 1)) continue
+      opt.taskSeq = n - 1
+    }
+    // a corrected goal always changes what the run delivers
+    if (opt.goal) opt.changesGoal = true
     if (opt.action === 'rewrite' && !opt.title && !opt.scope && !opt.acceptance && !opt.provider) continue
     // skipping a task always changes what the run delivers — never auto-apply it
     if (opt.action === 'skip') opt.changesGoal = true
@@ -88,3 +97,6 @@ export function parseRepair(raw: unknown, taskId: string, isAgent: (id: string) 
     recommended: Number.isInteger(rec) && rec >= 0 && rec < options.length ? rec : 0
   }
 }
+
+/** D-121: an agent's reply saying a headless run stopped at a permission prompt (GrokProvider). */
+export const PERMISSION_BLOCKED_RE = /was blocked asking permission for `([^`]+)`/

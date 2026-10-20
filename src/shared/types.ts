@@ -298,7 +298,17 @@ export interface CollabTaskMeta {
   repairs?: number       // automatic Planner repairs applied to this task
   skipNote?: string      // why it was skipped, for tasks that build on it
   history?: string[]     // plan changes made to this task (reassign, rewrite, skip…)
+  startedAt?: number     // D-121: first time this task started (ms)
+  finishedAt?: number    // D-121: when it last passed, failed or was skipped (ms)
+  startHash?: string     // D-121: its output files' fingerprint when the current attempt started
+  repairSig?: string     // D-121: the failure an automatic Planner fix was meant to cure
+  reviewer?: ProviderId  // D-121: who reviews this task (the Planner's or the user's pick); unset = the run's agent
+  tries?: CollabTry[]    // D-121: every attempt, kept across retries, reassignments and reworks (attempts resets)
+  blockedReviewers?: ProviderId[]  // D-121: reviewers that couldn't open the files for this task
+  lastFailKind?: 'review' | 'unchanged'  // D-121: what the last failure was, for the unchanged-files check
 }
+/** One attempt at a task (D-121), for the wrap-up and `troupe collab status`. */
+export interface CollabTry { agent: ProviderId; result?: 'passed' | 'failed' | 'blocked'; why?: string }
 export type CollabRecoverAction =
   | { type: 'retry'; note?: string }
   | { type: 'reassign'; provider: ProviderId; note?: string }
@@ -306,8 +316,10 @@ export type CollabRecoverAction =
   | { type: 'repair'; note?: string }
 export interface CollabRepairOption {
   label: string
-  action: 'retry' | 'reassign' | 'rewrite' | 'skip'
+  action: 'retry' | 'reassign' | 'rewrite' | 'skip' | 'rework'
   changesGoal: boolean
+  taskSeq?: number    // D-121 'rework' (final review failed): the work task to redo, 0-based
+  goal?: string       // D-121: the corrected goal, when the goal itself is the problem (applied only by the user)
   provider?: ProviderId
   title?: string
   scope?: string
@@ -356,6 +368,7 @@ export interface CollabTaskDraft {
   scope?: string
   acceptance?: string
   dependsOn?: string[]     // by seq index or task id; resolved on persist
+  reviewer?: ProviderId    // D-121: who reviews it; unset = the run's agent
 }
 
 export const DEFAULT_COLLAB_BUDGET: CollabBudget = { maxTasks: 8, maxRuns: 24, maxRetriesPerTask: 1 }

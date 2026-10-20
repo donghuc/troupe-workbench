@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { OS_WORDS, isAbsPath, relUnder } from '../../../shared/platform'
 import { rankFileNames } from '../../../shared/fileNameSearch'
 import { api } from '../api'
 import FileTree, { type FileSort } from './FileTree'
@@ -78,8 +79,9 @@ export default function FilesView({ root, onBack }: Props) {
   // A link inside a previewed file (relative to that file, or an absolute path in the project).
   const openLink = (href: string) => {
     let h = href
-    if (h.startsWith(root + '/')) h = h.slice(root.length + 1)
-    else if (!h.startsWith('/') && activePath) {
+    const under = relUnder(h, root)
+    if (under !== null) h = under
+    else if (!isAbsPath(h) && activePath) {
       const dir = activePath.includes('/') ? activePath.slice(0, activePath.lastIndexOf('/')) : ''
       h = normalizePath(dir ? `${dir}/${h}` : h)
     }
@@ -162,7 +164,7 @@ export default function FilesView({ root, onBack }: Props) {
             <div className="doc-toolbar">
               <span className="doc-path truncate">{activePath}</span>
               <div className="doc-actions">
-                <IconButton title="Show in Finder" onClick={() => api.system.revealItem(root, activePath)}><Icon name="folder-open" size="md" /></IconButton>
+                <IconButton title={OS_WORDS.showInFolder} onClick={() => api.system.revealItem(root, activePath)}><Icon name="folder-open" size="md" /></IconButton>
                 <IconButton title="Open in default app" onClick={() => api.system.openItem(root, activePath)}><Icon name="external" size="md" /></IconButton>
               </div>
             </div>

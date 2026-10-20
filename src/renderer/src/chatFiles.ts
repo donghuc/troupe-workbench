@@ -1,4 +1,5 @@
 import type { Message } from '../../shared/types'
+import { IS_WINDOWS, isAbsPath, relUnder } from '../../shared/platform'
 import type { AgentAction } from '../../shared/agent'
 import type { IconName } from './components/Icon'
 import { normalizeRel } from './links'
@@ -59,7 +60,12 @@ const WRITE_TOOL = /^(write|edit|multiedit|notebookedit|write_file|edit_file|cre
 export const wbfileSrc = (root: string, rel: string) => `wbfile://file/?root=${encodeURIComponent(root)}&path=${encodeURIComponent(rel)}`
 
 /** Project-relative form of an absolute-inside-cwd or ./-prefixed path. */
-export const toRelPath = (cwd: string | undefined, p: string): string => { let r = p.replace(/^\.\//, ''); if (cwd && r.startsWith(cwd + '/')) r = r.slice(cwd.length + 1); return r }
+export const toRelPath = (cwd: string | undefined, p: string): string => {
+  let r = p.replace(IS_WINDOWS ? /^\.[\\/]/ : /^\.\//, '')
+  const u = cwd ? relUnder(r, cwd) : null
+  if (u !== null) r = u
+  return IS_WINDOWS && !isAbsPath(r) ? r.replace(/\\/g, '/') : r
+}
 
 /**
  * Files referenced in a chat, newest first: `linked` = artifacts (linked in a reply, or a
@@ -71,7 +77,7 @@ export function collectChatFiles(messages: Message[], cwd: string | undefined): 
   const clean = (raw: string | undefined): string | null => {
     if (!raw) return null
     const rel = toRel(raw)
-    if (rel.startsWith('/') || /^[a-z]+:\/\//i.test(rel)) return null  // outside the folder / a URL — can't open
+    if (isAbsPath(rel) || /^[a-z]+:\/\//i.test(rel)) return null  // outside the folder / a URL — can't open
     if (rel.split('/').some((seg) => seg.startsWith('.'))) return null   // hidden file or folder
     return ARTIFACT_EXT.test(rel) ? rel : null
   }
@@ -100,7 +106,7 @@ export function fileArtifacts(metadata: Record<string, unknown> | null, cwd: str
   for (const a of actionsOf(metadata)) {
     if (a.kind !== 'file' || !a.path) continue
     const rel = toRel(a.path)
-    if (rel.startsWith('/') || /^[a-z]+:\/\//i.test(rel)) continue
+    if (isAbsPath(rel) || /^[a-z]+:\/\//i.test(rel)) continue
     if (ARTIFACT_EXT.test(rel) && !seen.has(rel)) { seen.add(rel); out.push(rel) }
   }
   return out

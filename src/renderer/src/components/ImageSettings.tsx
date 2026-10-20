@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { OS_WORDS } from '../../../shared/platform'
 import Icon from './Icon'
 import { Stack, Field } from './Form'
 import { api } from '../api'
@@ -19,7 +20,7 @@ export default function ImageSettings() {
       <Field label="Image folder" hint="Stores the canvas, references, generated and saved images. Changing it opens that folder’s canvas.">
         <div className="image-folder-row">
           <span className={`image-folder-path truncate${folder ? '' : ' empty'}`} title={folder ?? undefined}>{folder === undefined ? 'Loading…' : folder ?? 'No folder chosen yet'}</span>
-          {folder && <Button size="sm" title="Show in Finder" onClick={() => api.system.revealItem(folder, '').catch(failed('Show in Finder'))}><Icon name="folder-open" size="sm" /> Show</Button>}
+          {folder && <Button size="sm" title={OS_WORDS.showInFolder} onClick={() => api.system.revealItem(folder, '').catch(failed(OS_WORDS.showInFolder))}><Icon name="folder-open" size="sm" /> Show</Button>}
           <Button size="sm" variant={folder ? 'secondary' : 'primary'} onClick={choose}>{folder ? 'Change…' : 'Choose folder…'}</Button>
         </div>
       </Field>

@@ -2,6 +2,7 @@
 // a reply, and files attached to your message. Click opens the artifact viewer; the
 // icons pop it out or show it in Finder.
 import Icon from './Icon'
+import { OS_WORDS } from '../../../shared/platform'
 import { api } from '../api'
 import { fileCardMeta } from '../../../shared/fileCards'
 import { FILE_THUMBS } from '../fileThumbs'
@@ -24,7 +25,7 @@ export default function FileCard({ root, rel, name, onOpen }: { root?: string; r
       {root && (
         <span className="file-card-actions">
           <IconButton title="Open in new window" onClick={() => { void api.system.openArtifactWindow(root, rel) }}><Icon name="popout" size="sm" /></IconButton>
-          <IconButton title="Show in Finder" onClick={() => { void api.system.revealItem(root, rel) }}><Icon name="folder-open" size="md" /></IconButton>
+          <IconButton title={OS_WORDS.showInFolder} onClick={() => { void api.system.revealItem(root, rel) }}><Icon name="folder-open" size="md" /></IconButton>
         </span>
       )}
     </div>

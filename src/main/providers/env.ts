@@ -1,6 +1,8 @@
 import { homedir } from 'os'
 import { join } from 'path'
 import { execFileSync } from 'child_process'
+import { winExtraDirs, expandWinVars, parseRegPath, joinWinPath, withWinPath } from '../platform/winEnv'
+import { envPath } from '../platform/winBin'
 
 // A Finder-launched macOS app inherits a minimal PATH (no shell rc is sourced),
 // so CLIs installed via a version manager (nvm/fnm/volta) or Homebrew go missing
@@ -25,10 +27,30 @@ function resolveLoginPath(): string | null {
 }
 
 /** Forget the cached login-shell PATH, so a CLI installed while the app runs is found on the next check (D-103 Re-check). */
-export function resetLoginPath(): void { loginPath = undefined }
+export function resetLoginPath(): void { loginPath = undefined; winRegPath = undefined }
+
+// Windows (D-120): the user + machine PATH as the registry has them now, cached like the
+// login-shell PATH above and re-read after an install (resetLoginPath).
+let winRegPath: string | null | undefined
+
+function regPath(key: string): string | null {
+  try {
+    const out = execFileSync('reg', ['query', key, '/v', 'Path'], { encoding: 'utf8', timeout: 4000, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] })
+    const v = parseRegPath(out)
+    return v ? expandWinVars(v, process.env) : null
+  } catch { return null }
+}
+
+function buildWinEnv(): NodeJS.ProcessEnv {
+  if (winRegPath === undefined) {
+    winRegPath = joinWinPath([regPath('HKCU\\Environment'), regPath('HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment')]) || null
+  }
+  return withWinPath(process.env, joinWinPath([envPath(process.env), winRegPath, ...winExtraDirs(process.env)]))
+}
 
 // Common CLI install locations, so Finder-launched apps (minimal PATH) still find binaries.
 export function buildEnv(): NodeJS.ProcessEnv {
+  if (process.platform === 'win32') return buildWinEnv()
   const extra = [
     '/opt/homebrew/bin', '/usr/local/bin',
     join(homedir(), '.local/bin'), join(homedir(), '.claude/local'),

@@ -1,4 +1,5 @@
 import { confirmDialog } from '../ui/ConfirmDialog'
+import { OS_WORDS } from '../../../../shared/platform'
 import { Button, IconButton } from '../ui/Button'
 import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import Icon from '../Icon'
@@ -418,7 +419,7 @@ export default function ImageView({ active = true }: { active?: boolean }) {
         <div className="img-gate">
           <div className="img-gate-icon"><Icon name="image" size="xl" /></div>
           <h2>Connect a folder to use Image</h2>
-          <p>Image keeps the canvas, your reference images and every generated image in one folder on your Mac, so nothing is lost when you clear the canvas. Choose it in Settings ▸ Image.</p>
+          <p>Image keeps the canvas, your reference images and every generated image in one folder on your {OS_WORDS.computer}, so nothing is lost when you clear the canvas. Choose it in Settings ▸ Image.</p>
           <Button variant="primary" onClick={() => openSettings('image')}><Icon name="settings" size="md" /> Open Settings ▸ Image</Button>
         </div>
       )}

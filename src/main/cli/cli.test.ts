@@ -105,7 +105,8 @@ describe('cli commands (D-117)', () => {
   })
 })
 
-describe('troupe script over the socket (D-117)', () => {
+// The bash script and Unix socket are macOS-only; Windows uses the pipe client (cliMore.test.ts, D-120).
+describe.skipIf(process.platform === 'win32')('troupe script over the socket (D-117)', () => {
   const dir = mkdtempSync(join(tmpdir(), 'tc-'))
   const sock = join(dir, 's.sock')
   const script = fileURLToPath(new URL('../../../resources/troupe', import.meta.url))
@@ -153,7 +154,7 @@ describe('troupe script over the socket (D-117)', () => {
   })
 })
 
-describe('installing the troupe command (D-117)', () => {
+describe.skipIf(process.platform === 'win32')('installing the troupe command (D-117)', () => {
   it('writes a wrapper that runs the bundled script, and never overwrites a stranger\'s file', () => {
     const bin = mkdtempSync(join(tmpdir(), 'tb-'))
     const r = installCommand('/Applications/Troupe.app/Contents/Resources/troupe', `/usr/bin:${bin}`, bin)

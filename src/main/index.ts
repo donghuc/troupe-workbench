@@ -38,11 +38,16 @@ import { assertProjectRoot } from './security/roots'
 import { DOCUMENT_CSP, isDocumentMime } from './security/documentCsp'
 import { migrateProjectMcpOff } from './tools/mcpMigration'
 import { migrateExtraModels } from './tools/codexModels'
+import { setWinPdfPaths } from './platform/winPdf'
+import { initWinApp, attachWinWindow } from './platform/winShell'
+import { runSmoke } from './platform/smoke'
 
 // Display name is "Troupe", but keep userData at ".../AI Workbench" so existing data
 // (workbench.db) survives the rename — app.setName also decides the userData folder (spec §54).
 app.setPath('userData', join(app.getPath('appData'), 'AI Workbench'))
 app.setName('Troupe')
+// D-120: Windows — notifications id, single running copy, tray (platform/winShell.ts).
+if (process.platform === 'win32') initWinApp()
 
 // Serve project files to the renderer over a real URL (wbfile://file/?root=&path=),
 // so Chromium's PDF viewer and <img>/<iframe> render them (data: URLs blank out for
@@ -59,6 +64,8 @@ protocol.registerSchemesAsPrivileged([
 const iconPath = join(app.getAppPath(), 'build', 'icon.png')
 const appIcon = existsSync(iconPath) ? nativeImage.createFromPath(iconPath) : null
 
+let mainWindow: BrowserWindow | null = null
+
 function createWindow(): void {
   const win = new BrowserWindow({
     width: 1440,
@@ -67,8 +74,10 @@ function createWindow(): void {
     minHeight: 600,
     title: 'Troupe',
     ...(appIcon ? { icon: appIcon } : {}),
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 16, y: 16 },
+    // Windows (D-120): the native title bar (no traffic lights), menu bar hidden until Alt.
+    ...(process.platform === 'win32'
+      ? { autoHideMenuBar: true }
+      : { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 16, y: 16 } }),
     backgroundColor: '#1a1915',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -79,6 +88,10 @@ function createWindow(): void {
     }
   })
 
+  mainWindow = win
+  win.on('closed', () => { if (mainWindow === win) mainWindow = null })
+  if (process.platform === 'win32') attachWinWindow(() => mainWindow, win)
+  runSmoke(win)   // CI only (TROUPE_SMOKE_OUT); no-op otherwise
   win.webContents.setWindowOpenHandler(({ url }) => openExternalSafely(url)) // http(s)/mailto only; never wbfile:
   guardNavigation(win.webContents)   // D-100: a dropped or clicked page never replaces the app
 
@@ -127,6 +140,11 @@ app.whenReady().then(() => {
     }
   })
   if (process.platform === 'darwin' && app.dock && appIcon) { try { app.dock.setIcon(appIcon) } catch { /* non-fatal */ } }
+  if (process.platform === 'win32') {
+    // D-120: pdf.js for PDF text (macOS uses PDFKit).
+    const res = app.isPackaged ? process.resourcesPath : join(app.getAppPath(), 'resources')
+    setWinPdfPaths(join(res, 'pdf-text.mjs'), app.isPackaged ? join(process.resourcesPath, 'pdfjs') : join(app.getAppPath(), 'node_modules', 'pdfjs-dist', 'legacy', 'build'))
+  }
   try { getDb() } catch (e) { logError('startup failed', String(e)); throw e }
   // Park collab runs the previous process left mid-flight (D-060 item 4).
   sweepInterruptedTurns()

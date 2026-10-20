@@ -1,3 +1,5 @@
+import { IS_WINDOWS, relUnder } from './platform'
+import { formatDuration } from './collabChecks'
 // Command-line access (D-117). Pure pieces of the `troupe` CLI protocol: run ids, name
 // matching, mode checks and the plain-text output a bot or a person reads. The server
 // (main/cli) and its tests use these; nothing here touches Electron or the database.
@@ -153,7 +155,8 @@ export function filesChanged(metas: (Record<string, unknown> | null)[], root?: s
     for (const a of acts) {
       if (!a?.path || !(a.kind === 'file' || (a.kind === 'tool' && WRITE_TOOL.test(a.label ?? '')))) continue
       let p = a.path
-      if (root && p.startsWith(root.replace(/\/$/, '') + '/')) p = p.slice(root.replace(/\/$/, '').length + 1)
+      if (IS_WINDOWS) { const u = root ? relUnder(p, root) : null; p = u ?? p }   // D-120: C:\… paths
+      else if (root && p.startsWith(root.replace(/\/$/, '') + '/')) p = p.slice(root.replace(/\/$/, '').length + 1)
       if (!out.includes(p)) out.push(p)
     }
   }
@@ -179,24 +182,26 @@ export function describeSchedule(kind: string, intervalMin: number, atMin: numbe
   return intervalMin % 60 === 0 ? `every ${intervalMin / 60} h` : `every ${intervalMin} min`
 }
 
-export interface CliCollabTask { n: number; title: string; status: string; agent: string; attempts: number; produces: string; findings: string[]; files: string[] }
-export interface CliCollab { run: string; chat: string; project: string; goal: string; status: string; reason: string; tasks: CliCollabTask[]; fixes: { n: number; label: string; recommended: boolean; needsYou: string | null }[]; summary: string }
+export interface CliCollabTask { n: number; title: string; status: string; kind?: string; agent: string; reviewer: string; attempts: number; tries: string; produces: string; findings: string[]; files: string[]; startedAt: number | null; finishedAt: number | null; seconds: number | null }
+export interface CliCollab { run: string; chat: string; project: string; goal: string; status: string; reason: string; tasks: CliCollabTask[]; fixes: { n: number; label: string; recommended: boolean; needsYou: string | null; changesGoal?: boolean }[]; summary: string; wrapUp: string }
 export function collabText(c: CliCollab): string {
   const human = (s: string) => s.replace(/_/g, ' ')
   const lines = [`collab ${c.run}: ${human(c.status)}${c.reason ? ` — ${c.reason}` : ''}`, `goal: ${c.goal}`, `chat ${c.chat} in ${c.project}`]
   if (c.tasks.length) {
     lines.push('', 'tasks:')
     for (const t of c.tasks) {
-      lines.push(`  ${t.n}. [${human(t.status)}] ${t.title} · ${t.agent}${t.attempts > 1 ? ` · attempt ${t.attempts}` : ''}${t.produces ? ` → ${t.produces}` : ''}`)
+      lines.push(`  ${t.n}. [${human(t.status)}] ${t.title} · ${t.kind === 'review' ? `review by ${t.reviewer}` : `${t.agent}${t.reviewer && t.reviewer !== t.agent ? `, reviewed by ${t.reviewer}` : ''}`}${t.attempts > 1 ? ` · attempt ${t.attempts}` : ''}${t.seconds !== null ? ` · ${formatDuration(t.seconds * 1000)}${t.finishedAt ? '' : ' so far'}` : ''}${t.produces ? ` → ${t.produces}` : ''}`)
+      if (t.tries && t.tries.includes(',')) lines.push(`     tries: ${t.tries}`)
       for (const f of t.findings.slice(0, 3)) lines.push(`     - ${f}`)
     }
   }
   if (c.fixes.length) {
     lines.push('', 'fixes (troupe collab fix <run> <n>):')
-    for (const f of c.fixes) lines.push(`  ${f.n}. ${f.label}${f.recommended ? ' (recommended)' : ''}${f.needsYou ? ` — you first: ${f.needsYou}` : ''}`)
+    for (const f of c.fixes) lines.push(`  ${f.n}. ${f.label}${f.recommended ? ' (recommended)' : ''}${f.changesGoal ? ' (changes the goal — ask the user)' : ''}${f.needsYou ? ` — you first: ${f.needsYou}` : ''}`)
   }
   if (c.status === 'awaiting_confirmation') lines.push('', 'Plan ready. Approve: troupe collab approve <run> · Reject: troupe collab reject <run>')
-  if (c.summary) lines.push('', c.summary)
+  if (c.wrapUp) lines.push('', 'wrap-up:', c.wrapUp.trim())
+  else if (c.summary) lines.push('', c.summary)
   return lines.join('\n')
 }
 

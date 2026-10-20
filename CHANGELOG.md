@@ -18,6 +18,38 @@ Each version here matches a packaged build — the dmg is named
 > - Bumping rules: PATCH = fixes/small tweaks, MINOR = new features (backward-compatible),
 >   MAJOR = breaking changes or a data format users can't roll back from.
 
+## [2.10.0] - 2026-10-20
+
+### Added
+- (Windows) A personal Windows build: an unsigned per-user installer from the private repo's CI, with everything the Mac app has except Gemini (its CLI hangs when another app runs it on Windows). Close hides Troupe to the tray so scheduled tasks and the `troupe` command keep running; Quit is in the tray menu.
+- (Windows) Agent setup installs Claude, Codex and Grok with their official PowerShell installers, and opens sign-ins in a PowerShell window.
+- (Windows) The `troupe` command: Settings ▸ Tools ▸ Command line installs `troupe.cmd` and adds it to your PATH.
+- Collab: every finished or stopped run ends with the Planner's short wrap-up — what was delivered, the files, decisions for you and follow-ups — in the chat and on the Done card.
+- Collab: before you approve a plan, the card lists what to check — contradictions in the goal, files that would land outside the deliverables folder, two tasks writing one file, a task that doesn't wait for the file it reads, no final review.
+- Collab: a failed final review now comes with fixes from the Planner (which task to redo, with the findings) instead of just pausing.
+- Collab: the Planner can choose which agent reviews each task (e.g. a different agent from the Maker); you can change it in the plan before running.
+- Collab: each task shows how long it took. `troupe collab list` works without a project, and `collab status` shows timings and the wrap-up.
+
+### Changed
+- Each colour has one job. Terracotta is only for the main action in a view (Send, Save, Run, Continue, Add) and for links. Toggles, checkboxes and selected items are ink; selected model chips get a neutral fill and a check. Saved and Copied are green; running and busy dots are blue.
+- Delete, Remove, Clear, Reset and Stop show a trash (or matching) icon with the label in red, in menus and confirm dialogs.
+- Image Creation, Notes and project lists show short dates ("Oct 8"; the year only when it isn't this year).
+- Collab: the Planner, Maker and Reviewer replies show as one line each in the chat (click to read); the Done card sits after the run's last message, not above it.
+- Collab: the budget is sized to the plan instead of a flat 24 agent runs, and agent time limits are shorter (a stuck Reviewer waits 15 min, not 45).
+- Collab: Makers see the run's goal. If the goal itself is wrong, the Planner proposes a corrected goal and you confirm it — it's never changed without you.
+- Collab: a Maker that reports done but didn't change its files fails at once, without a review run; and after one automatic fix, the same failure asks you instead of retrying.
+- Collab: the wrap-up and `collab status` keep every attempt — who tried, what failed, who took over — even after a task is given to another agent. The Done card shows a plain one-line result instead of repeating the wrap-up.
+- Collab: Troupe creates the deliverables folders before a Maker starts.
+- The `troupe` command gives up after 90 s with a clear message instead of waiting forever (except `--wait`).
+- (Windows) With "Sandbox in Auto" on, Auto doesn't run Claude's shell commands, because Claude Code has no sandbox on native Windows. Full access still can.
+
+### Fixed
+- Grok can now write files and fetch web pages in Auto and as a Collab Maker. Every tool it may use is pre-approved, and tools that would ask for permission are left out, because a background run can't answer a prompt and Grok used to stop with nothing written. In Auto it has no shell.
+- When Grok does stop early, the reply says why, e.g. "Grok was blocked asking permission for `web_fetch`"; in Collab that becomes the task's finding and the Planner won't suggest a plain retry.
+- Collab: Codex can read files when it reviews (read-only commands such as `cat` and `rg`). A reviewer that can't open the files no longer fails the work: the review moves to another agent.
+- Collab: when a task is handed to the agent that was reviewing it, the review moves to another agent, so nobody reviews their own work.
+- Collab: "No changes were written" no longer fails a Maker that rightly left a file alone after a review that couldn't be done.
+
 ## [2.9.0] - 2026-10-19
 
 ### Added

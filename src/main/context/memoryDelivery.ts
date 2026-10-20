@@ -42,7 +42,9 @@ const stripMark = (s: string): string => s.replace(MIRROR_MARK, '').trim()
 export function isMirrorOf(mirrorPath: string, canonical: string): boolean {
   try {
     const a = readFileSync(mirrorPath, 'utf8')
-    return a.includes(MIRROR_MARK) && stripMark(a) === canonical
+    // D-120: on Windows an editor or git may have turned \n into \r\n in either file.
+    const lf = (s: string) => (process.platform === 'win32' ? s.replace(/\r\n/g, '\n') : s)
+    return a.includes(MIRROR_MARK) && lf(stripMark(a)) === lf(canonical)
   } catch { return false }
 }
 

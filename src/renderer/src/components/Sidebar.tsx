@@ -1,4 +1,5 @@
 import { confirmDialog } from './ui/ConfirmDialog'
+import { OS_WORDS } from '../../../shared/platform'
 import { useMemo, useState, type DragEvent, useEffect } from 'react'
 import Icon from './Icon'
 import logo from '../assets/logo.png'
@@ -126,7 +127,7 @@ export default function Sidebar(props: Props) {
             <MenuItem onClick={() => { setMenuId(null); onSetPinned(c.id, !c.pinned) }}>{c.pinned ? 'Unpin' : 'Pin'}</MenuItem>
             <MenuItem onClick={() => { setMenuId(null); onDuplicateConversation(c.id) }}>Duplicate</MenuItem>
             <MenuItem onClick={() => { setMenuId(null); onExportConversation(c.id) }}>Export…</MenuItem>
-            <MenuItem danger onClick={() => { setMenuId(null); void confirmDialog({ title: 'Delete chat?', message: `“${c.title}” and its messages are deleted.`, confirmLabel: 'Delete' }).then((ok) => ok && onDeleteConversation(c.id)) }}>Delete</MenuItem>
+            <MenuItem danger onClick={() => { setMenuId(null); void confirmDialog({ title: 'Delete chat?', message: `“${c.title}” and its messages are deleted.`, confirmLabel: 'Delete' }).then((ok) => ok && onDeleteConversation(c.id)) }}><Icon name="trash" size="sm" />Delete</MenuItem>
           </Menu>
         </>
       )}
@@ -168,7 +169,7 @@ export default function Sidebar(props: Props) {
               <button className="conv-menu-btn" title="More" onClick={() => setPMenuId(pMenuId === p.id ? null : p.id)}><Icon name="more-vertical" size="md" /></button>
               <Menu open={pMenuId === p.id} onClose={() => setPMenuId(null)}>
                 <MenuItem onClick={() => startPRename(p)}>Rename</MenuItem>
-                <MenuItem danger onClick={() => { setPMenuId(null); void confirmDialog({ title: `Delete “${p.name}”?`, message: "The project and all its chats are deleted. This can't be undone.", confirmLabel: 'Delete' }).then((ok) => ok && onDeleteProject(p.id)) }}>Delete</MenuItem>
+                <MenuItem danger onClick={() => { setPMenuId(null); void confirmDialog({ title: `Delete “${p.name}”?`, message: "The project and all its chats are deleted. This can't be undone.", confirmLabel: 'Delete' }).then((ok) => ok && onDeleteProject(p.id)) }}><Icon name="trash" size="sm" />Delete</MenuItem>
               </Menu>
             </>
           )}
@@ -185,7 +186,7 @@ export default function Sidebar(props: Props) {
         <span className="brand-name">Troupe</span>
       </div>
       <div className="sidebar-scroll">
-        <button className="nav-item" onClick={onOpenSearch}><Icon name="search" /> Search <span className="kbd">⌘K</span></button>
+        <button className="nav-item" onClick={onOpenSearch}><Icon name="search" /> Search <span className="kbd">{OS_WORDS.mod}K</span></button>
         <button className={`nav-item ${activeProjectId === null && !notesActive && !memoryActive && !tasksActive && !skillsActive && !imageActive ? 'active' : ''}`} onClick={() => onSelectProject(null)}><Icon name="grid" /> Projects</button>
         <button className={`nav-item ${imageActive ? 'active' : ''}`} onClick={onOpenImage}><Icon name="image" /> Image</button>
         <button className={`nav-item ${notesActive ? 'active' : ''}`} onClick={onOpenNotes}><Icon name="file" /> Notes</button>

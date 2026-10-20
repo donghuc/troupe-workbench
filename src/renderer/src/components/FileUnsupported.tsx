@@ -1,4 +1,5 @@
 import { api } from '../api'
+import { OS_WORDS } from '../../../shared/platform'
 import { extOf } from '../fileKinds'
 import Icon from './Icon'
 import { Button } from './ui/Button'
@@ -17,7 +18,7 @@ export default function FileUnsupported({ root, relPath, reason = 'type' }: { ro
       <div className="file-unsupported-name truncate" title={relPath}>{name}</div>
       <p className="file-unsupported-why">{why}</p>
       <div className="file-unsupported-actions">
-        <Button variant="primary" size="sm" onClick={() => api.system.revealItem(root, relPath)}>Show in Finder</Button>
+        <Button variant="primary" size="sm" onClick={() => api.system.revealItem(root, relPath)}>{OS_WORDS.showInFolder}</Button>
         <Button size="sm" onClick={() => api.system.openItem(root, relPath)}>Open in default app</Button>
       </div>
     </div>

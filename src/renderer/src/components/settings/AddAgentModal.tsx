@@ -1,4 +1,5 @@
 import { Button } from '../ui/Button'
+import { OS_WORDS } from '../../../../shared/platform'
 import { useEffect, useMemo, useState } from 'react'
 import Modal from '../Modal'
 import { Field } from '../Form'
@@ -104,7 +105,7 @@ export default function AddAgentModal({ editing, onClose }: Props) {
                 const bin = found?.[r.id]
                 const isAdded = added.has(r.id)
                 const picked = draft.presetId === r.id
-                const state = found === null ? 'Checking…' : isAdded ? 'Already added' : bin ? 'Found on your Mac' : 'Not installed'
+                const state = found === null ? 'Checking…' : isAdded ? 'Already added' : bin ? `Found on your ${OS_WORDS.computer}` : 'Not installed'
                 return (
                   <div key={r.id} role="listitem" className={`settings-row preset-row${picked ? ' picked' : ''}`}>
                     <ProviderAvatar id={`x-${r.id}`} size="lg" />
@@ -115,9 +116,9 @@ export default function AddAgentModal({ editing, onClose }: Props) {
                     {picked && <span className="preset-picked"><Icon name="check" size="xs" /> Selected</span>}
                     {!picked && bin && !isAdded && <Button size="sm" onClick={() => pickPreset(r)}>Use</Button>}
                     {found !== null && !bin && !isAdded && r.install && (
-                      <Button size="sm" title={`Opens Terminal and runs: ${r.install.cmd}`} onClick={() => api.agents.setupStart(r.id, 'install', true)}>Install…</Button>
+                      <Button size="sm" title={`Opens ${OS_WORDS.terminal} and runs: ${r.install.cmd}`} onClick={() => api.agents.setupStart(r.id, 'install', true)}>Install…</Button>
                     )}
-                    {bin && r.signIn && !isAdded && <Button variant="ghost" size="sm" title={`Opens Terminal and runs: ${r.signIn.cmd}`} onClick={() => api.agents.setupStart(r.id, 'signIn', true)}>Sign in…</Button>}
+                    {bin && r.signIn && !isAdded && <Button variant="ghost" size="sm" title={`Opens ${OS_WORDS.terminal} and runs: ${r.signIn.cmd}`} onClick={() => api.agents.setupStart(r.id, 'signIn', true)}>Sign in…</Button>}
                   </div>
                 )
               })}
@@ -179,7 +180,7 @@ export default function AddAgentModal({ editing, onClose }: Props) {
             {!testing && error && <>{error}</>}
             {!testing && !error && test && (test.result.ok
               ? <><strong>It answered</strong> in {(test.result.ms / 1000).toFixed(1)} s. You can add it.<pre className="agent-test-reply">{test.result.reply}</pre></>
-              : <><strong>It didn't answer:</strong> {test.result.error}. Check the command runs in Terminal.{test.result.reply && <pre className="agent-test-reply">{test.result.reply}</pre>}</>)}
+              : <><strong>It didn't answer:</strong> {test.result.error}. Check the command runs in {OS_WORDS.terminal}.{test.result.reply && <pre className="agent-test-reply">{test.result.reply}</pre>}</>)}
           </div>
         )}
 

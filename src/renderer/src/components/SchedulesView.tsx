@@ -88,7 +88,7 @@ export default function SchedulesView({ projects, providers, onRun }: Props) {
     <span className="md-head-menu">
       <IconButton title="More" aria-expanded={menuOpen} onClick={() => setMenuOpen((v) => !v)}><Icon name="more-vertical" size="md" /></IconButton>
       <Menu open={menuOpen} onClose={() => setMenuOpen(false)}>
-        <MenuItem danger onClick={() => { setMenuOpen(false); remove(s) }}>Delete</MenuItem>
+        <MenuItem danger onClick={() => { setMenuOpen(false); remove(s) }}><Icon name="trash" size="sm" />Delete</MenuItem>
       </Menu>
     </span>
   )

@@ -1,7 +1,7 @@
 import { CHROME_ACCESS_SETTING } from '../../shared/providers'
+import { execFileCli, whichWin } from '../platform/proc'
 import { workFolderRules } from '../../shared/contextBudget'
-import { execFile } from 'child_process'
-import { writeFileSync, mkdtempSync } from 'fs'
+import { writeFileSync, mkdtempSync, existsSync } from 'fs'
 import { tmpdir } from 'os'
 import { claudeMcpToolPrefixes } from '../../shared/projectMcp'
 import { removeTempDir } from '../util/tempFiles'
@@ -19,6 +19,15 @@ import type {
   AgentRequest, AgentEvent, ProviderCapabilities, ProviderAvailability
 } from '../../shared/agent'
 
+/** Windows: Git Bash where Claude Code looks for it (CLAUDE_CODE_GIT_BASH_PATH, Git's default folders, git on PATH). */
+function gitBashFound(): boolean {
+  const env = buildEnv()
+  if (env.CLAUDE_CODE_GIT_BASH_PATH && existsSync(env.CLAUDE_CODE_GIT_BASH_PATH)) return true
+  const pf = [env.ProgramFiles, env['ProgramFiles(x86)'], env.LOCALAPPDATA && join(env.LOCALAPPDATA, 'Programs')].filter(Boolean) as string[]
+  if (pf.some((d) => existsSync(join(d, 'Git', 'bin', 'bash.exe')))) return true
+  return !!whichWin('git', env)
+}
+
 export class ClaudeCodeProvider implements AgentProvider {
   readonly id = 'claude-code' as const
   readonly name = 'Claude'
@@ -26,10 +35,11 @@ export class ClaudeCodeProvider implements AgentProvider {
 
   isAvailable(): Promise<ProviderAvailability> {
     return new Promise((resolve) => {
-      execFile('claude', ['--version'], { env: buildEnv() }, (err, verOut) => {
+      execFileCli('claude', ['--version'], { env: buildEnv() }, (err, verOut) => {
         if (err) { resolve({ installed: false, authenticated: false, detail: 'claude CLI not found on PATH' }); return }
-        const version = String(verOut).trim()
-        execFile('claude', ['auth', 'status'], { env: buildEnv() }, (_e, statusOut) => {
+        // D-120: without Git for Windows, Claude Code uses PowerShell instead of Bash.
+        const version = String(verOut).trim() + (process.platform === 'win32' && !gitBashFound() ? ' · Git for Windows not found (Claude will use PowerShell)' : '')
+        execFileCli('claude', ['auth', 'status'], { env: buildEnv() }, (_e, statusOut) => {
           let loggedIn = false
           try { loggedIn = !!JSON.parse(String(statusOut)).loggedIn } catch { /* ignore */ }
           resolve({
@@ -71,7 +81,13 @@ export class ClaudeCodeProvider implements AgentProvider {
     const chromeAccess = getSetting(CHROME_ACCESS_SETTING) === '1' && mode !== 'read'
     const readOnly = ['Read', 'Grep', 'Glob']
     let permFlag = 'acceptEdits'
-    let allowed = [...readOnly, ...(webAccess ? ['WebSearch', 'WebFetch'] : []), ...(shellAccess ? ['Bash'] : [])]
+    // D-120: Claude Code has no sandbox on native Windows, so with "Sandbox in Auto" on, Auto
+    // pre-approves no shell tool there (D-115's guarantee holds by not running commands).
+    // Windows also has a PowerShell tool (used when Git for Windows is missing).
+    const win = process.platform === 'win32'
+    const sandboxed = sandboxOn(getSetting(SHELL_SANDBOX_SETTING))
+    const shellTools = win ? (sandboxed ? [] : ['Bash', 'PowerShell']) : ['Bash']
+    let allowed = [...readOnly, ...(webAccess ? ['WebSearch', 'WebFetch'] : []), ...(shellAccess ? shellTools : [])]
     if (mode === 'read') { permFlag = 'default'; allowed = [...readOnly, ...(req.allowWeb && webAccess ? ['WebSearch', 'WebFetch'] : [])] }
     else if (mode === 'full') { permFlag = 'bypassPermissions'; allowed = [...readOnly, 'Bash', 'WebSearch', 'WebFetch', 'Write', 'Edit'] }
     // Pre-approve configured MCP servers (e.g. browser tools) so their tools aren't
@@ -100,7 +116,7 @@ export class ClaudeCodeProvider implements AgentProvider {
     if (req.addDirs?.length) args.push('--add-dir', ...req.addDirs)
     // D-115: in Auto, shell commands run in Claude Code's sandbox (writes in the project
     // and added folders only, listed sites only, fails closed). Full access skips it.
-    if (mode === 'auto' && shellAccess && sandboxOn(getSetting(SHELL_SANDBOX_SETTING))) {
+    if (mode === 'auto' && shellAccess && sandboxed && !win) {
       args.push('--settings', claudeSandboxSettings(parseDomains(getSetting(SHELL_DOMAINS_SETTING))))
     }
     if (req.model) args.push('--model', req.model)

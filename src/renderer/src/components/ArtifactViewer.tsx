@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { OS_WORDS, isAbsPath, relUnder } from '../../../shared/platform'
 import { api } from '../api'
 import { kindOf } from '../fileKinds'
 import Icon from './Icon'
@@ -20,8 +21,9 @@ export default function ArtifactViewer({ root, relPath, onClose, popout }: Props
 
   const openLink = (href: string) => {
     let h = href
-    if (h.startsWith(root + '/')) h = h.slice(root.length + 1)
-    else if (!h.startsWith('/')) {
+    const under = relUnder(h, root)
+    if (under !== null) h = under
+    else if (!isAbsPath(h)) {
       const dir = current.includes('/') ? current.slice(0, current.lastIndexOf('/')) : ''
       h = normalizePath(dir ? `${dir}/${h}` : h)
     }
@@ -36,7 +38,7 @@ export default function ArtifactViewer({ root, relPath, onClose, popout }: Props
           {popout && (
             <IconButton onClick={() => api.system.openArtifactWindow(root, current)} title="Open in new window"><Icon name="popout" size="md" /></IconButton>
           )}
-          <IconButton onClick={() => api.system.revealItem(root, current)} title="Show in Finder"><Icon name="folder-open" size="md" /></IconButton>
+          <IconButton onClick={() => api.system.revealItem(root, current)} title={OS_WORDS.showInFolder}><Icon name="folder-open" size="md" /></IconButton>
           {(kind === 'pdf' || kind === 'video') && (
             <IconButton onClick={() => api.system.openItem(root, current)} title={kind === 'pdf' ? 'Open in Preview' : 'Open in default app'}><Icon name="external" size="md" /></IconButton>
           )}

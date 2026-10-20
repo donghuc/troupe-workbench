@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type DragEvent, type ReactNode } from 'react'
+import { OS_WORDS } from '../../../../shared/platform'
 import Icon from '../Icon'
+import { shortDate } from '../../dates'
 import ProviderAvatar from '../ProviderAvatar'
 import { api } from '../../api'
 import { failed, notify } from '../../notices'
@@ -109,7 +111,7 @@ function MediaCard({ card, ui, ctx }: { card: CardOf<'media'>; ui: CardUi; ctx: 
           </div>
         )}
         <button className="img-drop" onClick={() => input.current?.click()} disabled={busy}>
-          {busy ? <><span className="activity-spinner" /> Adding…</> : <><Icon name="image" size="md" /> {files.length ? 'Add more' : 'Drop, paste (⌘V) or choose images'}</>}
+          {busy ? <><span className="activity-spinner" /> Adding…</> : <><Icon name="image" size="md" /> {files.length ? 'Add more' : `Drop, paste (${OS_WORDS.mod}V) or choose images`}</>}
         </button>
         <input ref={input} type="file" accept="image/*" multiple hidden onChange={(e) => { void add([...(e.target.files ?? [])]); e.target.value = '' }} />
       </div>
@@ -219,7 +221,7 @@ function timeAgo(iso: string): string {
   if (s < 60) return 'just now'
   if (s < 3600) return `${Math.round(s / 60)} min ago`
   if (s < 86400) return `${Math.round(s / 3600)} h ago`
-  return new Date(iso).toLocaleDateString()
+  return shortDate(iso)
 }
 
 // ── Output ────────────────────────────────────────────────────────────────────
@@ -272,7 +274,7 @@ function OutputCard({ card, ui, ctx }: { card: CardOf<'output'>; ui: CardUi; ctx
                     onClick={() => ctx.toggleSaved(card.id, f, hint)}><Icon name={card.data.saved[f] ? 'check' : 'download'} size="sm" /></button>
                   {!/\.svg$/i.test(f) && <button title="Copy image" onClick={() => api.system.copyImage(ctx.root, f).then((ok: boolean) => ok && notify('Image copied')).catch(failed('Copy image'))}><Icon name="copy" size="sm" /></button>}
                   <button title="Open in its own window" onClick={() => api.system.openArtifactWindow(ctx.root, f).catch(failed('Open window'))}><Icon name="popout" size="sm" /></button>
-                  <button title="Show in Finder" onClick={() => api.system.revealItem(ctx.root, f).catch(failed('Show in Finder'))}><Icon name="folder-open" size="sm" /></button>
+                  <button title={OS_WORDS.showInFolder} onClick={() => api.system.revealItem(ctx.root, f).catch(failed(OS_WORDS.showInFolder))}><Icon name="folder-open" size="sm" /></button>
                 </div>
                   {feedsOn && (
                     <button className={`img-shot-ref${sel.has(f) ? ' on' : ''}`} aria-pressed={sel.has(f)}
@@ -288,7 +290,7 @@ function OutputCard({ card, ui, ctx }: { card: CardOf<'output'>; ui: CardUi; ctx
         {shown && (
           <div className="img-output-meta">
             <span>{timeAgo(shown.at)}{shown.model ? ` · ${shown.model}` : ''}{Object.keys(card.data.saved).length ? ` · ${Object.keys(card.data.saved).length} saved` : ''}</span>
-            {!running && <button className="img-link-btn" title="Delete this version's images from outputs/ (saved copies stay)" onClick={() => ctx.deleteRun(shown.id)}>Delete version</button>}
+            {!running && <button className="img-link-btn danger" title="Delete this version's images from outputs/ (saved copies stay)" onClick={() => ctx.deleteRun(shown.id)}><Icon name="trash" size="xs" />Delete version</button>}
           </div>
         )}
         {feedsOn && shown && shown.files.length > 0 && (

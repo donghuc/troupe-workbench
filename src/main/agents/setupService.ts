@@ -16,7 +16,7 @@ import { buildEnv, resetLoginPath } from '../providers/env'
 import { createProvider } from '../providers/registry'
 import { findPresetBin } from '../providers/CustomCliProvider'
 import { logInfo, logError } from '../util/logger'
-import { setupPlan, commandFileContents, SETUP_TIMEOUT_MS, type SetupKind } from './setupRules'
+import { setupPlan, commandFileContents, ps1FileContents, powershellExe, SETUP_TIMEOUT_MS, type SetupKind } from './setupRules'
 import { runSetupCommand, type SetupHandle } from './setupProcess'
 
 const running = new Map<string, SetupHandle>()
@@ -25,12 +25,21 @@ function send(sender: WebContents, ev: SetupEvent) { if (!sender.isDestroyed()) 
 
 /** Open a command in a new Terminal window via a temporary .command file (no AppleScript). */
 function openInTerminal(cmd: string): void {
+  if (process.platform === 'win32') { openInPowerShell(cmd); return }
   const shell = process.env.SHELL || '/bin/zsh'
   const file = join(tmpdir(), `troupe-setup-${randomBytes(4).toString('hex')}.command`)
   writeFileSync(file, commandFileContents(cmd, shell, buildEnv().PATH), { mode: 0o700 })
   chmodSync(file, 0o700)
   spawn('open', [file], { detached: true, stdio: 'ignore' }).unref()
   setTimeout(() => unlink(file, () => {}), 10 * 60_000).unref()   // Terminal has read it long before
+}
+
+/** Windows (D-120): a new PowerShell window (detached = its own console) runs a temporary .ps1. */
+function openInPowerShell(cmd: string): void {
+  const file = join(tmpdir(), `troupe-setup-${randomBytes(4).toString('hex')}.ps1`)
+  writeFileSync(file, ps1FileContents(cmd, buildEnv().PATH))
+  spawn(powershellExe(), ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-NoExit', '-File', file], { detached: true, stdio: 'ignore' }).unref()
+  setTimeout(() => unlink(file, () => {}), 10 * 60_000).unref()
 }
 
 export function startSetup(sender: WebContents, id: unknown, kind: unknown, terminal?: unknown): { runId: string | null; mode: 'run' | 'terminal' | 'none' } {

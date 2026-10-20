@@ -3,6 +3,7 @@
 // 2 · first project (a folder, or scratch mode), created on Continue,
 // 3 · permission modes + a one-click first prompt (read-only).
 import { Button, buttonClass } from './ui/Button'
+import { OS_WORDS } from '../../../shared/platform'
 import { useEffect, useState } from 'react'
 import ProviderAvatar from './ProviderAvatar'
 import { refreshAgentStatus, saveDisabledAgents, setAgentStatus } from '../agents'
@@ -126,7 +127,7 @@ export default function Welcome({ createProject, onFinish }: Props) {
           <div className="welcome-body">
             <div className="welcome-head">
               <h2>Start your first project</h2>
-              <p>A project is a folder on your Mac. Agents read and edit the files in it, and its memory lives there too.</p>
+              <p>A project is a folder on your {OS_WORDS.computer}. Agents read and edit the files in it, and its memory lives there too.</p>
             </div>
             <div className="welcome-choices">
               <button className={`welcome-choice${!scratch ? ' sel' : ''}`} disabled={!!projectId} onClick={chooseFolder}>

@@ -4,11 +4,17 @@ import { resolve, sep } from 'path'
 // proves `rel` stays under `root`; these decide whether `root` itself is one the app
 // may touch. No Electron, no DB here — see roots.ts for the DB-backed list.
 
+// True when resolved path `a` is `d` itself or lies strictly under it. Windows paths are
+// case-insensitive (D-120), so there both sides are compared lower-cased; macOS compares
+// exactly, as before.
+export function underResolved(a: string, d: string, win = process.platform === 'win32'): boolean {
+  if (win) { a = a.toLowerCase(); d = d.toLowerCase() }
+  return a === d || a.startsWith(d.endsWith(sep) ? d : d + sep)
+}
+
 // True when `abs` is `dir` itself or lies strictly under it (after resolving both).
 export function isUnder(abs: string, dir: string): boolean {
-  const a = resolve(abs)
-  const d = resolve(dir)
-  return a === d || a.startsWith(d.endsWith(sep) ? d : d + sep)
+  return underResolved(resolve(abs), resolve(dir))
 }
 
 // The matching allowed directory for `abs`, or null when it is under none of them.

@@ -2,6 +2,7 @@
 // the shared catalog minus the agents turned off in Settings ▸ Agents (D-071), each with
 // its live install / sign-in status (D-074) so pickers can flag a problem before sending.
 import { useSyncExternalStore } from 'react'
+import { OS_WORDS } from '../../shared/platform'
 import type { ProviderInfo, ProviderId } from '../../shared/types'
 import type { ProviderDescriptor } from '../../shared/agent'
 import {
@@ -93,7 +94,7 @@ async function firstRun(st: Status, agentsRaw: string | null): Promise<void> {
         await saveDisabledAgents(off)
         const names = (ids: ProviderId[]) => { const n = ids.map((id) => agentEntry(id).label); return n.length > 1 ? `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}` : n[0] }
         const on = enabledProviderIds(serializeDisabledAgents(off))
-        notify(`${names(off)} ${off.length > 1 ? "aren't" : "isn't"} installed on this Mac, so ${off.length > 1 ? "they're" : "it's"} switched off — you're set up with ${names(on)}. After installing, turn ${off.length > 1 ? 'them' : 'it'} on in Settings ▸ Agents.`)
+        notify(`${names(off)} ${off.length > 1 ? "aren't" : "isn't"} installed on this ${OS_WORDS.computer}, so ${off.length > 1 ? "they're" : "it's"} switched off — you're set up with ${names(on)}. After installing, turn ${off.length > 1 ? 'them' : 'it'} on in Settings ▸ Agents.`)
       }
     }
     await api.settings.set(AGENTS_FIRST_RUN_SETTING, '1')

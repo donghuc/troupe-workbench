@@ -1,0 +1,63 @@
+# Windows build (D-119, D-120): for Hien's own PC. Runs only in the private repo
+# (donghuc/troupe) — never in the public one, so the installer is never public. Builds an
+# unsigned per-user NSIS installer, launches it once as a smoke test, and uploads it as a
+# workflow artifact (Actions ▸ this run ▸ Artifacts). A separate workflow: a red run here
+# never blocks or changes the macOS checks and release.
+name: windows
+on:
+  push:
+    branches: [main, windows-port]
+  pull_request:
+  workflow_dispatch:
+jobs:
+  windows:
+    if: github.repository == 'donghuc/troupe'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      # Some older tests assume POSIX paths or /bin/bash; report, don't stop the build.
+      - run: npx vitest run
+        continue-on-error: true
+      - run: npm run build
+      - name: Package (NSIS, x64)
+        shell: pwsh
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          $sha = "${{ github.sha }}".Substring(0, 7)
+          # Every -c.x=y argument quoted: PowerShell splits an unquoted one at the dot.
+          npx electron-builder -c electron-builder.win.yml --win nsis --x64 --publish never "-c.npmRebuild=false" "-c.extraMetadata.troupeCommit=$sha" "-c.win.artifactName=`${productName}-Setup-`${version}-$sha.`${ext}"
+      - name: Smoke test (launch, database, troupe over the pipe)
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'smoke.json'
+          $env:TROUPE_SMOKE_OUT = $out
+          $app = Start-Process -FilePath 'dist\win-unpacked\Troupe.exe' -PassThru
+          for ($i = 0; $i -lt 90 -and -not (Test-Path $out); $i++) { Start-Sleep -Seconds 1 }
+          if (-not (Test-Path $out)) { throw 'Troupe did not report within 90 s' }
+          Get-Content $out
+          $r = Get-Content $out -Raw | ConvertFrom-Json
+          if (-not $r.rendererLoaded) { throw 'The window did not load' }
+          if (-not $r.db) { throw "The database failed: $($r.dbError)" }
+          Remove-Item Env:TROUPE_SMOKE_OUT
+          # The command as a user runs it: troupe.cmd → troupe.ps1 → Troupe.exe as node → pipe.
+          $cli = cmd /d /c "`"$($r.installed)`" projects" 2>&1
+          $code = $LASTEXITCODE
+          "troupe projects -> exit $code"; $cli
+          $piped = 'hello from CI' | cmd /d /c "`"$($r.installed)`" projects --json" 2>&1
+          "troupe projects --json -> exit $LASTEXITCODE"; $piped
+          taskkill /pid $app.Id /T /F | Out-Null
+          if ($code -ne 0 -or -not ($cli -match 'project')) { throw 'troupe projects failed over the pipe' }
+      # Keep the installer even when the smoke test fails, so it can be tried on the PC.
+      - if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: troupe-windows-${{ github.sha }}
+          path: dist/*.exe
+          retention-days: 14

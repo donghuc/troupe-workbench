@@ -1,9 +1,10 @@
-import { spawn, type ChildProcessWithoutNullStreams } from 'child_process'
+import type { ChildProcessWithoutNullStreams } from 'child_process'
 import { createInterface } from 'readline'
 import { promises as fsp } from 'fs'
 import { join } from 'path'
 import { appendCapped } from '../util/limits'
 import { buildEnv } from './env'
+import { spawnCli, stopChild } from '../platform/proc'
 import type { AgentEvent } from '../../shared/agent'
 import { stripAnsi } from '../../shared/customAgents'
 
@@ -64,7 +65,7 @@ export class CliProcess {
 
     let child: ChildProcessWithoutNullStreams
     try {
-      child = spawn(spec.bin, spec.args, { cwd: spec.cwd, env: spec.env ?? buildEnv() })
+      child = spawnCli(spec.bin, spec.args, { cwd: spec.cwd, env: spec.env ?? buildEnv() })
     } catch (err) {
       yield { type: 'error', message: `Failed to start ${label}: ${(err as Error).message}`, fatal: true }
       return
@@ -120,7 +121,7 @@ export class CliProcess {
 
     let child: ChildProcessWithoutNullStreams
     try {
-      child = spawn(spec.bin, spec.args, { cwd: spec.cwd, env: spec.env ?? buildEnv() })
+      child = spawnCli(spec.bin, spec.args, { cwd: spec.cwd, env: spec.env ?? buildEnv() })
     } catch (err) {
       yield { type: 'error', message: `Failed to start ${label}: ${(err as Error).message}`, fatal: true }
       return
@@ -176,7 +177,7 @@ export class CliProcess {
         resolve(r)
       }
       try {
-        child = spawn(bin, args, { cwd, env: env ?? buildEnv() })
+        child = spawnCli(bin, args, { cwd, env: env ?? buildEnv() })
       } catch (e) {
         finish({ code: -1, stdout: '', stderr: `Failed to start ${bin}: ${String(e)}` })
         return
@@ -193,13 +194,13 @@ export class CliProcess {
     })
   }
 
-  /** SIGTERM, then SIGKILL if the process is still alive after a grace period. */
+  /** SIGTERM, then SIGKILL if the process is still alive after a grace period (Windows: the whole tree, see stopChild). */
   cancel(): void {
     const child = this.child
     if (!child || child.exitCode !== null || child.signalCode !== null) return
-    child.kill('SIGTERM')
+    stopChild(child, 'SIGTERM')
     // `killed` only means a signal was sent; check whether the process actually exited.
-    setTimeout(() => { if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL') }, KILL_GRACE_MS).unref?.()
+    setTimeout(() => { if (child.exitCode === null && child.signalCode === null) stopChild(child, 'SIGKILL') }, KILL_GRACE_MS).unref?.()
   }
 }
 

@@ -1,4 +1,5 @@
 import { memo, useState, useMemo, useRef, isValidElement, Children, type ReactNode } from 'react'
+import { OS_WORDS, isAbsPath, relUnder } from '../../../shared/platform'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import Icon, { type IconName } from './Icon'
@@ -14,7 +15,7 @@ const isLocalLink = (href?: string) => !!href && !isWebUrl(href) && !href.starts
 // D-086: an absolute path that is not under the project folder (or a ../ escape). Such a
 // file can't be opened from the reply; the card offers Finder or a copy into the project.
 const isOutsideRoot = (rel: string, root?: string): boolean =>
-  rel.startsWith('../') || (rel.startsWith('/') && !!root && rel !== root && !rel.startsWith(root + '/'))
+  rel.startsWith('../') || (isAbsPath(rel) && !!root && rel !== root && relUnder(rel, root) === null)
 
 function OutsideFileLink({ abs, root, label, onOpen }: { abs: string; root?: string; label: ReactNode; onOpen?: (rel: string) => void }) {
   const [busy, setBusy] = useState(false)
@@ -27,7 +28,7 @@ function OutsideFileLink({ abs, root, label, onOpen }: { abs: string; root?: str
     <span className="outside-file" title={`${abs}\nThis file is outside the project folder, so Troupe can't open it here.`}>
       <span className="outside-file-name">{label}</span>
       <span className="outside-file-tag">outside project</span>
-      <Button type="button" variant="link" className="outside-file-btn" onClick={() => { void api.system.revealOutside(abs) }}>Finder</Button>
+      <Button type="button" variant="link" className="outside-file-btn" onClick={() => { void api.system.revealOutside(abs) }}>{OS_WORDS.fileManager}</Button>
       {root && <Button type="button" variant="link" className="outside-file-btn" disabled={busy} onClick={() => { void importIt() }}>{busy ? 'Copying…' : 'Copy into project'}</Button>}
     </span>
   )
@@ -75,7 +76,8 @@ function MediaThumb({ root, rel, altText, onOpen, onMedia }: { root: string; rel
 }
 function imageThumb(root: string, onOpen: ((rel: string) => void) | undefined, onMedia: ((rel: string) => void) | undefined, rawHref: string, altText?: string) {
   let rel = normalizeRel(rawHref)
-  if (rel.startsWith(root + '/')) rel = rel.slice(root.length + 1)
+  const under = relUnder(rel, root)
+  if (under !== null) rel = under
   rel = rel.replace(/^\/+/, '')
   return <MediaThumb root={root} rel={rel} altText={altText} onOpen={onOpen} onMedia={onMedia} />
 }

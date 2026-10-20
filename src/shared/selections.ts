@@ -1,3 +1,4 @@
+import { fileBase } from './platform'
 // Selected passages attached to a message (Reply on a selection, D-065). Each passage
 // keeps where it came from, so the agent knows which file (and heading or page) — or
 // which earlier reply — the user means. Pure; shared by the composer, the sent-message
@@ -29,7 +30,7 @@ export function sourceLine(src?: QuoteSource | null): string | null {
 export function sourceLabel(src?: QuoteSource | null): string {
   if (!src) return 'Selection'
   if (src.path) {
-    const name = src.path.split('/').pop() || src.path
+    const name = fileBase(src.path) || src.path
     return src.page ? `${name} › p. ${src.page}` : src.heading ? `${name} › ${oneLine(src.heading, 40)}` : name
   }
   return src.label ? oneLine(src.label, 40) : 'Selection'

@@ -1,5 +1,5 @@
 import { workFolderRules } from '../../shared/contextBudget'
-import { execFile } from 'child_process'
+import { execFileCli } from '../platform/proc'
 import { logInfo, logError } from '../util/logger'
 import { getSetting } from '../database/settingsRepo'
 import { promises as fsp } from 'fs'
@@ -47,9 +47,9 @@ export class CodexProvider implements AgentProvider {
 
   isAvailable(): Promise<ProviderAvailability> {
     return new Promise((resolve) => {
-      execFile('codex', ['--version'], { env: buildEnv() }, (err, verOut) => {
+      execFileCli('codex', ['--version'], { env: buildEnv() }, (err, verOut) => {
         if (err) { resolve({ installed: false, authenticated: false, detail: 'codex CLI not found on PATH' }); return }
-        execFile('codex', ['login', 'status'], { env: buildEnv() }, (e, statusOut, statusErr) => {
+        execFileCli('codex', ['login', 'status'], { env: buildEnv() }, (e, statusOut, statusErr) => {
           const text = `${statusOut}${statusErr}`
           const authed = codexLoggedIn(!!e, text)
           resolve({ installed: true, authenticated: authed, detail: `${String(verOut).trim()} · ${authed ? text.trim().split('\n')[0] : 'Not logged in'}` })

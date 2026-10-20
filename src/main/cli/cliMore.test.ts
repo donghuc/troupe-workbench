@@ -215,7 +215,7 @@ describe('Collab from the command line (D-118)', () => {
   })
 })
 
-describe('troupe script, new commands over the socket (D-118)', () => {
+describe.skipIf(process.platform === 'win32')('troupe script, new commands over the socket (D-118)', () => {
   const sock = join(mkdtempSync(join(tmpdir(), 'ts-')), 's.sock')
   const script = fileURLToPath(new URL('../../../resources/troupe', import.meta.url))
   const troupe = (args: string[], cwd?: string): Promise<{ code: number; out: string; err: string }> => new Promise((resolve) => {
@@ -237,4 +237,75 @@ describe('troupe script, new commands over the socket (D-118)', () => {
     expect((await troupe(['collab', 'frobnicate', 'x'])).code).toBe(2)
     expect(readFileSync(script, 'utf8')).toContain('4 chat busy')
   })
+})
+
+describe('Windows troupe client and token (D-120)', () => {
+  // A named pipe on Windows, a Unix socket elsewhere — same server and client code.
+  const sock = process.platform === 'win32' ? `\\\\.\\pipe\\troupe-test-${process.pid}` : join(mkdtempSync(join(tmpdir(), 'tw-')), 'p.sock')
+  const tokenFile = join(mkdtempSync(join(tmpdir(), 'tk-')), 'cli-token')
+  const client = fileURLToPath(new URL('../../../resources/troupe-cli.mjs', import.meta.url))
+  const troupe = (args: string[], cwd?: string, input?: string): Promise<{ code: number; out: string; err: string }> => new Promise((resolve) => {
+    const c = execFile(process.execPath, [client, ...args], { cwd, env: { ...process.env, TROUPE_PIPE: sock, TROUPE_TOKEN_FILE: tokenFile } }, (e, out, err) =>
+      resolve({ code: e ? (typeof (e as { code?: unknown }).code === 'number' ? (e as { code: number }).code : 1) : 0, out, err }))
+    if (input !== undefined) c.stdin?.end(input)
+  })
+  it('needs the token; same commands, output and exit codes as the bash script', async () => {
+    const { stopCliServer } = await import('./cliServer')
+    stopCliServer()
+    await startCliServer(sock, { token: 'right-token', pipe: process.platform === 'win32' })
+    expect((await troupe(['projects'])).code).toBe(3)                     // no token file: not reachable
+    writeFileSync(tokenFile, 'wrong-token')
+    const denied = await troupe(['projects'])
+    expect(denied.code).toBe(1); expect(denied.err).toMatch(/not allowed/)
+    writeFileSync(tokenFile, 'right-token\n')
+    const list = await troupe(['projects'])
+    expect(list.code).toBe(0); expect(list.out).toContain('Personal finance')
+    expect((await troupe(['cat', 'finance', 'docs/portfolio-management.md'])).out).toBe('# Portfolio\nHold 60/40.\n')
+    expect((await troupe(['frobnicate'])).code).toBe(2)
+    const piped = await troupe(['send', 'finance', '-', '--json', '--new'], undefined, 'from stdin')
+    expect(piped.code).toBe(0)
+    const { chat } = JSON.parse(piped.out)
+    expect(started.some((s) => s.text === 'from stdin')).toBe(true)
+    expect((await troupe(['send', chat, 'again'])).code).toBe(4)
+
+    // A refresh while open (Settings ▸ Save) brings a new token: the open server must take it.
+    await startCliServer(sock, { token: 'second-token', pipe: process.platform === 'win32' })
+    writeFileSync(tokenFile, 'second-token')
+    expect((await troupe(['projects'])).code).toBe(0)
+    writeFileSync(tokenFile, 'right-token')
+    expect((await troupe(['projects'])).code).toBe(1)
+    writeFileSync(tokenFile, 'second-token')
+
+    // The installed wrapper (troupe.cmd → troupe-run.ps1 → client): on Windows through cmd, elsewhere
+    // the .ps1 under pwsh when it's installed. Node stands in for Troupe.exe.
+    const { installCommandWin } = await import('./cliInstall')
+    const binDir = mkdtempSync(join(tmpdir(), 'tb-'))
+    const inst = installCommandWin(process.execPath, client, sock, tokenFile, binDir, '')
+    const win = process.platform === 'win32'
+    const pwsh = win ? null : (process.env.PATH ?? '').split(':').map((d) => join(d, 'pwsh')).find((f) => existsSync(f))
+    if (win || pwsh) {
+      const run = (args: string[], input?: string): Promise<{ code: number; out: string; err: string }> => new Promise((resolve) => {
+        const [file, pre] = win ? ['cmd.exe', ['/d', '/c', inst.path]] : [pwsh!, ['-NoProfile', '-File', join(binDir, 'troupe-run.ps1')]]
+        const c = execFile(file, [...pre, ...args], (e, out, err) =>
+          resolve({ code: e ? (typeof (e as { code?: unknown }).code === 'number' ? (e as { code: number }).code : 1) : 0, out, err }))
+        if (input !== undefined) c.stdin?.end(input); else c.stdin?.end()
+      })
+      // A tool that leaves stdin open must not hang the wrapper (only `send … -` reads it).
+      const open = await new Promise<number>((resolve) => {
+        const [file, pre] = win ? ['cmd.exe', ['/d', '/c', inst.path]] : [pwsh!, ['-NoProfile', '-File', join(binDir, 'troupe-run.ps1')]]
+        const c = execFile(file, [...pre, 'projects'], { timeout: 15000 }, (e) => resolve(e ? 1 : 0))
+        void c   // stdin deliberately left open
+      })
+      expect(open).toBe(0)
+      const w = await run(['projects'])
+      expect(w.code).toBe(0); expect(w.out).toContain('Personal finance')
+      const r = await run(['search', 'say "60/40" now', '--json'])
+      expect(r.code).toBe(0)
+      expect((await run(['frobnicate'])).code).toBe(2)
+      const s2 = await run(['send', 'finance', '-', '--new', '--json'], 'piped through the wrapper')
+      expect(s2.code).toBe(0)
+      expect(started.some((x) => x.text === 'piped through the wrapper')).toBe(true)
+    }
+    stopCliServer()
+  }, 30_000)   // spawns the client a dozen times (and pwsh when present)
 })

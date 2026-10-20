@@ -5,6 +5,8 @@ import { join, relative, resolve, sep, basename, dirname } from 'path'
 import type { FileNode, FileSearchResult } from '../../shared/types'
 import { removeTempDir } from '../util/tempFiles'
 import { dirSkipReason } from './treeLimits'
+import { underResolved } from '../security/pathGuard'
+import { winPdfText } from '../platform/winPdf'
 
 // Directories we never show or traverse.
 const IGNORED = new Set(['.git', 'node_modules', '.DS_Store', '.workbench'])
@@ -13,14 +15,14 @@ const IGNORED = new Set(['.git', 'node_modules', '.DS_Store', '.workbench'])
 export function ensureInside(root: string, target: string): string {
   const r = resolve(root)
   const t = resolve(root, target)
-  if (t !== r && !t.startsWith(r + sep)) {
+  if (!underResolved(t, r)) {
     throw new Error('Path escapes project folder')
   }
   // Symlinks (review 2026-10): "notes -> ~/.ssh" passes the check above, so the real
   // location of the deepest existing part must also lie under the real root.
   const realRoot = realExisting(r)
   const realT = realExisting(t)
-  if (realT !== realRoot && !realT.startsWith(realRoot + sep)) {
+  if (!underResolved(realT, realRoot)) {
     throw new Error('Path escapes project folder (symlink)')
   }
   return t
@@ -222,6 +224,7 @@ export async function searchFiles(root: string, query: string): Promise<FileSear
 // independent of the agent's Bash toggle. Returns '' on any failure or for a
 // scanned PDF with no text layer (D-044 correction).
 export function extractPdfText(absPath: string): string {
+  if (process.platform === 'win32') return winPdfText(absPath)   // D-120: pdf.js
   if (process.platform !== 'darwin') return ''
   try {
     const jxa = "ObjC.import('Quartz');function run(argv){try{var u=$.NSURL.fileURLWithPath($(argv[0]));var d=$.PDFDocument.alloc.initWithURL(u);if(!d||d.isNil())return '';var s=d.string;return (s&&!s.isNil())?ObjC.unwrap(s):'';}catch(e){return '';}}"

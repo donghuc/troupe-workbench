@@ -115,7 +115,7 @@
   --border-subtle: var(--alpha-ink-7);
   --border-default: var(--alpha-ink-13);
   --border-strong: var(--neutral-400);
-  --focus-ring: var(--terracotta-500);
+  --focus-ring: var(--neutral-900);
 
   --accent: var(--terracotta-500);
   --accent-hover: var(--terracotta-600);
@@ -125,8 +125,12 @@
   --on-accent: var(--neutral-25);
   --accent-wash: var(--terracotta-50);
 
+  --ink-solid: var(--neutral-900);
+  --on-ink: var(--neutral-0);
+
   --success: var(--green-700);
   --success-wash: var(--green-50);
+  --on-success: var(--neutral-25);
   --warning: var(--amber-700);
   --warning-wash: var(--amber-50);
   --danger: var(--crimson-700);
@@ -137,6 +141,7 @@
   --kind-prompt: var(--kind-prompt-base);
   --kind-media: var(--kind-media-base);
   --kind-output: var(--kind-output-base);
+  --kind-processor: var(--neutral-700);
 
   --scrim: var(--alpha-black-35);
   --scrim-strong: var(--alpha-black-82);
@@ -306,7 +311,7 @@
     --border-subtle: var(--alpha-cream-7);
     --border-default: var(--alpha-cream-14);
     --border-strong: var(--dark-500);
-    --focus-ring: var(--terracotta-450);
+    --focus-ring: var(--dark-50);
     --accent: var(--terracotta-450);
     --accent-hover: var(--terracotta-400);
     --accent-text: var(--terracotta-400);
@@ -314,14 +319,18 @@
     --accent-solid-hover: var(--terracotta-400);
     --on-accent: var(--dark-900);
     --accent-wash: var(--terracotta-950);
+    --ink-solid: var(--dark-50);
+    --on-ink: var(--dark-900);
     --success: var(--green-400);
     --success-wash: var(--green-950);
+    --on-success: var(--dark-900);
     --warning: var(--amber-400);
     --warning-wash: var(--amber-950);
     --danger: var(--crimson-300);
     --danger-wash: var(--crimson-950);
     --info: var(--blue-300);
     --info-wash: var(--blue-950);
+    --kind-processor: var(--dark-100);
   }
 }
 :root[data-theme="dark"] {
@@ -340,7 +349,7 @@
   --border-subtle: var(--alpha-cream-7);
   --border-default: var(--alpha-cream-14);
   --border-strong: var(--dark-500);
-  --focus-ring: var(--terracotta-450);
+  --focus-ring: var(--dark-50);
   --accent: var(--terracotta-450);
   --accent-hover: var(--terracotta-400);
   --accent-text: var(--terracotta-400);
@@ -348,14 +357,18 @@
   --accent-solid-hover: var(--terracotta-400);
   --on-accent: var(--dark-900);
   --accent-wash: var(--terracotta-950);
+  --ink-solid: var(--dark-50);
+  --on-ink: var(--dark-900);
   --success: var(--green-400);
   --success-wash: var(--green-950);
+  --on-success: var(--dark-900);
   --warning: var(--amber-400);
   --warning-wash: var(--amber-950);
   --danger: var(--crimson-300);
   --danger-wash: var(--crimson-950);
   --info: var(--blue-300);
   --info-wash: var(--blue-950);
+  --kind-processor: var(--dark-100);
 }
 
 /* ---------- semantic — paper ----------
@@ -378,7 +391,7 @@
   --border-subtle: var(--alpha-paper-ink-8);
   --border-default: var(--alpha-paper-ink-14);
   --border-strong: var(--neutral-400);
-  --focus-ring: var(--terracotta-500);
+  --focus-ring: var(--paper-900);
   --accent: var(--terracotta-500);
   --accent-hover: var(--terracotta-600);
   --accent-text: var(--terracotta-600);
@@ -386,8 +399,11 @@
   --accent-solid-hover: var(--terracotta-700);
   --on-accent: var(--neutral-25);
   --accent-wash: var(--terracotta-50);
+  --ink-solid: var(--paper-900);
+  --on-ink: var(--neutral-0);
   --success: var(--green-700);
   --success-wash: var(--green-50);
+  --on-success: var(--neutral-25);
   --warning: var(--amber-700);
   --warning-wash: var(--amber-50);
   --danger: var(--crimson-700);
@@ -397,6 +413,7 @@
   --kind-prompt: var(--kind-prompt-base);
   --kind-media: var(--kind-media-base);
   --kind-output: var(--kind-output-base);
+  --kind-processor: var(--paper-700);
   --scrim: var(--alpha-black-35);
   --scrim-strong: var(--alpha-black-82);
   --on-image: var(--alpha-dark-60);

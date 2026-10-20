@@ -4,6 +4,7 @@
 // runners stay as code. Pure; tested.
 import type { ProviderId, BuiltinProviderId } from './types'
 import { parseCommandLine, type CustomOutput } from './customAgents'
+import { IS_WINDOWS } from './platform'
 import claude from './agents/claude-code.json'
 import codex from './agents/codex.json'
 import gemini from './agents/gemini.json'
@@ -26,6 +27,8 @@ export interface AgentRecipe {
   /** `terminal: true` = interactive-only, always opened in a Terminal window. */
   signIn?: { cmd: string; terminal?: boolean }
   docs?: string
+  /** Windows (D-120): set when the agent can't be used there yet; the card says why. */
+  unsupported?: string
   /** Presets only (2.4, Part C): how to run it as a user-added agent. Built-ins leave it out. */
   agent?: { command: string; output: CustomOutput; modelFlag?: string; readOnlyArgs?: string }
 }
@@ -42,7 +45,7 @@ const isStr = (v: unknown): v is string => typeof v === 'string' && v.trim().len
 /** Validate one recipe. Never throws: a bad recipe comes back with the reason. */
 export function parseAgentRecipe(raw: unknown): RecipeResult {
   if (!isObj(raw)) return { ok: false, reason: 'not an object' }
-  const { id, label, recommended, detect, needs, prereq, install, signIn, docs, agent } = raw
+  const { id, label, recommended, detect, needs, prereq, install, signIn, docs, agent, unsupported } = raw
   if (!isStr(id) || !ID_RE.test(id)) return { ok: false, reason: 'id must be lowercase letters, digits and dashes' }
   if (!isStr(label)) return { ok: false, reason: `${id}: label is required` }
   if (!Array.isArray(detect) || !detect.length || !detect.every((b) => isStr(b) && BIN_RE.test(b))) return { ok: false, reason: `${id}: detect must list binary names` }
@@ -64,6 +67,7 @@ export function parseAgentRecipe(raw: unknown): RecipeResult {
     if (!isObj(signIn) || !isStr(signIn.cmd)) return { ok: false, reason: `${id}: signIn needs cmd` }
     sign = { cmd: signIn.cmd.trim(), ...(signIn.terminal === true ? { terminal: true } : {}) }
   }
+  if (unsupported !== undefined && !isStr(unsupported)) return { ok: false, reason: `${id}: unsupported must be text` }
   if (docs !== undefined && !(isStr(docs) && /^https:\/\//.test(docs))) return { ok: false, reason: `${id}: docs must be an https link` }
   if (!inst && !docs) return { ok: false, reason: `${id}: needs an install command or a docs link` }
   let run: AgentRecipe['agent']
@@ -88,6 +92,7 @@ export function parseAgentRecipe(raw: unknown): RecipeResult {
       ...(inst ? { install: inst } : {}),
       ...(sign ? { signIn: sign } : {}),
       ...(docs ? { docs: docs as string } : {}),
+      ...(unsupported ? { unsupported: (unsupported as string).trim() } : {}),
       ...(run ? { agent: run } : {})
     }
   }
@@ -110,8 +115,26 @@ export const RECIPE_FILES: Record<string, unknown> = {
   'opencode.json': opencode, 'cursor.json': cursor
 }
 
+/**
+ * The Windows form of a recipe file (D-120): its `win` block replaces install, signIn, docs,
+ * agent and unsupported; `"install": null` there means "no install from Troupe on Windows".
+ * Other platforms ignore `win`.
+ */
+export function winVariant(raw: unknown): unknown {
+  if (!isObj(raw)) return raw
+  const { win, ...rest } = raw
+  if (!isObj(win)) return rest
+  const out: Record<string, unknown> = { ...rest }
+  for (const k of ['install', 'signIn', 'docs', 'agent', 'unsupported', 'needs'] as const) {
+    if (!(k in win)) continue
+    if (win[k] === null) delete out[k]
+    else out[k] = win[k]
+  }
+  return out
+}
+
 function load(raw: unknown): AgentRecipe {
-  const r = parseAgentRecipe(raw)
+  const r = parseAgentRecipe(IS_WINDOWS ? winVariant(raw) : raw)
   if (!r.ok) throw new Error(`bad agent recipe: ${r.reason}`)
   return r.recipe
 }

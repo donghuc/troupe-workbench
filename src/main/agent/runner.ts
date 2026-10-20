@@ -1,4 +1,5 @@
 import { noteWrite } from './recentWrites'
+import { fileBase } from '../../shared/platform'
 import { randomUUID } from 'crypto'
 import { app, type WebContents } from 'electron'
 import type { ProviderId } from '../../shared/types'
@@ -175,13 +176,13 @@ export function startRun(sender: WebContents, params: RunParams): string {
           actions.push({ kind: 'tool', label: ev.tool, detail: actionDetail(ev.input), path: p, at: Date.now() })
           if (p && WRITE_TOOL.test(ev.tool)) noteWrite(p, params.providerId)   // D-087
         }
-        else if (ev.type === 'file_changed') { actions.push({ kind: 'file', label: ev.path.split('/').pop() ?? ev.path, detail: ev.kind, path: ev.path, at: Date.now() }); noteWrite(ev.path, params.providerId) }
+        else if (ev.type === 'file_changed') { actions.push({ kind: 'file', label: fileBase(ev.path) || ev.path, detail: ev.kind, path: ev.path, at: Date.now() }); noteWrite(ev.path, params.providerId) }
         else if (ev.type === 'session_started') { providerSessionId = ev.providerSessionId; modelUsed = ev.model }
         else if (ev.type === 'complete') { usage = ev.usage }
         else if (ev.type === 'error' && ev.fatal) {
           clearWatchdog()
           const saved = full.trim()
-            ? appendMessage({ conversationId: params.conversationId, role: 'assistant', provider: params.providerId, content: full, metadata: { providerSessionId, modelUsed, contextMode, partial: true, actions, ...(params.parallelGroup ? { parallelGroup: params.parallelGroup } : {}) } })
+            ? appendMessage({ conversationId: params.conversationId, role: 'assistant', provider: params.providerId, content: full, metadata: { providerSessionId, modelUsed, contextMode, partial: true, actions, ...(params.parallelGroup ? { parallelGroup: params.parallelGroup } : {}), ...(params.extraMetadata ?? {}) } })
             : null
           return done(saved?.id ?? null, ev.message)
         }
@@ -193,7 +194,7 @@ export function startRun(sender: WebContents, params: RunParams): string {
         const msg = `${provider.name} timed out after ${Math.round(timeoutMs / 60_000)} min with no reply.`
         emit({ type: 'error', message: msg, fatal: true })
         const saved = full.trim()
-          ? appendMessage({ conversationId: params.conversationId, role: 'assistant', provider: params.providerId, content: full, metadata: { providerSessionId, modelUsed, contextMode, partial: true, timedOut: true, actions, ...(params.parallelGroup ? { parallelGroup: params.parallelGroup } : {}) } })
+          ? appendMessage({ conversationId: params.conversationId, role: 'assistant', provider: params.providerId, content: full, metadata: { providerSessionId, modelUsed, contextMode, partial: true, timedOut: true, actions, ...(params.parallelGroup ? { parallelGroup: params.parallelGroup } : {}), ...(params.extraMetadata ?? {}) } })
           : null
         return done(saved?.id ?? null, msg)
       }
@@ -208,7 +209,7 @@ export function startRun(sender: WebContents, params: RunParams): string {
       clearWatchdog()
       emit({ type: 'error', message: String(err), fatal: true })
       const saved = full.trim()
-        ? appendMessage({ conversationId: params.conversationId, role: 'assistant', provider: params.providerId, content: full, metadata: { providerSessionId, modelUsed, contextMode, partial: true, actions, ...(params.parallelGroup ? { parallelGroup: params.parallelGroup } : {}) } })
+        ? appendMessage({ conversationId: params.conversationId, role: 'assistant', provider: params.providerId, content: full, metadata: { providerSessionId, modelUsed, contextMode, partial: true, actions, ...(params.parallelGroup ? { parallelGroup: params.parallelGroup } : {}), ...(params.extraMetadata ?? {}) } })
         : null
       done(saved?.id ?? null, String(err))
     }

@@ -1,4 +1,5 @@
 import { Badge } from './ui/Badge'
+import { OS_WORDS } from '../../../shared/platform'
 import { useEffect, useRef, useState } from 'react'
 import type { ProviderInfo, ProviderId, FileNode, Skill } from '../../../shared/types'
 import type { PermissionMode } from '../../../shared/agent'
@@ -419,7 +420,7 @@ export default function Composer({ providers, onSend, disabled, placeholder = 'H
                           <ProviderAvatar id={p.id} size="sm" />
                           <span className="pm-prov-name">{p.name}</span>
                           {!p.installed
-                            ? <Badge tone="danger" title={`The ${p.name} CLI wasn't found on this Mac`}>Not installed</Badge>
+                            ? <Badge tone="danger" title={`The ${p.name} CLI wasn't found on this ${OS_WORDS.computer}`}>Not installed</Badge>
                             : !p.authenticated && <Badge tone="warning" title={`Sign in to the ${p.name} CLI first (see Providers)`}>Signed out</Badge>}
                           {ms.length > 1 && <span className="pm-caret">›</span>}
                         </button>

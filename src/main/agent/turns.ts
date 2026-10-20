@@ -1,4 +1,5 @@
 import { BrowserWindow, type WebContents } from 'electron'
+import { fileBase } from '../../shared/platform'
 import { IPC } from '../../shared/ipc'
 import type { ProviderId } from '../../shared/types'
 import type { AgentEvent } from '../../shared/agent'
@@ -286,7 +287,7 @@ export function startTurn(sender: WebContents, input: StartTurnInput, h?: { onFi
     plan = { mode: 'sequential', chain: steps.map((s) => s.provider), prompt: plan.prompt }
     modeHeader = { mode: thinking, modeCast: describeCast(thinking, tpl, getSetting(DISABLED_AGENTS_SETTING)) }
   }
-  const attMeta = input.attachments?.map((a) => ({ name: a.path.split('/').pop() || a.path, image: !!a.image, path: a.path, viewable: !!a.viewable }))
+  const attMeta = input.attachments?.map((a) => ({ name: fileBase(a.path) || a.path, image: !!a.image, path: a.path, viewable: !!a.viewable }))
   const meta = { ...(input.messageMetadata ?? {}), ...modeHeader, ...(attMeta && attMeta.length ? { attachments: attMeta } : {}) }
   const userMsg = appendMessage({ conversationId: input.conversationId, role: 'user', content: input.text, metadata: Object.keys(meta).length ? meta : null })
   const turn: Turn = {

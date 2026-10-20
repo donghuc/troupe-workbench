@@ -1,10 +1,13 @@
 import { Badge } from './ui/Badge'
+import { OS_WORDS } from '../../../shared/platform'
 import { confirmDialog } from './ui/ConfirmDialog'
 import { useState } from 'react'
 import type { CollabRun, CollabTask, CollabTaskKind, CollabTaskStatus, ProviderId, ProviderInfo, CollabRecoverAction } from '../../../shared/types'
 import { presetsFor, modelLists, disabledModelSet } from '../models'
 import { rowsFromTasks, draftsFromRows, type PlanRow } from '../../../shared/collabPlan'
 import { resolveTaskModel } from '../../../shared/models'
+import { formatDuration } from '../../../shared/collabChecks'
+import { isProviderId } from '../../../shared/providers'
 import Icon from './Icon'
 import { api } from '../api'
 import { Button, IconButton } from './ui/Button'
@@ -44,6 +47,9 @@ const shortScope = (scope: string, outDir: string): string => {
 }
 const stripDate = (h: string) => h.replace(/^\d{4}-\d{2}-\d{2} · /, '')
 
+// The card shows plain text; runs from before D-121 stored the wrap-up's markdown as the summary.
+const plain = (t: string): string => t.replace(/\*\*|__|`/g, '').replace(/^#+\s*/gm, '')
+
 function AttentionPanel({ run, task, providers }: { run: CollabRun; task: CollabTask; providers: ProviderInfo[] }): JSX.Element {
   const [open, setOpen] = useState<Open>(null)
   const [note, setNote] = useState('')
@@ -63,7 +69,8 @@ function AttentionPanel({ run, task, providers }: { run: CollabRun; task: Collab
   const pick = async (i: number) => {
     const o = repair!.options[i]
     if (o.userStep && !(await confirmDialog({ title: 'Done this first?', message: o.userStep, confirmLabel: 'Yes, continue' }))) return
-    if (o.changesGoal && !(await confirmDialog({ title: o.label, message: 'This changes what the run delivers. Continue?', confirmLabel: 'Apply fix' }))) return
+    // D-121: a goal change is the user's call — show the new goal before applying it.
+    if (o.changesGoal && !(await confirmDialog({ title: o.label, message: o.goal ? `This changes what the run delivers. The goal becomes:\n\n${o.goal}` : 'This changes what the run delivers. Continue?', confirmLabel: o.goal ? 'Change the goal' : 'Apply fix' }))) return
     await act(() => api.collab.applyRepair(run.id, i))
   }
   const skip = async () => {
@@ -109,7 +116,7 @@ function AttentionPanel({ run, task, providers }: { run: CollabRun; task: Collab
       {open === 'note' && (
         <div className="collab-attn-form">
           <textarea className="collab-ta" rows={2} autoFocus value={note} onChange={(e) => setNote(e.target.value)} placeholder="Tell the agent what to do differently" />
-          <div className="collab-choice-actions"><Button size="sm" variant="primary" disabled={busy} onClick={() => recover({ type: 'retry', note: note.trim() || undefined })}>{note.trim() ? 'Retry with note' : 'Retry as is'}</Button></div>
+          <div className="collab-choice-actions"><Button size="sm" disabled={busy} onClick={() => recover({ type: 'retry', note: note.trim() || undefined })}>{note.trim() ? 'Retry with note' : 'Retry as is'}</Button></div>
         </div>
       )}
       {open === 'agent' && (
@@ -120,7 +127,7 @@ function AttentionPanel({ run, task, providers }: { run: CollabRun; task: Collab
               <option value="">Choose an agent</option>
               {others.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
-            <Button size="sm" variant="primary" disabled={busy || !to} onClick={() => recover({ type: 'reassign', provider: to as ProviderId })}>Reassign</Button>
+            <Button size="sm" disabled={busy || !to} onClick={() => recover({ type: 'reassign', provider: to as ProviderId })}>Reassign</Button>
           </div>
         </div>
       )}
@@ -206,7 +213,7 @@ export default function CollabCard({ run, providers, onOpenFile }: { run: Collab
           {onOpenFile && <Button variant="link" onClick={() => onOpenFile(`.workbench/collab/${run.id}/PLAN.md`)}>Plan</Button>}
           {onOpenFile && <Button variant="link" onClick={() => onOpenFile(`.workbench/collab/${run.id}/STATUS.md`)}>Status log</Button>}
           {run.outputDir && (
-            <Button variant="link" title="Show in Finder" onClick={() => { void api.system.revealItem(run.projectCwd, run.outputDir) }}>
+            <Button variant="link" title={OS_WORDS.showInFolder} onClick={() => { void api.system.revealItem(run.projectCwd, run.outputDir) }}>
               Deliverables: {run.outputDir}/
             </Button>
           )}
@@ -217,6 +224,15 @@ export default function CollabCard({ run, providers, onOpenFile }: { run: Collab
 
       {(run.status === 'failed' || run.status === 'stopped') && run.reason && (
         <div className="collab-reason">{run.reason}</div>
+      )}
+      {run.status === 'stopped' && run.summary && <div className="collab-summary">{plain(run.summary)}</div>}
+
+      {/* D-121: the app's plan checks and the Planner's own conflicts, before the user approves. */}
+      {editing && run.reason && (
+        <div className="collab-reason warn collab-checks">
+          <strong>Check before running</strong>
+          <ul>{run.reason.split('\n').filter(Boolean).map((l, i) => <li key={i}>{l}</li>)}</ul>
+        </div>
       )}
 
       {run.status === 'needs_attention' && !stuck && (
@@ -232,7 +248,7 @@ export default function CollabCard({ run, providers, onOpenFile }: { run: Collab
             <li key={t.id} className={`collab-task ${t.status}${t.id === stuck?.id ? ' stuck' : ''}`}>
               <span className="collab-task-status">{statusIcon(t.status)}</span>
               <span className="collab-task-body">
-                <span className="collab-task-title">{t.title} {t.kind === 'review' && <span className="collab-kind">review</span>}{(t.provider || t.model) && (() => {
+                <span className="collab-task-title">{t.title} {t.kind === 'review' && <span className="collab-kind">review</span>}{t.kind === 'review' && t.meta?.reviewer ? <Badge className="collab-agent-badge">by {providers.find((p) => p.id === t.meta.reviewer)?.name ?? t.meta.reviewer}</Badge> : t.kind !== 'review' && (t.provider || t.model) && (() => {
                   const pid = (t.provider ?? run.providerId) as ProviderId
                   const pname = providers.find((p) => p.id === pid)?.name ?? pid
                   const mv = resolveTaskModel(run.providerId, run.model, t.provider, t.model, modelLists(), disabledModelSet())
@@ -242,6 +258,7 @@ export default function CollabCard({ run, providers, onOpenFile }: { run: Collab
                 {t.status === 'failed' && t.id !== stuck?.id && t.lastVerdict?.findings?.[0] ? <span className="collab-task-note">{findingText(t.lastVerdict.findings[0])}</span> : null}
                 {t.status === 'skipped' && <span className="collab-task-note">Skipped{t.meta?.skipNote ? ` — ${t.meta.skipNote}` : ''}</span>}
                 {t.status !== 'skipped' && t.meta?.history?.length ? <span className="collab-task-note">{stripDate(t.meta.history[t.meta.history.length - 1])}</span> : null}
+                {t.meta?.startedAt && (t.meta.finishedAt || t.status === 'in_progress') ? <span className="collab-task-time">{formatDuration((t.meta.finishedAt ?? Date.now()) - t.meta.startedAt)}{t.meta.finishedAt ? '' : ' so far'}</span> : null}
               </span>
             </li>
           ))}
@@ -262,6 +279,8 @@ export default function CollabCard({ run, providers, onOpenFile }: { run: Collab
               const agent = isReview ? 'review' : `${providers.find((p) => p.id === pid)?.name ?? pid}${r.model ? ` · ${presetsFor(pid).find((m) => m.v === r.model)?.l ?? (r.model.charAt(0).toUpperCase() + r.model.slice(1))}` : ''}`
               const waits = (r.dependsOn ?? []).map((k) => rows.findIndex((x) => x.key === k)).filter((n) => n >= 0 && n !== i)
               const out = shortScope(r.scope ?? '', run.outputDir)
+              // D-121: who reviews it, when it isn't the run's own agent
+              const rev = r.reviewer && r.reviewer !== run.providerId ? (providers.find((p) => p.id === r.reviewer)?.name ?? r.reviewer) : ''
               return (
                 <li key={r.key} className={`collab-plan-item${isOpen ? ' open' : ''}`}>
                   <div className="collab-plan-row">
@@ -273,14 +292,14 @@ export default function CollabCard({ run, providers, onOpenFile }: { run: Collab
                         <span className="collab-plan-sub">{out}{out && waits.length ? ' · ' : ''}{waits.length ? `after ${waits.map((n) => n + 1).join(', ')}` : ''}</span>
                       )}
                     </span>
-                    <span className={`collab-plan-agent${isReview ? ' review' : ''}`}>{agent}</span>
+                    <span className={`collab-plan-agent${isReview ? ' review' : ''}`}>{isReview && rev ? `review · ${rev}` : agent}{!isReview && rev ? ` · reviewed by ${rev}` : ''}</span>
                   </button>
                   <span className="collab-plan-more">
                     <IconButton title="More" aria-expanded={menuRow === r.key} onClick={() => setMenuRow(menuRow === r.key ? null : r.key)}><Icon name="more-vertical" size="md" /></IconButton>
                     <Menu open={menuRow === r.key} onClose={() => setMenuRow(null)}>
                       <MenuItem disabled={i === 0} onClick={() => { move(i, -1); setMenuRow(null) }}><Icon name="arrow-up" size="sm" />Move up</MenuItem>
                       <MenuItem disabled={i === rows.length - 1} onClick={() => { move(i, 1); setMenuRow(null) }}><Icon name="arrow-down" size="sm" />Move down</MenuItem>
-                      <MenuItem danger onClick={() => { delRow(i); setMenuRow(null); if (isOpen) setOpenRow(null) }}><Icon name="close" size="sm" />Delete task</MenuItem>
+                      <MenuItem danger onClick={() => { delRow(i); setMenuRow(null); if (isOpen) setOpenRow(null) }}><Icon name="trash" size="sm" />Delete task</MenuItem>
                     </Menu>
                   </span>
                   <IconButton className="collab-plan-expand" title={isOpen ? 'Collapse' : 'Edit task'} aria-expanded={isOpen} onClick={() => setOpenRow(isOpen ? null : r.key)}>
@@ -317,6 +336,13 @@ export default function CollabCard({ run, providers, onOpenFile }: { run: Collab
                             </span>
                           </span>
                         )}
+                        <span className="collab-plan-field">
+                          <label className="collab-flabel">Reviewed by</label>
+                          <select className="collab-kind-sel" value={r.reviewer ?? ''} onChange={(e) => setRow(i, { reviewer: (e.target.value || undefined) as ProviderId | undefined })}>
+                            <option value="">Default</option>
+                            {providers.filter((p) => isProviderId(p.id)).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                          </select>
+                        </span>
                       </div>
                       {waits.length > 0 && <div className="collab-plan-hint">Starts after {waits.length === 1 ? `task ${waits[0] + 1} passes` : `tasks ${waits.slice(0, -1).map((n) => n + 1).join(', ')} and ${waits[waits.length - 1] + 1} pass`} · <Button variant="link" onClick={() => setRow(i, { dependsOn: [] })}>don't wait</Button></div>}
                       {isReview && <div className="collab-plan-hint">Review tasks use the strong reviewer model.</div>}
@@ -339,7 +365,7 @@ export default function CollabCard({ run, providers, onOpenFile }: { run: Collab
 
       {run.status === 'needs_attention' && (
         <div className="collab-plan-actions">
-          <Button size="sm" variant="ghost" danger onClick={confirmStop} disabled={busy}>Stop run</Button>
+          <Button size="sm" variant="ghost" danger className="btn-icon-label" onClick={confirmStop} disabled={busy}><Icon name="stop" size="sm" />Stop run</Button>
           <span className="collab-card-spacer" />
           {outOfBudget
             ? <Button variant="primary" size="sm" onClick={() => resume(true)} disabled={busy}>Add 12 runs & continue</Button>
@@ -349,7 +375,7 @@ export default function CollabCard({ run, providers, onOpenFile }: { run: Collab
 
       {run.status === 'done' && (() => {
         const anyFailed = tasks.some((t) => t.status === 'failed')
-        return <div className={`collab-summary${anyFailed ? ' warn' : ''}`}>{anyFailed ? '⚠' : '✓'} {run.summary || 'Collab run complete.'}</div>
+        return <div className={`collab-summary${anyFailed ? ' warn' : ''}`}>{anyFailed ? '⚠' : '✓'} {plain(run.summary) || 'Collab run complete.'}</div>
       })()}
     </div>
   )

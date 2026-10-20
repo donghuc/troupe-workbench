@@ -1,6 +1,7 @@
 import { workFolderRules } from '../../shared/contextBudget'
+import { fileBase } from '../../shared/platform'
+import { execFileCli } from '../platform/proc'
 import { writtenByOthers } from '../agent/recentWrites'
-import { execFile } from 'child_process'
 import { logInfo, logError } from '../util/logger'
 import { promises as fsp } from 'fs'
 import { homedir } from 'os'
@@ -10,6 +11,7 @@ import type {
   AgentRequest, AgentEvent, ProviderCapabilities, ProviderAvailability
 } from '../../shared/agent'
 import { buildEnv } from './env'
+import { getSetting } from '../database/settingsRepo'
 import { CliProcess, mediaFilesSince } from './cliProcess'
 import { memoryDelivery, globalMemoryDelivery } from '../context/projectMemory'
 
@@ -26,7 +28,7 @@ export class GrokProvider implements AgentProvider {
 
   isAvailable(): Promise<ProviderAvailability> {
     return new Promise((resolve) => {
-      execFile('grok', ['--version'], { env: buildEnv() }, (err, verOut, verErr) => {
+      execFileCli('grok', ['--version'], { env: buildEnv() }, (err, verOut, verErr) => {
         if (err) { resolve({ installed: false, authenticated: false, detail: 'grok CLI not found on PATH' }); return }
         // No documented machine-readable login-status command; report installed and
         // assume authenticated (a failed key surfaces as a run error).
@@ -56,7 +58,8 @@ export class GrokProvider implements AgentProvider {
     // Memory is always injected for Grok (no known native memory file); D-055 rule.
     const memory = memoryDelivery('grok', req.cwd ?? null, ctx?.memory ?? '') === 'injected' ? ctx?.memory : undefined
     const globalMemory = globalMemoryDelivery('grok', ctx?.globalMemory ?? '') === 'injected' ? ctx?.globalMemory : undefined
-    const block = [ctx?.instructions, globalMemory, memory, ctx?.persistentContext, workFolderRules(req.cwd, req.addDirs), ctx?.skillText, ctx?.snapshot, ctx?.attachmentsText].filter(Boolean).join('\n\n')
+    const mode0 = req.permissionMode ?? 'auto'
+    const block = [ctx?.instructions, globalMemory, memory, ctx?.persistentContext, workFolderRules(req.cwd, req.addDirs), grokModeRule(mode0, req.toolProfile), ctx?.skillText, ctx?.snapshot, ctx?.attachmentsText].filter(Boolean).join('\n\n')
     const prompt = block.trim()
       ? `<workbench_context>\n${block}\n</workbench_context>\n\n${req.prompt}`
       : req.prompt
@@ -74,9 +77,9 @@ export class GrokProvider implements AgentProvider {
       // no shell, Grok had used the Paper MCP server to try to move its image (and edited the
       // user's Paper file) for 10 minutes.
       ? ['--always-approve', '--tools', 'read_file,list_dir,image_gen,image_edit', '--disallowed-tools', 'search_tool,use_tool', '--deny', 'MCPTool']
-      : ['--permission-mode', permMode]
-    const common = ['-p', prompt, '--output-format', 'json', ...permFlags]
-    if (req.model) common.push('-m', req.model)
+      : grokPermFlags(mode, { web: getSetting('agent_web_access') !== '0', allowWeb: !!req.allowWeb })
+    const argsFor = (flags: string[]) => { const a = ['-p', prompt, '--output-format', 'json', ...flags]; if (req.model) a.push('-m', req.model); return a }
+    const common = argsFor(permFlags)
     const raw = !!process.env.WB_GROK_RAW
 
     logInfo('[grok] run', JSON.stringify({ model: req.model || 'default', permMode: req.toolProfile === 'image' ? 'image-tools' : permMode, resume: resumeSessionId ?? null }))
@@ -86,10 +89,24 @@ export class GrokProvider implements AgentProvider {
     // The runner injects the transcript each turn and never passes a resume id (by
     // design — see agent/runner.ts), so --resume is effectively unused today; kept as
     // a passthrough for a future Phase-10 native-resume mode. (B-041)
-    const res = await this.exec(resumeSessionId ? [...common, '--resume', resumeSessionId] : common, req.cwd)
+    let res = await this.exec(resumeSessionId ? [...common, '--resume', resumeSessionId] : common, req.cwd)
+    // D-121: grok refuses to start a session when a tool we removed is required by one we kept
+    // (test 6: exit_plan_mode needs enter_plan_mode; scheduler_list needs the scheduler). Its
+    // error names each unsatisfied tool: remove those too, remember them, and start once more.
+    if (res.code && req.toolProfile !== 'image' && !this.cancelled) {
+      const learned = learnGrokRequirements(`${res.stderr}\n${res.stdout}`)
+      if (learned.length) {
+        logInfo('[grok] removing tools whose requirements were removed', JSON.stringify(learned))
+        const again = argsFor(grokPermFlags(mode, { web: getSetting('agent_web_access') !== '0', allowWeb: !!req.allowWeb }))
+        res = await this.exec(resumeSessionId ? [...again, '--resume', resumeSessionId] : again, req.cwd)
+      }
+    }
     if (raw) logInfo('[grok] raw', JSON.stringify({ code: res.code, stdout: res.stdout.slice(0, 4000), stderr: res.stderr.slice(0, 2000) }))
     if (this.cancelled) { yield { type: 'complete', usage: {} }; return }
     const parsed = parseGrokJson(res.stdout)
+    // D-121: grok reports why it stopped; a refused tool call ends the turn silently, which in
+    // Collab looked like "Grok says what it will do, then stops without writing anything".
+    logInfo('[grok] result', JSON.stringify({ code: res.code, stopReason: parsed?.stopReason ?? null, chars: parsed?.text?.length ?? 0 }))
 
     // Surface images grok produced this run. Its `imagine` tool saves into grok's own
     // session dir (~/.grok/sessions/<enc-cwd>/<sid>/images) and links them relative
@@ -131,6 +148,11 @@ export class GrokProvider implements AgentProvider {
     // Repoint grok's relative "images/<n>" links to the recovered copies so they render
     // inline where grok referenced them; a repointed image needs no separate file_changed.
     let displayText = fixGrokSpacing(parsed?.text ?? '')
+    // D-121: which tool was refused — grok's JSON only says "cancelled"; its session log names it.
+    const blockedTool = parsed?.stopReason && /cancel/i.test(parsed.stopReason) && req.cwd && parsed.sessionId ? await grokBlockedTool(req.cwd, parsed.sessionId) : null
+    if (blockedTool) logInfo('[grok] blocked by a permission prompt', JSON.stringify({ tool: blockedTool, session: parsed?.sessionId }))
+    const stopNote = grokStopNote(parsed?.stopReason, mode, blockedTool)
+    if (stopNote) displayText = displayText ? `${displayText}\n\n${stopNote}` : stopNote
     const referenced = new Set<string>()
     for (const r of recovered) {
       if (displayText.includes(r.orig)) { displayText = displayText.split(r.orig).join(r.destRel); referenced.add(r.dest) }
@@ -142,7 +164,7 @@ export class GrokProvider implements AgentProvider {
       for (const f of emitList) { if (seen.has(f)) continue; seen.add(f); if (seen.size > 6) break; yield { type: 'file_changed', path: f } }
     }
     try {
-      const text = parsed?.text
+      const text = parsed?.text || (stopNote ? displayText : '')
       const failed = failedRun
       if (text) {
         if (parsed!.sessionId) yield { type: 'session_started', providerSessionId: parsed!.sessionId }
@@ -183,9 +205,98 @@ export class GrokProvider implements AgentProvider {
   }
 }
 
+/**
+ * D-121: Auto runs grok with --permission-mode acceptEdits — file edits are approved, shell
+ * commands are not, and a headless run can't ask, so grok's turn just ends. Say so up front.
+ */
+export function grokModeRule(mode: string, toolProfile?: string): string {
+  if (mode !== 'auto' || toolProfile === 'image') return ''
+  return 'Tools in this run: read, create and edit files with your file tools; web search and fetch when web access is on. There is no shell in this mode — use the file tools for everything (no mkdir, cat or ls), and do the whole task in this turn without asking questions.'
+}
+
+/**
+ * Grok's flags per Troupe permission mode (D-121). A headless grok run cancels ANY tool that
+ * asks for permission and ends the turn (session log: permission_requested → resolved
+ * "cancelled" in 0–2 ms → turn_ended permission_cancelled). Test 4 lost `write`, test 5
+ * `web_fetch`. So every tool a run may use is pre-approved, and every tool that would still
+ * ask is removed from its toolset — the model can't call what it doesn't have.
+ *  - auto: file edits (Edit covers write + search_replace), web (if on in Settings), MCP.
+ *    No shell: grok has no sandbox wired up here, so `run_terminal_command` is removed.
+ *  - read: reading only (+ web for a Reviewer); writing tools and shell removed.
+ *  - full: always-approve, as before.
+ * Never in a headless run: ask_user_question / enter_plan_mode (both wait for a person) and
+ * the scheduler (it would create grok-side scheduled jobs).
+ */
+export function grokPermFlags(mode: string, opts: { web: boolean; allowWeb?: boolean }): string[] {
+  const never = ['ask_user_question', 'enter_plan_mode', 'scheduler_create', 'scheduler_delete']
+  const finish = (remove: string[]) => withGrokDependants(remove).join(',')
+  if (mode === 'full') return ['--permission-mode', 'bypassPermissions', '--disallowed-tools', finish(never)]
+  const web = mode === 'read' ? opts.web && !!opts.allowWeb : opts.web
+  const allow = mode === 'read' ? [] : ['Edit', 'MCPTool']
+  if (web) allow.push('WebFetch', 'WebSearch')
+  const remove = [...never, 'run_terminal_command', ...(web ? [] : ['web_fetch', 'web_search']),
+    ...(mode === 'read' ? ['write', 'search_replace', 'search_tool', 'use_tool', 'image_gen', 'image_edit', 'image_to_video', 'reference_to_video'] : [])]
+  return ['--permission-mode', mode === 'read' ? 'plan' : 'acceptEdits', ...allow.flatMap((r) => ['--allow', r]), '--disallowed-tools', finish(remove)]
+}
+
+/**
+ * Tools that require another tool (D-121, test 6): removing the required one without its
+ * dependants makes grok refuse to start ("Requirements unsatisfied"). Grok doesn't publish its
+ * requirement graph, so this starts from the pairs it reported and learns the rest from its
+ * own error at run time (learnGrokRequirements), for the life of the app.
+ */
+const GROK_TOOL_DEPENDANTS: Record<string, string[]> = {
+  enter_plan_mode: ['exit_plan_mode'],
+  scheduler_create: ['scheduler_list', 'scheduler_delete'],
+  scheduler_delete: ['scheduler_list']
+}
+const learnedRemovals = new Set<string>()
+/** The removal list plus every tool that requires a removed one (transitively), and learned removals. */
+export function withGrokDependants(remove: string[]): string[] {
+  const out = new Set([...remove, ...learnedRemovals])
+  let grew = true
+  while (grew) { grew = false; for (const t of [...out]) for (const d of GROK_TOOL_DEPENDANTS[t] ?? []) if (!out.has(d)) { out.add(d); grew = true } }
+  return [...out]
+}
+/** Parse grok's "Requirements unsatisfied" error; remember each named tool for removal. Returns the new ones. */
+export function learnGrokRequirements(text: string): string[] {
+  if (!/requirements unsatisfied/i.test(text)) return []
+  const found = [...text.matchAll(/tool "(?:[\w-]+:)?([a-z0-9_]+)"\s*:/gi)].map((m) => m[1])
+  const fresh = found.filter((t) => !learnedRemovals.has(t))
+  for (const t of fresh) learnedRemovals.add(t)
+  return fresh
+}
+
+/** The tool a cancelled grok turn was asking permission for, from its session log (D-121). */
+export async function grokBlockedTool(cwd: string, sessionId: string, home = homedir()): Promise<string | null> {
+  try {
+    const log = await fsp.readFile(join(home, '.grok', 'sessions', encodeURIComponent(cwd), sessionId, 'events.jsonl'), 'utf8')
+    let tool: string | null = null
+    for (const line of log.split('\n')) {
+      if (!line.includes('permission_resolved')) continue
+      try { const e = JSON.parse(line); if (e.type === 'permission_resolved' && e.decision !== 'allow' && typeof e.tool_name === 'string') tool = e.tool_name } catch { /* partial line */ }
+    }
+    return tool
+  } catch { return null }
+}
+
+/** A line for the reply when grok stopped for a reason other than finishing (D-121). The
+ *  "blocked asking permission" wording is matched by PERMISSION_BLOCKED_RE (collabRecovery). */
+export function grokStopNote(stopReason: string | undefined, mode: string, blockedTool?: string | null): string {
+  if (!stopReason || /^(end_?turn|stop|completed?|success|done)$/i.test(stopReason)) return ''
+  if (blockedTool) return `_Grok was blocked asking permission for \`${blockedTool}\`: a background run can't answer a permission prompt, so the turn ended (\`${stopReason}\`)._`
+  if (/permission|cancel|denied|approv/i.test(stopReason)) {
+    return `_Grok stopped before finishing (\`${stopReason}\`): a tool it tried needed approval, which Troupe can't give${mode === 'auto' ? ' in Auto (a shell command, or a tool outside file editing)' : mode === 'read' ? ' in Read only' : ''}._`
+  }
+  if (/max_?turns|turn_?limit/i.test(stopReason)) return `_Grok stopped before finishing (\`${stopReason}\`): it ran out of steps._`
+  return `_Grok stopped (\`${stopReason}\`)._`
+}
+
 // grok writes multi-line CLI errors to stderr (often prefixed "Error:"); collapse
 // to a single readable line for the UI.
 function cleanGrokError(stderr: string): string {
+  // Signed out: grok's own text ends with a command on the next line, which got cut off.
+  if (/not (signed|logged) in|authenticate/i.test(stderr)) return 'Grok isn\'t signed in. Open Settings ▸ Agents ▸ Grok ▸ Sign in…, or run grok once in a terminal.'
   const line = stderr.split('\n').map((l) => l.trim()).filter(Boolean).find((l) => /error|limit|denied|unauthor|forbidden|quota/i.test(l))
     ?? stderr.trim().split('\n').map((l) => l.trim()).filter(Boolean)[0] ?? ''
   return line.replace(/^Error:\s*/i, '').trim()
@@ -249,7 +360,7 @@ async function recoverGrokSessionImages(cwd: string, sinceMs: number, opts: Reco
   const out: RecoveredImage[] = []
   for (const { rel, f, sid } of fresh.sort((a, b) => b.m - a.m).slice(0, 4)) {
     const sidTag = sid.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8) || 'sess'
-    const destName = `grok-${sidTag}-${rel.split('/').pop()}`
+    const destName = `grok-${sidTag}-${fileBase(rel)}`
     const dest = join(destDir, destName)
     try { await fsp.copyFile(f, dest); out.push({ orig: rel, dest, destRel: `generated/grok/${destName}` }) } catch { /* skip */ }
   }
@@ -272,7 +383,7 @@ function blockifyImages(text: string): string {
     .trim()
 }
 
-interface GrokResult { text?: string; sessionId?: string; inputTokens?: number; outputTokens?: number }
+interface GrokResult { text?: string; sessionId?: string; inputTokens?: number; outputTokens?: number; stopReason?: string }
 // grok --output-format json emits { text, stopReason, sessionId, usage } — but be tolerant
 // of surrounding log lines by extracting the last JSON object.
 function parseGrokJson(out: string): GrokResult | null {
@@ -284,6 +395,7 @@ function parseGrokJson(out: string): GrokResult | null {
         return {
           text: typeof o.text === 'string' ? o.text : (typeof o.output === 'string' ? o.output : undefined),
           sessionId: o.sessionId ?? o.session_id,
+          stopReason: typeof (o.stopReason ?? o.stop_reason) === 'string' ? (o.stopReason ?? o.stop_reason) : undefined,
           inputTokens: u.input_tokens ?? u.inputTokens ?? u.prompt_tokens,
           outputTokens: u.output_tokens ?? u.outputTokens ?? u.completion_tokens
         }

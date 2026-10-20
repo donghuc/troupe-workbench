@@ -3,6 +3,7 @@
 // Pure — no electron, no fs — so the rules (what may connect, what a run receives,
 // the prompt contract) are unit-tested (imageCanvas.test.ts).
 import type { ProviderId } from './types'
+import { fileBase } from './platform'
 
 export const IMAGE_FOLDER_SETTING = 'image_folder'
 export const CANVAS_FILE = 'canvas.json'
@@ -285,7 +286,7 @@ export function savedName(hint: string, source: string, now: Date = new Date()):
   const date = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
   const stop = new Set(['a', 'an', 'the', 'of', 'that', 'and', 'with', 'for', 'to', 'in', 'on', 'at', 'is', 'be', 'should', 'generate', 'create', 'make', 'photo', 'image', 'picture'])
   const slug = hint.toLowerCase().replace(/[^a-z0-9\s-]+/g, ' ').split(/\s+/).filter((w) => w && !stop.has(w)).slice(0, 4).join('-')
-  const base = source.split('/').pop() || 'image.png'
+  const base = fileBase(source) || 'image.png'
   return [date, slug, base].filter(Boolean).join('-')
 }
 

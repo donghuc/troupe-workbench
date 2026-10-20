@@ -1,6 +1,7 @@
 // First-run welcome (D-103): the three-screen setup a brand-new user sees once. Pure rules
 // only — the screens live in renderer/src/components/Welcome.tsx.
 import { BUILTIN_IDS } from './providers'
+import { IS_WINDOWS, fileBase } from './platform'
 import type { ProviderId } from './types'
 
 /** Set once the welcome has been finished or skipped; never shown again automatically. */
@@ -44,12 +45,13 @@ export function welcomeAgentsOff(status: AgentStatus): ProviderId[] {
  */
 export function isBroadFolder(path: string): boolean {
   const p = path.replace(/\/+$/, '')
+  if (IS_WINDOWS && /^[a-z]:\\(users(\\[^\\]+(\\(desktop|documents|downloads))?)?)?\\?$/i.test(p.replace(/\//g, '\\'))) return true
   return /^\/Users\/[^/]+(\/(Desktop|Documents|Downloads))?$/.test(p) || p === '' || p === '/Users'
 }
 
 /** Project name from a folder path: its last segment. */
 export function nameFromFolder(path: string): string {
-  return path.replace(/\/+$/, '').split('/').pop() || 'My project'
+  return fileBase(path.replace(IS_WINDOWS ? /[\\/]+$/ : /\/+$/, '')) || 'My project'
 }
 
 /**

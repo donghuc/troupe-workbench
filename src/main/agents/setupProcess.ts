@@ -4,7 +4,8 @@
 // fake installer scripts.
 import { spawn } from 'child_process'
 import { createInterface } from 'readline'
-import { cleanLine, lastErrorLine } from './setupRules'
+import { cleanLine, lastErrorLine, powershellArgs, powershellExe } from './setupRules'
+import { stopChild } from '../platform/proc'
 
 export interface SetupResult { ok: boolean; code: number | null; timedOut: boolean; cancelled: boolean; error?: string }
 
@@ -16,8 +17,13 @@ export function runSetupCommand(cmd: string, opts: { env: NodeJS.ProcessEnv; tim
   const lines: string[] = []
   let timedOut = false
   let cancelled = false
-  const child = spawn(shell, ['-lc', cmd], { env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] })
+  const win = process.platform === 'win32'
+  // Windows (D-120): PowerShell, hidden; there are no process groups, so stopping ends the tree.
+  const child = win
+    ? spawn(powershellExe(), powershellArgs(cmd), { env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
+    : spawn(shell, ['-lc', cmd], { env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] })
   const killGroup = () => {
+    if (win) { stopChild(child); return }
     try { if (child.pid) process.kill(-child.pid, 'SIGTERM') } catch { /* already gone */ }
     setTimeout(() => { try { if (child.pid) process.kill(-child.pid, 'SIGKILL') } catch { /* gone */ } }, 1500).unref()
   }

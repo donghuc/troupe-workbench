@@ -1,4 +1,5 @@
 import { Badge } from '../ui/Badge'
+import { OS_WORDS } from '../../../../shared/platform'
 import { confirmDialog } from '../ui/ConfirmDialog'
 import { useState } from 'react'
 import ProviderAvatar from '../ProviderAvatar'
@@ -12,7 +13,7 @@ import { agentEntry, agentIds, isBuiltinId } from '../../../../shared/providers'
 import { allPresetsFor, modelKey, parseExtraModels, addExtraModel, removeExtraModel, type ModelLists } from '../../../../shared/models'
 import type { ProviderId, BuiltinProviderId } from '../../../../shared/types'
 import type { CustomAgent } from '../../../../shared/customAgents'
-import { presetRecipe } from '../../../../shared/agentRecipes'
+import { presetRecipe, BUILTIN_RECIPES } from '../../../../shared/agentRecipes'
 import { useAgentList, customAgentFor } from '../../agents'
 import { api } from '../../api'
 import { Button } from '../ui/Button'
@@ -114,7 +115,7 @@ export default function AgentsTab({ offAgents, toggleAgent, offModels, toggleMod
                               <button type="button" className={`model-chip${mOn ? ' on' : ''}`} aria-pressed={mOn} title={`${m.v}${m.note ? ` — ${m.note}` : ''}\n${mOn ? `Hide ${m.l} from the model picker` : `Show ${m.l} in the model picker`}`} onClick={() => toggleModel(key, !mOn)}>
                                 <Icon name={mOn ? 'check' : 'close'} size="xs" />{m.l}{m.note && <span className="model-chip-note"> · retiring</span>}
                               </button>
-                              {isTyped && <button type="button" className="model-chip-remove" aria-label={`Remove ${m.l}`} title={`Remove ${m.l}`} onClick={() => setExtraModelsText(removeExtraModel(extraModels, id, m.v))}><Icon name="close" size="xs" /></button>}
+                              {isTyped && <button type="button" className="model-chip-remove" aria-label={`Remove ${m.l}`} title={`Remove ${m.l}`} onClick={() => setExtraModelsText(removeExtraModel(extraModels, id, m.v))}><Icon name="trash" size="xs" />Remove</button>}
                             </span>
                           )
                         })}
@@ -129,6 +130,14 @@ export default function AgentsTab({ offAgents, toggleAgent, offModels, toggleMod
                         )}
                       {(id === 'codex' || id === 'gemini') && models.length === 0 && <p className="agent-body-hint">Model list not found — run {e.cli} once, or add models above.</p>}
 
+                      {/* Grok (and Gemini) can't report sign-in without running, so "Ready" can still mean
+                          signed out: offer the interactive sign-in here (D-120, from the Windows test). */}
+                      {(id === 'grok' || id === 'gemini') && BUILTIN_RECIPES[id].signIn && !BUILTIN_RECIPES[id].unsupported && (
+                        <div className="agent-custom-actions">
+                          <Button size="sm" title={`Opens ${OS_WORDS.terminal} and runs: ${BUILTIN_RECIPES[id].signIn!.cmd}`} onClick={() => api.agents.setupStart(id, 'signIn', true)}>Sign in…</Button>
+                        </div>
+                      )}
+
                       {id === 'codex' && (
                         <Field label="Image model" htmlFor="codex-image-model" hint="Used on the Image canvas.">
                           <input id="codex-image-model" className="field-input mono" placeholder="gpt-5.6-sol (default)" value={codexImageModel} onChange={(ev) => setCodexImageModel(ev.target.value)} />
@@ -142,9 +151,9 @@ export default function AgentsTab({ offAgents, toggleAgent, offModels, toggleMod
                           <div className="agent-custom-actions">
                             <Button size="sm" onClick={() => setEditing(custom)}><Icon name="edit" size="xs" /> Edit</Button>
                             {custom.presetId && presetRecipe(custom.presetId)?.signIn && (
-                              <Button size="sm" title={`Opens Terminal and runs: ${presetRecipe(custom.presetId)!.signIn!.cmd} — sign in or add an API key there`} onClick={() => api.agents.setupStart(custom.presetId!, 'signIn', true)}>Sign in / API key…</Button>
+                              <Button size="sm" title={`Opens ${OS_WORDS.terminal} and runs: ${presetRecipe(custom.presetId)!.signIn!.cmd} — sign in or add an API key there`} onClick={() => api.agents.setupStart(custom.presetId!, 'signIn', true)}>Sign in / API key…</Button>
                             )}
-                            <Button variant="ghost" size="sm" danger onClick={() => remove(custom)}>Remove</Button>
+                            <Button variant="ghost" size="sm" danger className="btn-icon-label" onClick={() => remove(custom)}><Icon name="trash" size="sm" />Remove</Button>
                           </div>
                         </div>
                       )}

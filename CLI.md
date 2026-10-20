@@ -58,7 +58,7 @@ troupe collab status <run|chat> --wait 600   # plan, task progress, and fixes wh
 troupe collab approve <run>                  # run the plan        (troupe collab reject <run> to drop it)
 troupe collab fix <run> <n>                  # apply the Planner's fix n
 troupe collab retry <run> <task n> --note "use ISO dates"   # or: skip, ask (ask the Planner)
-troupe collab resume <run>     troupe collab stop <run>     troupe collab list <project>
+troupe collab resume <run>     troupe collab stop <run>     troupe collab list [project]   # all projects when none is named
 ```
 
 Add `--json` to any command for machine-readable output.
@@ -97,9 +97,13 @@ data, settings or database directly. Run `troupe --help` for every command.
 
 ## Collab (multi-agent runs)
 - Start: `troupe collab start "<project>" "<goal>"`, then `troupe collab status <run> --wait 600`.
-- ALWAYS show me the plan and ask before `troupe collab approve`.
+- ALWAYS show me the plan and ask before `troupe collab approve` — including every line under
+  "Check before running" (goal conflicts, files outside the deliverables folder). Don't pick a side for me.
 - When it's stuck, show me the reason and the fixes; apply one with `troupe collab fix <run> <n>`
   only after I choose — except a fix marked (recommended) that doesn't change the goal.
+  A fix marked "(changes the goal — ask the user)" is always my call.
+- When it finishes or is stopped, show me the wrap-up from `troupe collab status <run>`.
+- Commands answer within 90 s; if one says "Troupe didn't answer", tell me — don't retry in a loop.
 
 ## Rules
 - Report the agent's actual reply and the files it changed, not just "done".

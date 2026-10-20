@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { OS_WORDS } from '../../../../shared/platform'
 import { api } from '../../api'
 import logo from '../../assets/logo.png'
 import type { AppInfo } from '../../../../shared/api'
@@ -12,7 +13,7 @@ const COMMANDS: { k: string; d: string }[] = [
   { k: '@critique', d: 'Thinking mode: one agent produces, another attacks, the first responds.' },
   { k: '@research', d: 'Thinking mode: one agent gathers sources, another checks them.' },
   { k: '# your note', d: 'Save the line as a dated fact in this project\'s memory instead of sending it.' },
-  { k: '⌘K', d: 'Search across chats and messages.' },
+  { k: `${OS_WORDS.mod}K`, d: 'Search across chats and messages.' },
   { k: 'Shift + Enter', d: 'New line — and continues a numbered or bulleted list.' },
   { k: 'Select text', d: 'Pops a menu: Explain this · Reply · Lookup.' },
   { k: 'Compare replies', d: 'Under an @all group: one card with the verdict, agreements and disagreements; full replies fold beneath.' },
@@ -60,7 +61,7 @@ export function AboutTab() {
         <div><dt>Platform</dt><dd>{info?.platform ?? '—'}</dd></div>
       </dl>
       <div className="about-actions">
-        <Button size="sm" onClick={() => api.system.openLogs()}>Reveal logs in Finder</Button>
+        <Button size="sm" onClick={() => api.system.openLogs()}>Reveal logs in {OS_WORDS.fileManager}</Button>
         <Button size="sm" onClick={copyDiagnostics} disabled={diag === 'busy'}>{diag === 'busy' ? 'Collecting…' : diag === 'done' ? 'Copied' : 'Copy diagnostics'}</Button>
         <Button size="sm" onClick={() => window.dispatchEvent(new Event(SHOW_WELCOME_EVENT))}>Show welcome</Button>
       </div>

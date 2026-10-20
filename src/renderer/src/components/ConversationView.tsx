@@ -98,6 +98,16 @@ export default function ConversationView({ conversation, providers, pendingSend,
   const toggleExpanded = (id: string) => setExpanded((cur) => { const n = new Set(cur); if (n.has(id)) n.delete(id); else n.add(id); return n })
   const isSynthesis = (m: Message) => m.role === 'assistant' && !!m.metadata?.synthesis
   const firstLine = (text: string) => { const l = text.split('\n').map((x) => x.replace(/^[#>*\-\s`]+/, '').replace(/\*\*|__|`/g, '').trim()).find(Boolean) ?? ''; return l.length > 110 ? l.slice(0, 110) + '…' : l }
+  // Collab sub-runs (D-121): every Planner / Maker / Reviewer reply folds to one line; the
+  // wrap-up stays open — it is the thing to read.
+  const collabTag = (m: Message) => (m.role === 'assistant' ? (m.metadata?.collab as { runId: string; role: string; task?: number; title?: string } | undefined) : undefined)
+  const collabLabel = (c: { role: string; task?: number }, text: string) => {
+    const t = c.task ? `T${c.task}` : ''
+    if (c.role === 'reviewer') { const v = /\b(PASS|FAIL)\b/.exec(text)?.[1]; return ['Reviewer', t, v].filter(Boolean).join(' · ') }
+    if (c.role === 'maker') return `${t} · Maker`
+    if (c.role === 'repair') return ['Planner', 'fix', t].filter(Boolean).join(' · ')
+    return 'Planner · plan'
+  }
   const shownLanes = run.lanes.length ? run.lanes : (ghost?.lanes ?? [])
   const shownParallel = run.lanes.length ? run.parallel : !!ghost?.parallel
 
@@ -287,7 +297,8 @@ export default function ConversationView({ conversation, providers, pendingSend,
     const out: (Message | Message[])[] = []
     for (let i = 0; i < messages.length; ) {
       const m = messages[i]
-      const pg = m.role === 'assistant' ? (m.metadata?.parallelGroup as string | undefined) : undefined
+      // Collab sub-runs (D-121) carry a parallelGroup too but render one line each, not side by side.
+      const pg = m.role === 'assistant' && !m.metadata?.collab ? (m.metadata?.parallelGroup as string | undefined) : undefined
       if (pg) {
         const group = [m]; let j = i + 1
         while (j < messages.length && messages[j].role === 'assistant' && (messages[j].metadata?.parallelGroup as string | undefined) === pg) { group.push(messages[j]); j++ }
@@ -353,8 +364,25 @@ export default function ConversationView({ conversation, providers, pendingSend,
                   <Icon name="chevron-down" size="xs" />
                 </button>
               )
+              const renderCollab = (m: Message, c: { role: string; task?: number; title?: string }) => !expanded.has(m.id) ? (
+                <button key={m.id} type="button" className="reply-collapsed collab-line" onClick={() => toggleExpanded(m.id)} title={c.title ? `${c.title} — show the full reply` : 'Show the full reply'}>
+                  <ProviderAvatar id={m.provider} size="sm" />
+                  <span className="reply-collapsed-name">{collabLabel(c, m.content)}</span>
+                  <span className="reply-collapsed-line truncate">{firstLine(m.content)}</span>
+                  <Icon name="chevron-down" size="xs" />
+                </button>
+              ) : (
+                <div key={m.id} className="reply-expanded">
+                  <Button type="button" variant="link" className="reply-collapse-btn" onClick={() => toggleExpanded(m.id)}>Collapse</Button>
+                  {renderMessage(m)}
+                </div>
+              )
               const renderRow = (row: Message | Message[]) => {
-                if (!Array.isArray(row)) return isSynthesis(row) ? renderCard(row) : renderMessage(row)
+                if (!Array.isArray(row)) {
+                  const c = collabTag(row)
+                  if (c && c.role !== 'wrapup') return renderCollab(row, c)
+                  return isSynthesis(row) ? renderCard(row) : renderMessage(row)
+                }
                 const card = row.find(isSynthesis)
                 const replies = row.filter((m) => !isSynthesis(m))
                 if (!card) {
@@ -390,8 +418,13 @@ export default function ConversationView({ conversation, providers, pendingSend,
               // Terminal collab card: drop it in at the point the run happened so later
               // chat flows below it. Active runs keep it pinned at the end (near composer).
               if (collabRun && !collabActive) {
+                // Place it after the run's last message (D-121) — it was placed at the run's
+                // start, so the Done card sat above all the work it summarised.
+                const ofRun = (r: Message | Message[]) => (Array.isArray(r) ? r : [r]).some((m) => collabTag(m)?.runId === collabRun.id || String(m.metadata?.parallelGroup ?? '').startsWith(`collab:${collabRun.id}`))
+                let last = -1
+                rows.forEach((r, k) => { if (ofRun(r)) last = k })
                 const rowTime = (r: Message | Message[]) => (Array.isArray(r) ? r[0].createdAt : r.createdAt)
-                const i = rows.findIndex((r) => rowTime(r) > collabRun.createdAt)
+                const i = last >= 0 ? last + 1 : rows.findIndex((r) => rowTime(r) > collabRun.createdAt)
                 const cut = i === -1 ? rows.length : i
                 return <>{rows.slice(0, cut).map(renderRow)}<CollabCard key="collab-card" run={collabRun} providers={providers} onOpenFile={cwd ? (rel) => setOpenArtifact(rel) : undefined} />{rows.slice(cut).map(renderRow)}</>
               }

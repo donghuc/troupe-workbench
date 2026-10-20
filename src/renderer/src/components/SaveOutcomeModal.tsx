@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import Modal from './Modal'
+import Icon from './Icon'
 import { api } from '../api'
 import { reportError } from '../notices'
 import { OUTCOME_KINDS, type Outcome, type OutcomeKind } from '../../../shared/decisions'
@@ -60,7 +61,7 @@ export default function SaveOutcomeModal({ conversationId, projectId, messageId,
           <label className="field-label">What kind of outcome is this?</label>
           <div className="outcome-kinds" role="radiogroup" aria-label="Kind">
             {OUTCOME_KINDS.map((k) => (
-              <button key={k.v} type="button" role="radio" aria-checked={draft.kind === k.v} className={`model-chip${draft.kind === k.v ? ' on' : ''}`} onClick={() => set({ kind: k.v as OutcomeKind })}>{k.l}</button>
+              <button key={k.v} type="button" role="radio" aria-checked={draft.kind === k.v} className={`model-chip${draft.kind === k.v ? ' on' : ''}`} onClick={() => set({ kind: k.v as OutcomeKind })}>{draft.kind === k.v && <Icon name="check" size="xs" />}{k.l}</button>
             ))}
           </div>
           <p className="field-hint outcome-kind-hint">{draft.kind === 'decision' ? 'A choice made between options — agents follow it unless the reason no longer holds.' : draft.kind === 'insight' ? 'Something learned that stays true — background agents can rely on.' : 'Left unresolved on purpose — agents know it is still open.'}</p>

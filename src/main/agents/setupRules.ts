@@ -55,3 +55,33 @@ export function commandFileContents(cmd: string, shell: string, path?: string): 
     ''
   ].join('\n')
 }
+
+/**
+ * Windows (D-120): the `.ps1` a PowerShell window runs for an interactive step — the
+ * counterpart of commandFileContents. PATH is Troupe's merged PATH, so an agent Troupe found
+ * is found here too.
+ */
+export function ps1FileContents(cmd: string, path?: string): string {
+  const q = (v: string) => `'${v.replace(/'/g, "''")}'`
+  return [
+    '# Opened by Troupe to finish setting up an agent. You can read every line before it runs.',
+    ...(path ? [`$env:PATH = ${q(path)}`] : []),
+    'Clear-Host',
+    `Write-Host ${q(`> ${cmd}`)}`,
+    cmd,
+    "Write-Host ''",
+    "Write-Host 'Done. You can close this window and go back to Troupe.'",
+    ''
+  ].join('\r\n')
+}
+
+/** Windows: PowerShell arguments that run one setup command non-interactively. */
+export function powershellArgs(cmd: string): string[] {
+  return ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', cmd]
+}
+
+/** Windows PowerShell by full path, so a step still runs when PATH is odd. */
+export function powershellExe(env: NodeJS.ProcessEnv = process.env): string {
+  const root = env.SystemRoot || env.SYSTEMROOT || env.windir || 'C:\\Windows'
+  return `${root}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`
+}

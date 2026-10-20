@@ -4,6 +4,7 @@ import FileTree from './FileTree'
 import { api } from '../api'
 import type { FileNode } from '../../../shared/types'
 import { Button } from './ui/Button'
+import Icon from './Icon'
 
 interface Props { projectId: string; folderPath: string | null; onClose: () => void }
 
@@ -56,7 +57,7 @@ export default function ContextManager({ projectId, folderPath, onClose }: Props
       {files.map((f) => (
         <div key={f} className="ctx-file-row">
           <span className="truncate">{f}</span>
-          <Button variant="link" onClick={() => remove(f)}>Remove</Button>
+          <Button variant="link" danger className="btn-icon-label" onClick={() => remove(f)}><Icon name="trash" size="sm" />Remove</Button>
         </div>
       ))}
 

@@ -8,7 +8,8 @@ export type PlanRow = CollabTaskDraft & { key: string; dependsOn?: string[] }
 export function rowsFromTasks(tasks: CollabTask[]): PlanRow[] {
   return tasks.map((t) => ({
     key: t.id, title: t.title, kind: t.kind, scope: t.scope, acceptance: t.acceptance,
-    provider: t.provider ?? undefined, model: t.model ?? undefined, dependsOn: [...t.dependsOn]
+    provider: t.provider ?? undefined, model: t.model ?? undefined, dependsOn: [...t.dependsOn],
+    ...(t.meta?.reviewer ? { reviewer: t.meta.reviewer } : {})
   }))
 }
 

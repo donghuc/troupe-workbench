@@ -18,6 +18,14 @@ import { enabledProviderIds, DISABLED_AGENTS_SETTING } from '../../shared/provid
 import { buildDiagnostics, tailLines } from '../../shared/diagnostics'
 import { cliStatus, installCli } from '../cli/cliAccess'
 
+let commit: string | undefined
+function buildCommit(): string {
+  if (commit === undefined) {
+    try { commit = String(JSON.parse(readFileSync(join(app.getAppPath(), 'package.json'), 'utf8')).troupeCommit ?? '') } catch { commit = '' }
+  }
+  return commit
+}
+
 export function registerSystemIpc(): void {
   // Open the native macOS Lookup/dictionary panel for the current text selection.
   handle('system.lookup', (e) => {
@@ -58,6 +66,9 @@ export function registerSystemIpc(): void {
     try {
       const abs = ensureInside(assertProjectRoot(root), expectString(relPath, 'path'))
       if (!existsSync(abs)) return false
+      // D-120: on Windows "open" runs programs and scripts outright; refuse those (a file an
+      // agent or a cloned repo put in the project shouldn't run from a click in a reply).
+      if (process.platform === 'win32' && /\.(exe|com|bat|cmd|ps1|psm1|vbs|vbe|js|jse|wsf|wsh|msi|msp|scr|hta|cpl|lnk|reg|pif|appref-ms)$/i.test(abs)) return false
       const err = await shell.openPath(abs)
       return err === ''
     } catch { return false }
@@ -81,7 +92,8 @@ export function registerSystemIpc(): void {
   // keeps the newest few and merges the typed "More models" itself (D-078).
   handle('system.autoModels', async () => ({ codex: codexAutoModels(), gemini: await refreshGeminiModels() }))
   handle('system.appInfo', () => ({
-    version: app.getVersion(),
+    // D-120: CI builds (Windows) stamp the short commit into package.json (extraMetadata).
+    version: app.getVersion() + (buildCommit() ? ` (${buildCommit()})` : ''),
     electron: process.versions.electron,
     chrome: process.versions.chrome,
     node: process.versions.node,
@@ -94,7 +106,8 @@ export function registerSystemIpc(): void {
     let log = ''
     try { log = readFileSync(logPath(), 'utf8') } catch { /* no log yet */ }
     let os = `macOS ${process.getSystemVersion?.() ?? ''}`.trim()
-    if (process.platform !== 'darwin') os = process.platform
+    if (process.platform === 'win32') os = `Windows ${process.getSystemVersion?.() ?? ''}`.trim()
+    else if (process.platform !== 'darwin') os = process.platform
     return buildDiagnostics({
       app: { version: app.getVersion(), electron: process.versions.electron, node: process.versions.node, platform: process.platform, arch: arch(), os },
       agents: providers.map((p) => ({ name: p.name, installed: !!p.availability.installed, authenticated: !!p.availability.authenticated, detail: p.availability.detail, enabled: enabled.includes(p.id) })),

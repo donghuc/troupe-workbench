@@ -51,8 +51,8 @@ export default function CanvasTabs({ index, busy, onSelect, onCreate, onRename, 
               <Menu open={menu === t.id} onClose={() => setMenu(null)} className="conv-menu img-tab-menu" style={{ left: menuAt.x, top: menuAt.y }} onClick={(e) => e.stopPropagation()}>
                 <MenuItem onClick={() => startRename(t.id, t.name)}>Rename</MenuItem>
                 <MenuItem onClick={() => { setMenu(null); onDuplicate(t.id) }}>Duplicate</MenuItem>
-                <MenuItem onClick={() => { setMenu(null); onClear(t.id) }}>Clear canvas</MenuItem>
-                <MenuItem danger onClick={() => { setMenu(null); onDelete(t.id) }}>Delete</MenuItem>
+                <MenuItem danger onClick={() => { setMenu(null); onClear(t.id) }}><Icon name="close" size="sm" />Clear canvas</MenuItem>
+                <MenuItem danger onClick={() => { setMenu(null); onDelete(t.id) }}><Icon name="trash" size="sm" />Delete</MenuItem>
               </Menu>
             </div>
           )

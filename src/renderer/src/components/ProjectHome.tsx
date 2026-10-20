@@ -5,6 +5,7 @@ import Composer from './Composer'
 import type { PendingAttachment } from '../attachments'
 import ContextPanel from './ContextPanel'
 import InlineEdit from './InlineEdit'
+import { shortDate } from '../dates'
 
 interface Props {
   project: Project
@@ -30,7 +31,7 @@ const fmtWhen = (ts: number) => {
   const sameDay = d.toDateString() === now.toDateString()
   return sameDay
     ? d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
-    : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+    : shortDate(d, now)
 }
 
 export default function ProjectHome({

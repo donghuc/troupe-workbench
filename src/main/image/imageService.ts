@@ -4,6 +4,7 @@
 // agent (Codex / Grok / Gemini) with the prompt contract from shared/imageCanvas.ts —
 // the agents aren't image APIs, so after the run we collect what they actually saved.
 import { promises as fsp, existsSync, statSync, readFileSync } from 'fs'
+import { renameRetry } from '../platform/winFs'
 import { join, resolve, relative, sep, extname, basename, isAbsolute } from 'path'
 import { createHash } from 'crypto'
 import { homedir } from 'os'
@@ -56,7 +57,7 @@ function requireFolder(): string {
 const writeJson = async (abs: string, data: unknown) => {
   const tmp = `${abs}.tmp`
   await fsp.writeFile(tmp, JSON.stringify(data, null, 2), 'utf8')
-  await fsp.rename(tmp, abs)
+  await renameRetry(tmp, abs)
 }
 const canvasPath = (f: string, id: string) => {
   if (!isCanvasId(id)) throw new Error('Not a canvas')

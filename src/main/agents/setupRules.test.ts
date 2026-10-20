@@ -10,7 +10,7 @@ describe('agent setup rules (2.3 A2)', () => {
   it('plans each step from the bundled recipe', () => {
     expect(setupPlan(BUILTIN_RECIPES['claude-code'], 'install')).toEqual({ mode: 'run', cmd: BUILTIN_RECIPES['claude-code'].install!.cmd })
     expect(setupPlan(BUILTIN_RECIPES.gemini, 'signIn').mode).toBe('terminal')   // interactive-only
-    expect(setupPlan(BUILTIN_RECIPES.grok, 'install').mode).toBe('none')       // docs link only
+    expect(setupPlan(BUILTIN_RECIPES.grok, 'install').mode).toBe(process.platform === 'win32' ? 'run' : 'none')   // macOS: docs link only; Windows: PowerShell installer (D-120)
     expect(setupPlan({ ...BUILTIN_RECIPES.codex, install: { cmd: 'x', host: 'a.b', manualOnly: true } }, 'install').mode).toBe('terminal')
   })
   it('cleans colour codes and progress redraws', () => {
@@ -31,7 +31,8 @@ describe('agent setup rules (2.3 A2)', () => {
   })
 })
 
-describe('setup process (fake installers)', () => {
+// Fake installers are POSIX shell scripts; Windows runs setup steps in PowerShell (D-120).
+describe.skipIf(process.platform === 'win32')('setup process (fake installers)', () => {
   const dir = mkdtempSync(join(tmpdir(), 'troupe-setup-'))
   const script = (name: string, body: string) => { const p = join(dir, name); writeFileSync(p, `#!/bin/sh\n${body}\n`); chmodSync(p, 0o755); return p }
   const env = { PATH: `${dir}:/usr/bin:/bin` }

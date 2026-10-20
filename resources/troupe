@@ -41,7 +41,7 @@ Project files (read-only)
 
 Collab
   collab start <project> "<goal>" [--agent A] [--model M] [--mode read|auto]
-  collab list <project>
+  collab list [project]                 Collab runs (all projects when none is named)
   collab status <run|chat> [--wait SECONDS]
   collab approve <run>   collab reject <run>   collab stop <run>   collab resume <run>
   collab fix <run> <n>                  Apply the Planner's fix n
@@ -83,7 +83,7 @@ case "$cmd" in
           sub="$1"; shift; add do "$sub"
           case "$sub" in
             start) need $# 2 'troupe collab start <project> "<goal>"'; add project "$1"; add goal "$2"; shift 2 ;;
-            list)  need $# 1 "troupe collab list <project>"; add project "$1"; shift ;;
+            list)  if [ $# -ge 1 ] && [ "${1#--}" = "$1" ]; then add project "$1"; shift; fi ;;
             status|approve|reject|stop|resume) need $# 1 "troupe collab $sub <run>"; add run "$1"; shift ;;
             fix)   need $# 2 "troupe collab fix <run> <n>"; add run "$1"; add n "$2"; shift 2 ;;
             retry|skip|ask) need $# 2 "troupe collab $sub <run> <task n>"; add run "$1"; add task "$2"; shift 2 ;;
@@ -115,9 +115,16 @@ if [ ! -S "$SOCK" ]; then
   exit 3
 fi
 
+# Commands that don't wait answer at once; give up after 90 s instead of hanging (D-121).
+limit=()
+case " ${args[*]-} " in *" wait="*|*" waitfree="*) ;; *) limit=(--max-time 90) ;; esac
 # -s: curl prints nothing of its own; the script reports errors itself (no stray "curl: (22)").
-resp=$(curl -s --unix-socket "$SOCK" -X POST -w $'\n%{http_code}' ${args[@]+"${args[@]}"} "http://troupe/v1/$cmd")
+resp=$(curl -s --unix-socket "$SOCK" -X POST -H "x-troupe-sent: $(date +%s)" ${limit[@]+"${limit[@]}"} -w $'\n%{http_code}' ${args[@]+"${args[@]}"} "http://troupe/v1/$cmd")
 rc=$?
+if [ $rc -eq 28 ]; then
+  echo "troupe: Troupe didn't answer within 90 s. It may be busy; bring the app to the front and try again." >&2
+  exit 3
+fi
 if [ $rc -ne 0 ]; then
   echo "troupe: can't reach Troupe (is the app still open?)." >&2
   exit 3

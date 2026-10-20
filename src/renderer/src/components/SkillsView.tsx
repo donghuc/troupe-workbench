@@ -90,8 +90,8 @@ export default function SkillsView({ projects }: { projects: Project[] }) {
     <span className="md-head-menu">
       <IconButton title="More" aria-expanded={menuOpen} onClick={() => setMenuOpen((v) => !v)}><Icon name="more-vertical" size="md" /></IconButton>
       <Menu open={menuOpen} onClose={() => setMenuOpen(false)}>{s.builtin
-        ? <MenuItem onClick={() => { setMenuOpen(false); resetBuiltin(s) }}>Reset to default</MenuItem>
-        : <MenuItem danger onClick={() => { setMenuOpen(false); remove(s) }}>Delete</MenuItem>}
+        ? <MenuItem danger onClick={() => { setMenuOpen(false); resetBuiltin(s) }}><Icon name="refresh" size="sm" />Reset to default</MenuItem>
+        : <MenuItem danger onClick={() => { setMenuOpen(false); remove(s) }}><Icon name="trash" size="sm" />Delete</MenuItem>}
       </Menu>
     </span>
   )
@@ -109,7 +109,7 @@ export default function SkillsView({ projects }: { projects: Project[] }) {
     if (sel.mode === 'view' && current) return (
       <>
         <span className="md-head-title truncate">{current.name}</span>
-        {current.builtin && <Badge tone="accent" className="skill-builtin-badge">Built-in</Badge>}
+        {current.builtin && <Badge className="skill-builtin-badge">Built-in</Badge>}
         <Badge className="skill-scope-badge">{scopeLabel(current)}</Badge>
         <span className="md-head-spacer" />
         <Button size="sm" onClick={() => openEdit(current)}><Icon name="edit" size="sm" />Edit</Button>
@@ -133,7 +133,7 @@ export default function SkillsView({ projects }: { projects: Project[] }) {
           {skills.map((s) => (
             <div key={s.id} className={`md-row ${selId === s.id ? 'active' : ''}`} onClick={() => openView(s)}>
               <div className="md-row-main">
-                <div className="truncate md-row-title">{s.name} {s.builtin && <Badge tone="accent" className="skill-builtin-badge">Built-in</Badge>}<Badge className="skill-scope-badge">{scopeLabel(s)}</Badge></div>
+                <div className="truncate md-row-title">{s.name} {s.builtin && <Badge className="skill-builtin-badge">Built-in</Badge>}<Badge className="skill-scope-badge">{scopeLabel(s)}</Badge></div>
                 <div className="truncate md-row-sub">{s.description || s.body.slice(0, 100)}</div>
               </div>
             </div>

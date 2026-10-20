@@ -3,6 +3,7 @@
 // only after the user confirms (once per recipe version). Every command stays copyable under
 // "Or do it yourself in Terminal".
 import { Badge } from './ui/Badge'
+import { OS_WORDS } from '../../../shared/platform'
 import { useEffect, useRef, useState } from 'react'
 import ProviderAvatar from './ProviderAvatar'
 import { api } from '../api'
@@ -104,6 +105,18 @@ export default function AgentSetupCard({ id, status, onStatus }: Props) {
   const cancel = () => { if (runId.current) void api.agents.setupCancel(runId.current); else setPhase('idle') }
 
   const busy = phase === 'installing' || phase === 'signingIn'
+  // Windows (D-120): an agent that can't run there yet says so and offers nothing to click.
+  if (recipe.unsupported) return (
+    <div className="setup-card">
+      <div className="setup-card-head">
+        <ProviderAvatar id={id} size="xl" />
+        <div className="setup-card-title">
+          <div className="setup-card-name">{recipe.label}</div>
+          <div className="welcome-agent-state"><span className="welcome-dot missing" />{recipe.unsupported}</div>
+        </div>
+      </div>
+    </div>
+  )
   return (
     <div className="setup-card">
       <div className="setup-card-head">
@@ -121,7 +134,7 @@ export default function AgentSetupCard({ id, status, onStatus }: Props) {
 
       {phase === 'confirm' && recipe.install && (
         <div className="setup-confirm">
-          <div><b>Install {recipe.label}?</b> This downloads and runs the official installer from <b>{recipe.install.host}</b> on your Mac.</div>
+          <div><b>Install {recipe.label}?</b> This downloads and runs the official installer from <b>{recipe.install.host}</b> on your {OS_WORDS.computer}.</div>
           <code className="setup-cmd">{recipe.install.cmd}</code>
           <div className="setup-actions">
             <Button variant="primary" onClick={confirmInstall}>Install</Button>
@@ -146,7 +159,7 @@ export default function AgentSetupCard({ id, status, onStatus }: Props) {
         <div className="setup-progress">
           <div className="setup-progress-row">
             <span className="activity-spinner spinner-xs" />
-            <span>Finish in the Terminal window, then come back here.</span>
+            <span>Finish in the {OS_WORDS.terminal} window, then come back here.</span>
             <Button size="sm" onClick={() => setPhase('idle')}>Stop waiting</Button>
           </div>
         </div>
@@ -157,7 +170,7 @@ export default function AgentSetupCard({ id, status, onStatus }: Props) {
           <div>Couldn't finish. {error}</div>
           <div className="setup-actions">
             <Button size="sm" onClick={() => setPhase('idle')}>Try again</Button>
-            <Button size="sm" onClick={() => startStep(st === 'missing' ? 'install' : 'signIn', true)}>Open in Terminal</Button>
+            <Button size="sm" onClick={() => startStep(st === 'missing' ? 'install' : 'signIn', true)}>Open in {OS_WORDS.terminal}</Button>
           </div>
         </div>
       )}
@@ -173,7 +186,7 @@ export default function AgentSetupCard({ id, status, onStatus }: Props) {
 
       {st !== 'ready' && (recipe.install || recipe.signIn) && (
         <div className="setup-diy">
-          <Button variant="link" onClick={() => setDiy((v) => !v)}>{diy ? '▾' : '▸'} Or do it yourself in Terminal</Button>
+          <Button variant="link" onClick={() => setDiy((v) => !v)}>{diy ? '▾' : '▸'} Or do it yourself in {OS_WORDS.terminal}</Button>
           {diy && (
             <div className="setup-diy-body">
               {st === 'missing' && recipe.install && <CopyCmd cmd={recipe.install.cmd} />}
