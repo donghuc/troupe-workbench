@@ -20,6 +20,20 @@ Each version here matches a packaged build — the dmg is named
 
 ## [Unreleased]
 
+## [2.13.0] - 2026-10-21
+
+### Changed
+- The sidebar dot for a chat with unread replies is terracotta, like the dot of a chat whose agent is working.
+- A tidier composer: + and the permission mode on the left, the agent & model, mic and Send on the right.
+- Start a Collab run by typing `@collab` in your message (it's in the @ menu too); a chip shows it's on and ✕ turns it off. The Chat / Collab switch is gone.
+- Under the composer, **Context** now shows roughly how many tokens your next message sends; click it for the details.
+
+### Fixed
+- Voice input: switching to another chat while your words are being transcribed no longer loses them — they appear in the composer when you come back (or are waiting in that chat's draft). Leaving while still recording transcribes what you said too.
+
+### Removed
+- The language chip next to the mic. The dictation language is set in Settings ▸ Tools ▸ Voice.
+
 ## [2.12.0] - 2026-10-20
 
 ### Changed

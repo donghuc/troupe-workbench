@@ -76,7 +76,7 @@ export default function VoiceSettings() {
         <Segmented size="sm" label="Voice model" value={st.selected} onChange={(v) => void setPrefs({ model: v })}
           options={st.models.map((m) => ({ value: m.id, label: m.label }))} />
       </Field>
-      <Field label="Language" htmlFor="voice-lang" hint="Also on the chip next to the mic, so switching between two languages is one click.">
+      <Field label="Language" htmlFor="voice-lang" hint="The language you speak. Troupe never guesses it — a wrong guess gives a translation instead of your words.">
         <select id="voice-lang" className="collab-kind-sel voice-lang" value={st.language} onChange={(e) => void setPrefs({ language: e.target.value })}>
           {VOICE_LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
         </select>

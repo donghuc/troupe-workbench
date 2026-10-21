@@ -29,6 +29,8 @@ import type { ModeId } from '../../../shared/modes'
 import { stampLine } from '../../../shared/contextBudget'
 import { Button } from './ui/Button'
 
+const formatTokens = (n: number): string => (n < 1000 ? String(n) : n < 10_000 ? `${(n / 1000).toFixed(1)}k` : `${Math.round(n / 1000)}k`)
+
 // What the project page hands a brand-new chat to send as its first message.
 export interface PendingSend {
   text: string
@@ -138,6 +140,14 @@ export default function ConversationView({ conversation, providers, pendingSend,
   const [showInspect, setShowInspect] = useState(false)
   // The provider currently selected in the composer — what the inspector reports on.
   const [composerProvider, setComposerProvider] = useState<ProviderId>(conversation.provider)
+  // D-129: the size of what the next message sends, next to the Context link.
+  const [ctxTokens, setCtxTokens] = useState<number | null>(null)
+  useEffect(() => {
+    if (isStreaming) return
+    let alive = true
+    api.context.inspect(conversation.id, composerProvider).then((d: { totalApproxTokens: number }) => { if (alive) setCtxTokens(d.totalApproxTokens) }).catch(() => { if (alive) setCtxTokens(null) })
+    return () => { alive = false }
+  }, [conversation.id, composerProvider, run.rev, isStreaming])
   const [compressing, setCompressing] = useState(false)
   const [saveContent, setSaveContent] = useState<string | null>(null)
   const [saveSkill, setSaveSkill] = useState<string | null>(null)
@@ -471,7 +481,9 @@ export default function ConversationView({ conversation, providers, pendingSend,
               draftKey={conversation.id}
               chatId={conversation.id}
             />
-            <Button variant="link" className="inspect-link" onClick={() => setShowInspect(true)}>Inspect context</Button>
+            <Button variant="link" className="inspect-link" onClick={() => setShowInspect(true)} title="What the agent receives with your next message">
+              Context{ctxTokens !== null ? ` · ~${formatTokens(ctxTokens)} tokens` : ''}
+            </Button>
           </div>
         </div>
       </div>

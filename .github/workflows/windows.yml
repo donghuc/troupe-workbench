@@ -61,13 +61,16 @@ jobs:
           $env:ELECTRON_RUN_AS_NODE = '1'
           $mod = (Resolve-Path 'dist\win-unpacked\resources\app.asar').Path + '\node_modules\@fugood\node-whisper-win32-x64'
           $js = "const m = require(process.argv[1]); if (!m.WhisperContext) { console.error('no WhisperContext'); process.exit(1) } console.log('whisper addon loaded')"
-          & 'dist\win-unpacked\Troupe.exe' -e $js $mod
-          if ($LASTEXITCODE -ne 0) { throw 'The voice input addon did not load' }
+          # Judge by what it printed: Troupe.exe as node can exit non-zero after the script ends
+          # (2.12.0 run #11 printed "whisper addon loaded", then exit 1).
+          $out = (& 'dist\win-unpacked\Troupe.exe' -e $js $mod 2>&1 | Out-String)
+          "voice addon -> exit $LASTEXITCODE"; $out
+          if ($out -notmatch 'whisper addon loaded') { throw 'The voice input addon did not load' }
           # The GPU build needs a Vulkan driver, which CI machines may not have: report only.
           $gpu = (Resolve-Path 'dist\win-unpacked\resources\app.asar').Path + '\node_modules\@fugood\node-whisper-win32-x64-vulkan'
           if (Test-Path ((Resolve-Path 'dist\win-unpacked\resources').Path + '\app.asar.unpacked\node_modules\@fugood\node-whisper-win32-x64-vulkan\index.node')) { 'Vulkan build packaged' } else { throw 'The Vulkan build of the voice addon is missing from the package' }
-          & 'dist\win-unpacked\Troupe.exe' -e $js $gpu
-          "Vulkan build load on this runner -> exit $LASTEXITCODE (a failure here is expected without a GPU driver)"
+          $g = (& 'dist\win-unpacked\Troupe.exe' -e $js $gpu 2>&1 | Out-String)
+          "Vulkan build load on this runner -> exit $LASTEXITCODE (a failure here is expected without a GPU driver)"; $g
           $global:LASTEXITCODE = 0
       # Keep the installer even when the smoke test fails, so it can be tried on the PC.
       - if: success() || failure()

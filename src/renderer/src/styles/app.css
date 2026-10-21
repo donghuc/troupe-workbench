@@ -152,11 +152,6 @@ button { font-family: inherit; font-size: var(--fs-sm); border: none; background
    The recording dot is red by convention (D-122 exception) — it's the only red that isn't a destructive action. */
 .mic-btn { width: 32px; height: 32px; display: grid; place-items: center; border-radius: var(--r-md); color: var(--text-secondary); }
 .mic-btn:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); }
-.voice-lang-wrap { position: relative; display: inline-flex; }
-.voice-lang-chip { height: 24px; min-width: 30px; padding: 0 var(--sp-1-5); border-radius: var(--r-sm); border: 1px solid var(--border-default); font-size: var(--fs-xs); font-weight: var(--fw-medium); letter-spacing: 0.02em; color: var(--text-secondary); }
-.voice-lang-chip:hover { background: var(--bg-hover); color: var(--text-primary); }
-.voice-lang-menu { min-width: 180px; max-height: 320px; overflow-y: auto; }
-.voice-lang-menu .perm-opt { flex-direction: row; align-items: center; justify-content: space-between; width: 100%; }
 .mic-btn:disabled { opacity: var(--opacity-40); cursor: default; }
 .voice-pill { display: inline-flex; align-items: center; gap: var(--sp-1-5); height: 32px; padding: 0 var(--sp-1) 0 var(--sp-3); border-radius: var(--r-full); background: var(--bg-sunken); font-size: var(--fs-sm); color: var(--text-secondary); }
 .voice-pill.recording { color: var(--text-primary); }
@@ -865,7 +860,6 @@ body.resizing .resize-handle::after { background: var(--text-tertiary); }
 .artifact-viewer .markdown-body blockquote { background: var(--bg-sunken); border-left-color: var(--border-strong); padding: var(--sp-2) var(--sp-3); border-radius: 0 var(--r-sm) var(--r-sm) 0; }
 
 /* Active-agent indicator on a conversation row (multi-session) */
-.running-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--info); margin-right: var(--sp-1-5); vertical-align: middle; animation: run-pulse var(--dur-pulse) ease-in-out infinite; }
 @keyframes run-pulse { 0%, 100% { opacity: 1; } 50% { opacity: var(--opacity-30); } }
 
 /* Detached artifact pop-out window */
@@ -1095,7 +1089,7 @@ body.resizing .resize-handle::after { background: var(--text-tertiary); }
 .chat-row.active .chat-bullet:not(.busy) { background: var(--text-secondary); }
 /* D-122 exception (Hien): a chat whose agent is running pulses in the brand colour */
 .chat-bullet.busy { background: var(--accent); animation: run-pulse var(--dur-pulse) ease-in-out infinite; }
-.chat-bullet.unread { width: 7px; height: 7px; background: var(--ink-solid); }
+.chat-bullet.unread { width: 7px; height: 7px; background: var(--accent); }   /* Hien, 2026-10-21: working and unread chats use the accent */
 .chat-title { flex: 1; min-width: 0; cursor: pointer; font-size: var(--fs-md); color: var(--text-secondary); padding-right: var(--sp-5); }
 .chat-row:hover .chat-title, .chat-row.active .chat-title { color: var(--text-primary); }
 
@@ -1150,7 +1144,7 @@ body.resizing .resize-handle::after { background: var(--text-tertiary); }
 
 @media (prefers-reduced-motion: reduce) {
   .stream-body, .activity-label, .copy-btn.copied,
-  .cursor-blink, .stream-spider, .running-dot, .voice-dot,
+  .cursor-blink, .stream-spider, .voice-dot,
   .modal-overlay, .palette-overlay, .modal-card, .palette-card,
   .chat-side .artifact-viewer, .proj-chats, .mcp-error, .form-error, .media-viewer,
   .skeleton::after { animation: none !important; }
@@ -1217,7 +1211,7 @@ body.resizing .resize-handle::after { background: var(--text-tertiary); }
 }
 .perm-select:hover { background: var(--bg-hover); }
 .perm-menu {
-  position: absolute; right: 0; bottom: 40px; z-index: var(--z-popover); min-width: 220px;
+  position: absolute; left: 0; bottom: 40px; z-index: var(--z-popover); min-width: 220px;
   background: var(--bg-panel); border: 1px solid var(--border-default);
   border-radius: var(--r-md); box-shadow: var(--shadow-md); padding: var(--sp-1);
   display: flex; flex-direction: column;
@@ -1476,7 +1470,9 @@ select.field-input {
 .collab-ta { width: 100%; box-sizing: border-box; min-height: 2.4em; field-sizing: content; max-height: 220px; overflow-y: auto; resize: vertical; font: inherit; font-size: var(--fs-sm); line-height: var(--lh-normal); color: var(--text-primary); background: var(--bg-app); border: 1px solid var(--border-subtle); border-radius: var(--r-sm); padding: var(--sp-1-5) var(--sp-2); outline: none; }
 .collab-ta:focus { border-color: var(--focus-ring); }
 .collab-plan-actions { display: flex; justify-content: flex-end; gap: var(--sp-2); margin-top: var(--sp-3); }
-.composer-collab-hint { font-size: var(--fs-xs); color: var(--warning); padding: var(--sp-1) var(--sp-2) var(--sp-1-5); }
+.collab-chip { background: var(--bg-active); color: var(--text-primary); }
+.collab-chip-note { color: var(--text-tertiary); }
+.collab-chip.blocked .collab-chip-note { color: var(--warning); }
 .collab-agent-row { display: flex; gap: var(--sp-1-5); }
 .collab-agent-row .collab-kind-sel { width: auto; flex: 1; min-width: 0; }
 .collab-agent-note { font-style: italic; opacity: var(--opacity-80); }

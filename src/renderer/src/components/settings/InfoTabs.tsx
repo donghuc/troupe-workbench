@@ -9,6 +9,7 @@ import { Button } from '../ui/Button'
 const COMMANDS: { k: string; d: string }[] = [
   { k: '@claude / @codex', d: 'Route this message to one specific agent.' },
   { k: '@all', d: 'Ask every agent at once — each answers independently; a Compare card sums them up.' },
+  { k: '@collab', d: 'Plan & run with several agents in this project: they plan it, you approve, then they run it (needs a project folder).' },
   { k: '@debate', d: 'Thinking mode: one agent argues for, one against, a judge decides (cast in Settings ▸ Thinking).' },
   { k: '@critique', d: 'Thinking mode: one agent produces, another attacks, the first responds.' },
   { k: '@research', d: 'Thinking mode: one agent gathers sources, another checks them.' },

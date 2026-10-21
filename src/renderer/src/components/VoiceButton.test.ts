@@ -28,13 +28,13 @@ vi.mock('../notices', () => ({ notify: (m: string) => notices.push(m), reportErr
 
 const { default: VoiceButton } = await import('./VoiceButton')
 
-async function mount() {
+async function mount(owner?: string) {
   const host = document.createElement('div'); document.body.appendChild(host)
   const scope = createRef<HTMLDivElement>()
   const texts: string[] = []
   const root = createRoot(host)
   await act(async () => {
-    root.render(createElement('div', { ref: scope, tabIndex: -1 }, createElement(VoiceButton, { scope, onText: (t: string) => texts.push(t) })))
+    root.render(createElement('div', { ref: scope, tabIndex: -1 }, createElement(VoiceButton, { scope, owner, onText: (t: string) => texts.push(t) })))
   })
   const q = (sel: string) => host.querySelector(sel) as HTMLElement | null
   const click = async (sel: string) => { await act(async () => { q(sel)!.click() }) }
@@ -86,5 +86,39 @@ describe('VoiceButton (D-124)', () => {
     expect(calls).toEqual([])
     expect(notices[0]).toBe('open tools')
     await m.unmount()
+  })
+
+  it('leaving the chat while it transcribes keeps the words: back in time → in the composer', async () => {
+    let done!: (v: { text: string; ms: number }) => void
+    transcribe.mockImplementationOnce(() => new Promise((r) => { done = r }))
+    const a = await mount('chat-a')
+    await a.click('.mic-btn')
+    await a.click('button[aria-label="Stop and transcribe"]')
+    await flush()
+    expect(a.q('.voice-pill')).not.toBeNull()          // Transcribing…
+    await a.unmount()
+    const b = await mount('chat-a')                      // came back
+    expect(b.q('.voice-pill')?.textContent).toContain('Transcribing')
+    await act(async () => { done({ text: 'kept words', ms: 5 }) })
+    await flush()
+    expect(b.texts).toEqual(['kept words'])
+    expect(a.texts).toEqual([])
+    expect(localStorage.getItem('draft:chat-a')).toBeNull()
+    await b.unmount()
+  })
+
+  it('…still away when it finishes → added to that chat’s draft', async () => {
+    localStorage.setItem('draft:chat-b', 'Ask Claude')
+    let done!: (v: { text: string; ms: number }) => void
+    transcribe.mockImplementationOnce(() => new Promise((r) => { done = r }))
+    const a = await mount('chat-b')
+    await a.click('.mic-btn')
+    await a.unmount()                                    // left while recording: still transcribed
+    expect(calls).toContain('finish')
+    await flush()
+    await act(async () => { done({ text: 'about the plan', ms: 5 }) })
+    await flush()
+    expect(localStorage.getItem('draft:chat-b')).toBe('Ask Claude about the plan')
+    expect(a.texts).toEqual([])
   })
 })

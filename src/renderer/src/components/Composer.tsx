@@ -18,8 +18,8 @@ import { type SelectionItem, sourceLabel, snippet, composeWithSelections } from 
 import { type PendingAttachment, attachmentName, attachmentIsImage } from '../attachments'
 import { Menu } from './ui/Menu'
 import { Button, IconButton } from './ui/Button'
-import { Segmented } from './ui/Segmented'
 import VoiceButton from './VoiceButton'
+import { hasCollab, stripCollab } from '../collabMention'
 import AttachmentsModal from './AttachmentsModal'
 import { insertAtCaret } from '../../../shared/voice'
 
@@ -59,7 +59,6 @@ const PERM_OPTS: { v: PermissionMode; l: string; d: string }[] = [
 
 export default function Composer({ providers, onSend, disabled, placeholder = 'How can I help you today?', autoFocus, defaultProvider, folderPath, enableSkills, defaultModel, defaultPermissionMode, onPermissionModeChange, draftKey, chatId, busy, onStop, inject, onQuickMemory, onProviderChange, onStartCollab, collabAvailable, collabBusy }: Props) {
   const [text, setText] = useState(() => (draftKey ? getDraft(draftKey) : ''))
-  const [mode, setMode] = useState<'chat' | 'collab'>('chat')
   const [providerId, setProviderId] = useState<ProviderId>(defaultProvider ?? providers[0]?.id ?? 'claude-code')
   // If the chosen agent is turned off (Settings ▸ Agents, D-071), fall back to the first one that is on.
   useEffect(() => { if (providers.length && !providers.some((p) => p.id === providerId)) setProviderId(providers[0].id) }, [providers, providerId])
@@ -119,7 +118,6 @@ export default function Composer({ providers, onSend, disabled, placeholder = 'H
   useEffect(() => { if (draftKey) setDraftSelections(draftKey, selections) }, [selections, draftKey])
   useEffect(() => { if (draftKey) setDraftAttachments(draftKey, attachments) }, [attachments, draftKey])
   useEffect(() => { if (!selections.length) setSelOpen(false) }, [selections.length])
-  useEffect(() => { if (mode === 'collab' && !collabAvailable) setMode('chat') }, [collabAvailable, mode])
   // Auto-grow the input with content, up to the CSS max-height (then it scrolls).
   useEffect(() => {
     const el = taRef.current; if (!el) return
@@ -161,6 +159,10 @@ export default function Composer({ providers, onSend, disabled, placeholder = 'H
   // @debate / @critique / @research → a thinking mode (D-083).
   const modeMatches = mentionQuery === null ? [] : MODE_IDS.filter((id) => id.startsWith(mentionQuery))
   const [modesOpen, setModesOpen] = useState(false)
+  // @collab → plan & run with several agents (D-129): it replaced the Chat/Collab switch.
+  const collabMode = !!onStartCollab && hasCollab(text)
+  const collabBlocked = collabMode && (!collabAvailable || !!collabBusy)
+  const showCollabMention = !!onStartCollab && mentionQuery !== null && 'collab'.startsWith(mentionQuery)
 
   const choose = (pid: ProviderId, m: string) => { setProviderId(pid); setModel(m); setPmOpen(false); setHovered(null) }
 
@@ -204,9 +206,11 @@ export default function Composer({ providers, onSend, disabled, placeholder = 'H
     if ((!t && !hasSel) || disabled || busy) return
     setMentionQuery(null)
     if (memoryMode) { onQuickMemory!(t.replace(/^#\s+/, '')); setText(''); return }
-    if (mode === 'collab') {
-      if (!collabAvailable || !onStartCollab || collabBusy) return
-      onStartCollab(composeWithSelections(t, selections), providerId, permMode, model || undefined)
+    if (collabMode) {
+      if (collabBlocked || !onStartCollab) return
+      const goal = stripCollab(t)
+      if (!goal && !selections.length) return
+      onStartCollab(composeWithSelections(goal, selections), providerId, permMode, model || undefined)
       setText(''); setSelections([])
       return
     }
@@ -215,10 +219,10 @@ export default function Composer({ providers, onSend, disabled, placeholder = 'H
   }
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (mentionQuery !== null && (mentionMatches.length > 0 || showAllMention || modeMatches.length > 0)) {
+    if (mentionQuery !== null && (mentionMatches.length > 0 || showAllMention || modeMatches.length > 0 || showCollabMention)) {
       if (mentionMatches.length > 0 && e.key === 'ArrowDown') { e.preventDefault(); setMentionIndex((i) => (i + 1) % mentionMatches.length); return }
       if (mentionMatches.length > 0 && e.key === 'ArrowUp') { e.preventDefault(); setMentionIndex((i) => (i - 1 + mentionMatches.length) % mentionMatches.length); return }
-      if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); if (mentionMatches.length > 0) insertMention(mentionMatches[mentionIndex].id); else if (showAllMention) insertAllMention(); else if (modeMatches.length) insertAllMention(modeMatches[0]); return }
+      if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); if (mentionMatches.length > 0) insertMention(mentionMatches[mentionIndex].id); else if (showAllMention) insertAllMention(); else if (showCollabMention && collabAvailable) insertAllMention('collab'); else if (modeMatches.length) insertAllMention(modeMatches[0]); return }
       if (e.key === 'Escape') { e.preventDefault(); setMentionQuery(null); return }
     }
     // Shift+Enter continues a Markdown list: on a numbered/bulleted line it inserts
@@ -295,7 +299,7 @@ export default function Composer({ providers, onSend, disabled, placeholder = 'H
       onDragLeave={(e) => { if (e.currentTarget === e.target) setDragging(false) }}
       onDrop={(e) => { e.preventDefault(); setDragging(false); if (e.dataTransfer.files?.length) addFiles(e.dataTransfer.files) }}
     >
-      {(attachments.length > 0 || activeSkill || memoryMode || selections.length > 0) && (
+      {(attachments.length > 0 || activeSkill || memoryMode || selections.length > 0 || collabMode) && (
         <div className="attach-chips">
           {selections.length > 0 && !memoryMode && (
             <span className="attach-chip sel-chip">
@@ -319,6 +323,13 @@ export default function Composer({ providers, onSend, disabled, placeholder = 'H
               )}
             </span>
           )}
+          {collabMode && (
+            <span className={`attach-chip collab-chip${collabBlocked ? ' blocked' : ''}`}>
+              <Icon name="flash" size="xs" /> Collab
+              <span className="collab-chip-note"> · {!collabAvailable ? 'needs a project folder' : collabBusy ? 'a run is already active — stop or finish it first' : 'the agents plan it, you approve, then they run it'}</span>
+              <button onClick={() => setText((cur) => stripCollab(cur))} aria-label="Turn off Collab">✕</button>
+            </span>
+          )}
           {memoryMode && <span className="attach-chip mem-chip"><Icon name="memory" size="xs" /> Saving to project memory</span>}
           {activeSkill && (
             <span className="attach-chip skill-chip">⚡ {activeSkill.name}{isAutoSkill && <span className="skill-auto"> · auto</span>}
@@ -336,11 +347,8 @@ export default function Composer({ providers, onSend, disabled, placeholder = 'H
           )}
         </div>
       )}
-      {mode === 'collab' && collabBusy && (
-        <div className="composer-collab-hint">A Collab run is active — stop or finish it below before starting another.</div>
-      )}
       <div className="composer-input-wrap">
-        {mentionQuery !== null && (mentionMatches.length > 0 || showAllMention || modeMatches.length > 0) && (
+        {mentionQuery !== null && (mentionMatches.length > 0 || showAllMention || modeMatches.length > 0 || showCollabMention) && (
           <div className="mention-menu">
             {showAllMention && (
               <button className="mention-item" onMouseEnter={() => setMentionIndex(-1)} onClick={() => insertAllMention()}>
@@ -367,6 +375,14 @@ export default function Composer({ providers, onSend, disabled, placeholder = 'H
                 )}
               </div>
             )}
+            {showCollabMention && (
+              <button className="mention-item" disabled={!collabAvailable} onMouseEnter={() => setMentionIndex(-1)} onClick={() => insertAllMention('collab')}
+                title={collabAvailable ? 'The agents plan it, you approve, then they run it' : 'Collab needs a project folder'}>
+                <span className="mention-all-ico"><Icon name="flash" size="sm" /></span>
+                <span className="mention-name">Collab</span>
+                <span className="mention-handle">{collabAvailable ? '@collab · plan & run with several agents' : 'needs a project folder'}</span>
+              </button>
+            )}
             {mentionMatches.map((p, i) => (
               <button
                 key={p.id}
@@ -384,7 +400,7 @@ export default function Composer({ providers, onSend, disabled, placeholder = 'H
         <textarea
           ref={taRef}
           value={text}
-          placeholder={mode === 'collab' ? 'Describe the goal — the agents plan it, you confirm, then they run it…' : placeholder}
+          placeholder={collabMode ? 'Describe the goal — the agents plan it, you confirm, then they run it…' : placeholder}
           autoFocus={autoFocus}
           onChange={onChange}
           onKeyDown={onKeyDown}
@@ -402,20 +418,6 @@ export default function Composer({ providers, onSend, disabled, placeholder = 'H
                 {folderPath && <button onClick={() => { setAttachOpen(false); setManageAttach(true) }}>Attachments in this project…</button>}
             </Menu>
           </div>
-          {onStartCollab && (
-            <Segmented size="sm" label="Send mode" value={mode} onChange={setMode}
-              options={[
-                { value: 'chat', label: 'Chat' },
-                { value: 'collab', label: 'Collab', disabled: !collabAvailable, title: collabAvailable ? 'Plan & run with multiple agents' : 'Collab needs a project folder' }
-              ]} />
-          )}
-          <input
-            ref={fileInputRef} type="file" multiple
-            className="visually-hidden"
-            onChange={(e) => { const files = Array.from(e.target.files ?? []); e.target.value = ''; if (files.length) addFiles(files) }}
-          />
-        </div>
-        <div className="composer-actions">
           <div className="perm-wrap">
             <button className="perm-select" onClick={() => setPermOpen((o) => !o)} title="Permission mode">
               {PERM_OPTS.find((o) => o.v === permMode)?.l ?? 'Auto'} <Icon name="chevron-down" size="sm" />
@@ -429,6 +431,13 @@ export default function Composer({ providers, onSend, disabled, placeholder = 'H
                 ))}
             </Menu>
           </div>
+          <input
+            ref={fileInputRef} type="file" multiple
+            className="visually-hidden"
+            onChange={(e) => { const files = Array.from(e.target.files ?? []); e.target.value = ''; if (files.length) addFiles(files) }}
+          />
+        </div>
+        <div className="composer-actions">
           <div className="pm-wrap">
             <button ref={pmBtnRef} className="provider-select" onClick={togglePm} title="Provider & model">
               <ProviderAvatar id={providerId} size="sm" /> {provider?.name ?? 'Provider'}{model ? ` · ${modelLabel}` : ''} <Icon name="chevron-down" size="sm" />
@@ -458,10 +467,10 @@ export default function Composer({ providers, onSend, disabled, placeholder = 'H
                   })}
             </Menu>
           </div>
-          <VoiceButton scope={rootRef} onText={insertSpoken} disabled={disabled} />
+          <VoiceButton scope={rootRef} onText={insertSpoken} disabled={disabled} owner={draftKey} />
           {busy && onStop
             ? <button className="send-btn stop-btn" onClick={onStop} title="Stop"><Icon name="stop" size="md" /></button>
-            : <button className="send-btn" disabled={(!text.trim() && !(selections.length && !memoryMode)) || disabled || (mode === 'collab' && collabBusy)} onClick={submit} title={mode === 'collab' && collabBusy ? 'A Collab run is already active' : 'Send'}><Icon name="send" size="md" /></button>}
+            : <button className="send-btn" disabled={(!(collabMode ? stripCollab(text) : text.trim()) && !(selections.length && !memoryMode)) || disabled || collabBlocked} onClick={submit} title={collabMode ? (collabBlocked ? (collabAvailable ? 'A Collab run is already active' : 'Collab needs a project folder') : 'Plan with Collab') : 'Send'}><Icon name="send" size="md" /></button>}
         </div>
       </div>
 
