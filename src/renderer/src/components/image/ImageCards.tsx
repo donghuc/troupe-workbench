@@ -6,7 +6,7 @@ import ProviderAvatar from '../ProviderAvatar'
 import { api } from '../../api'
 import { failed, notify } from '../../notices'
 import { presetsFor } from '../../models'
-import { CARD_LABEL, isVectorAgent, OUTPUT_SLOT, type Card, type CardView as CardDerived } from '../../../../shared/imageCanvas'
+import { CARD_LABEL, isVectorAgent, OUTPUT_SLOT, REF_ROLES, withRole, type Card, type RefRole, type CardView as CardDerived } from '../../../../shared/imageCanvas'
 import type { ProviderId, ProviderInfo } from '../../../../shared/types'
 import type { CardUi, CardLink } from './ImageCanvas'
 import { thumbUrl, IMAGE_REF_TYPE } from './geometry'
@@ -148,6 +148,14 @@ function ProcessorCard({ card, ui, ctx, d, link, lod }: CardProps<'processor'>) 
             <div key={s} className="img-slot" data-card={card.id} data-slot={s}>
               <InPort card={card} slot={s} link={link} filled={!!v?.filled} />
               <span className={`img-slot-label truncate${v?.filled ? '' : ' empty'}`} title={label}>{i + 1}. {label}</span>
+              {v?.image && (
+                // D-131: what this image input is for — said to the agent next to its files.
+                <select className={`img-role${v.role && v.role !== 'any' ? ' set' : ''}`} value={v.role ?? 'any'} disabled={!!run} title="What the agent should take from these images"
+                  aria-label={`Input ${i + 1} is for`} onPointerDown={(e) => e.stopPropagation()}
+                  onChange={(e) => ctx.patch(card.id, (k) => (k.kind === 'processor' ? { ...k, data: withRole(k.data, s, e.target.value as RefRole) } : k))}>
+                  {REF_ROLES.map((r) => <option key={r.id} value={r.id}>{r.id === 'any' ? 'Any use' : `For ${r.label.toLowerCase()}`}</option>)}
+                </select>
+              )}
               {slots.length > 1 && <IconButton className="img-slot-x" title="Remove input" onClick={() => ctx.removeSlot(card.id, s)}><Icon name="close" size="xs" /></IconButton>}
             </div>
           )

@@ -125,6 +125,10 @@
   --on-accent: var(--neutral-25);
   --accent-wash: var(--terracotta-50);
 
+  --bubble-user: var(--blue-50);
+  --bubble-on-user: var(--neutral-900);
+  --bubble-user-border: var(--alpha-ink-7);
+
   --ink-solid: var(--neutral-900);
   --on-ink: var(--neutral-0);
 
@@ -399,6 +403,9 @@
   --accent-solid-hover: var(--terracotta-700);
   --on-accent: var(--neutral-25);
   --accent-wash: var(--terracotta-50);
+  --bubble-user: var(--blue-50);
+  --bubble-on-user: var(--neutral-900);
+  --bubble-user-border: var(--alpha-ink-7);
   --ink-solid: var(--paper-900);
   --on-ink: var(--neutral-0);
   --success: var(--green-700);

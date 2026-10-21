@@ -3,10 +3,11 @@ import { handle } from './handle'
 import { writeFile } from 'fs/promises'
 import type { ProviderId, NewMessageInput } from '../../shared/types'
 import {
-  listConversations, listRecentConversations, getConversation, createConversation, renameConversation, deleteConversation, setConversationPinned, setConversationPermissionMode, branchConversation, searchAll
+  listConversations, listRecentConversations, getConversation, createConversation, renameConversation, setConversationPinned, setConversationPermissionMode, branchConversation, searchAll
 } from '../conversations/conversationsRepo'
 import { listMessages, appendMessage, deleteMessagesFrom } from '../conversations/messagesRepo'
 import { setSetting } from '../database/settingsRepo'
+import { deleteChatWithFiles, chatAttachmentCount } from '../attachments/deleteChat'
 import { providerLabel } from '../../shared/providers'
 
 export function registerConversationIpc(): void {
@@ -16,7 +17,8 @@ export function registerConversationIpc(): void {
   handle('conversations.create', (_e, projectId: string, title: string, provider: ProviderId) =>
     createConversation(projectId, title, provider))
   handle('conversations.rename', (_e, id: string, title: string) => renameConversation(id, title))
-  handle('conversations.remove', (_e, id: string) => deleteConversation(id))
+  handle('conversations.remove', (_e, id: string) => deleteChatWithFiles(id))
+  handle('conversations.attachmentCount', (_e, id: string) => chatAttachmentCount(id))
   handle('conversations.setPinned', (_e, id: string, pinned: boolean) => setConversationPinned(id, pinned))
   // Remember the composer's permission mode for this chat AND as the app-wide last
   // choice, so a new chat starts where the user left off.

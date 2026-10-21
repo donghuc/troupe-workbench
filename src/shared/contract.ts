@@ -77,6 +77,7 @@ export const INVOKE_PATHS = [
   'conversations.create',
   'conversations.rename',
   'conversations.remove',
+  'conversations.attachmentCount',
   'conversations.setPinned',
   'conversations.setPermissionMode',
   'conversations.branch',

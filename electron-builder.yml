@@ -2,7 +2,7 @@ appId: com.troupe.app
 productName: Troupe
 copyright: © 2026 Hien Do
 
-afterPack: scripts/adhoc-sign.cjs
+afterPack: scripts/after-pack.cjs
 
 directories:
   buildResources: build

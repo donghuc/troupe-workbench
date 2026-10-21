@@ -324,9 +324,9 @@ export default function Composer({ providers, onSend, disabled, placeholder = 'H
             </span>
           )}
           {collabMode && (
-            <span className={`attach-chip collab-chip${collabBlocked ? ' blocked' : ''}`}>
+            <span className={`attach-chip collab-mode-chip${collabBlocked ? ' blocked' : ''}`}>
               <Icon name="flash" size="xs" /> Collab
-              <span className="collab-chip-note"> · {!collabAvailable ? 'needs a project folder' : collabBusy ? 'a run is already active — stop or finish it first' : 'the agents plan it, you approve, then they run it'}</span>
+              <span className="collab-mode-note"> · {!collabAvailable ? 'needs a project folder' : collabBusy ? 'a run is already active — stop or finish it first' : 'the agents plan it, you approve, then they run it'}</span>
               <button onClick={() => setText((cur) => stripCollab(cur))} aria-label="Turn off Collab">✕</button>
             </span>
           )}

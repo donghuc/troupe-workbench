@@ -1,3 +1,4 @@
+import { api } from '../api'
 import { confirmDialog } from './ui/ConfirmDialog'
 import { OS_WORDS } from '../../../shared/platform'
 import { useMemo, useState, type DragEvent, useEffect } from 'react'
@@ -127,7 +128,7 @@ export default function Sidebar(props: Props) {
             <MenuItem onClick={() => { setMenuId(null); onSetPinned(c.id, !c.pinned) }}>{c.pinned ? 'Unpin' : 'Pin'}</MenuItem>
             <MenuItem onClick={() => { setMenuId(null); onDuplicateConversation(c.id) }}>Duplicate</MenuItem>
             <MenuItem onClick={() => { setMenuId(null); onExportConversation(c.id) }}>Export…</MenuItem>
-            <MenuItem danger onClick={() => { setMenuId(null); void confirmDialog({ title: 'Delete chat?', message: `“${c.title}” and its messages are deleted.`, confirmLabel: 'Delete' }).then((ok) => ok && onDeleteConversation(c.id)) }}><Icon name="trash" size="sm" />Delete</MenuItem>
+            <MenuItem danger onClick={() => { setMenuId(null); void api.conversations.attachmentCount(c.id).catch(() => 0).then((n: number) => confirmDialog({ title: 'Delete chat?', message: `“${c.title}” and its messages are deleted${n ? `, with the ${n === 1 ? 'file' : `${n} files`} you attached in it (Troupe's copies — your originals stay)` : ''}.`, confirmLabel: 'Delete' })).then((ok: boolean) => ok && onDeleteConversation(c.id)) }}><Icon name="trash" size="sm" />Delete</MenuItem>
           </Menu>
         </>
       )}

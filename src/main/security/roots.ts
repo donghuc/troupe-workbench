@@ -1,5 +1,5 @@
 import { app } from 'electron'
-import { join } from 'path'
+import { join, resolve } from 'path'
 import { getDb } from '../database/db'
 import { matchRoot, expectString } from './pathGuard'
 import { IMAGE_FOLDER_SETTING } from '../../shared/imageCanvas'
@@ -46,4 +46,16 @@ export function assertKnownAbsolute(abs: unknown): string {
   const a = expectString(abs, 'path')
   if (!matchRoot(a, [attachmentsRoot(), ...projectRoots()]) && !matchRoot(a, projectRoots(true))) throw new Error('Path is outside the app\'s folders')
   return a
+}
+
+// Security review #6: the window may only make a folder a project root if the folder picker
+// (run by main) just returned it, or it is already one. A renderer bug can't register `/` or
+// `~` and unlock every file handler.
+const picked = new Set<string>()
+export function rememberPickedFolder(p: string): void { picked.add(resolve(p)) }
+export function assertPickedFolder(folder: unknown): string {
+  const f = expectString(folder, 'folder')
+  const r = resolve(f)
+  if (picked.has(r) || projectRoots(true).some((x) => resolve(x) === r)) return f
+  throw new Error('Choose the folder with the folder picker.')
 }

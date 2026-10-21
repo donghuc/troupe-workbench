@@ -3,6 +3,7 @@ import { handle } from './handle'
 import { refreshSkillsWatch } from '../skills/skillsWatcher'
 import type { NewProjectInput, ProjectPatch, ConnectFolderResult, MirrorResult } from '../../shared/types'
 import { readMemoryFile, writeMemory } from '../context/projectMemory'
+import { assertPickedFolder, rememberPickedFolder } from '../security/roots'
 import {
   reorderProjects,
   listProjects, getProject, createProject, updateProject, touchProject, deleteProject,
@@ -13,7 +14,7 @@ export function registerProjectIpc(): void {
   handle('projects.list', () => listProjects())
   handle('projects.get', (_e, id: string) => getProject(id))
   handle('projects.create', (_e, input: NewProjectInput) => { const p = createProject(input); refreshSkillsWatch(); return p })
-  handle('projects.update', (_e, id: string, patch: ProjectPatch) => { const p = updateProject(id, patch); refreshSkillsWatch(); return p })
+  handle('projects.update', (_e, id: string, patch: ProjectPatch) => { if (patch?.folderPath && patch.folderPath !== getProject(id)?.folderPath) assertPickedFolder(patch.folderPath); const p = updateProject(id, patch); refreshSkillsWatch(); return p })
   handle('projects.touch', (_e, id: string) => touchProject(id))
   handle('projects.remove', (_e, id: string) => { deleteProject(id); refreshSkillsWatch() })
 
@@ -21,6 +22,7 @@ export function registerProjectIpc(): void {
   // otherwise the UI reads the (absent) file and says "Not set" while the runner
   // still injects the orphaned column (D-055 step 6, B5).
   handle('projects.connectFolder', (_e, id: string, folderPath: string): ConnectFolderResult => {
+    assertPickedFolder(folderPath)
     const blob = getProject(id)?.memory?.trim() ?? ''
     let memory: ConnectFolderResult['memory'] = 'none'
     let mirror: MirrorResult | undefined
@@ -39,7 +41,7 @@ export function registerProjectIpc(): void {
 
   // Additional folders (D-054): places the agent may read and edit via `--add-dir`.
   // They are not roots — memory, skills, .mcp.json and the file browser stay primary-only.
-  handle('projects.addFolder', (_e, id: string, folderPath: string) => addProjectFolder(id, folderPath))
+  handle('projects.addFolder', (_e, id: string, folderPath: string) => addProjectFolder(id, assertPickedFolder(folderPath)))
   handle('projects.removeFolder', (_e, id: string, folderPath: string) => removeProjectFolder(id, folderPath))
   handle('projects.reorder', (_e, orderedIds: string[]) => reorderProjects(orderedIds))
 
@@ -50,6 +52,7 @@ export function registerProjectIpc(): void {
       title: 'Connect a project folder'
     })
     if (res.canceled || res.filePaths.length === 0) return null
+    rememberPickedFolder(res.filePaths[0])
     return res.filePaths[0]
   })
 }

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   emptyCanvas, makeCard, canConnect, connect, gatherInputs, removeCard, removeSlot, outputImages,
   inputsHash, buildImagePrompt, savedName, withoutRun, findFreeSpot,
-  nextCanvasName, parseCanvasIndex, addTab, renameTab, removeTab, copyName, applyRunResult, parseCanvas, imagePathsInReply, processorOf, outputsOf, OUTPUT_SLOT, type Canvas, type Card
+  withRole, REF_ROLES, nextCanvasName, parseCanvasIndex, addTab, renameTab, removeTab, copyName, applyRunResult, parseCanvas, imagePathsInReply, processorOf, outputsOf, OUTPUT_SLOT, type Canvas, type Card
 } from './imageCanvas'
 
 function setup() {
@@ -54,7 +54,7 @@ describe('gatherInputs', () => {
   it('joins text in slot order and collects references', () => {
     const { c, a, b, p, d } = setup()
     const c2 = connect(connect(connect(c, b.id, p.id, 's1'), a.id, p.id, 's2'), p.id, d.id, OUTPUT_SLOT)
-    expect(gatherInputs(c2, p.id)).toEqual({ prompt: 'a red fox in snow', refs: ['inputs/ref1.png', 'inputs/ref2.png'] })
+    expect(gatherInputs(c2, p.id)).toEqual({ prompt: 'a red fox in snow', refs: ['inputs/ref1.png', 'inputs/ref2.png'], groups: [{ n: 1, role: 'any', refs: ['inputs/ref1.png', 'inputs/ref2.png'] }] })
     expect(processorOf(c2, d.id)?.id).toBe(p.id)
     expect(outputsOf(c2, p.id).map((k) => k.id)).toEqual([d.id])
   })
@@ -176,5 +176,49 @@ describe('canvas tabs', () => {
     const c2 = applyRunResult(c1, p.id, { id: 'r2', at: 't', files: [], error: 'x', inputsHash: 'h' })
     expect((c2.cards.find((k) => k.kind === 'output') as any).data.runs.map((r: any) => r.id)).toEqual(['r1', 'r2'])
     expect(applyRunResult(c, 'missing', { id: 'r', at: '', files: [], inputsHash: '' })).toBe(c)
+  })
+})
+
+describe('which reference is which (D-131)', () => {
+  function three() {
+    const { c, a, b, p, d } = setup()
+    const m2 = makeCard('media', 0, 400) as Extract<Card, { kind: 'media' }>
+    m2.data.files = ['inputs/palette.png', 'inputs/ref1.png']   // ref1 already came in input 1
+    const p3 = { ...p, data: { ...p.data, slots: ['s1', 's2', 's3'] } } as Extract<Card, { kind: 'processor' }>
+    let c2: Canvas = { ...c, cards: [a, b, p3, d, m2] }
+    c2 = connect(connect(connect(c2, b.id, p.id, 's1'), a.id, p.id, 's2'), m2.id, p.id, 's3')
+    return { c2, p: p3 }
+  }
+  it('groups images by input number, in slot order, without repeating a file', () => {
+    const { c2, p } = three()
+    const inp = gatherInputs(c2, p.id)
+    expect(inp.refs).toEqual(['inputs/ref1.png', 'inputs/ref2.png', 'inputs/palette.png'])   // also the --image order
+    expect(inp.groups).toEqual([{ n: 1, role: 'any', refs: ['inputs/ref1.png', 'inputs/ref2.png'] }, { n: 3, role: 'any', refs: ['inputs/palette.png'] }])
+  })
+  it('a role goes into the prompt as a phrase, and into the hash only once set', () => {
+    const { c2, p } = three()
+    const before = gatherInputs(c2, p.id)
+    const c3 = { ...c2, cards: c2.cards.map((k) => (k.id === p.id && k.kind === 'processor' ? { ...k, data: withRole(k.data, 's3', 'color') } : k)) }
+    const after = gatherInputs(c3, p.id)
+    expect(after.groups?.[1].role).toBe('color')
+    expect(inputsHash(before, 'codex', '', 1)).toBe(inputsHash({ prompt: before.prompt, refs: before.refs }, 'codex', '', 1))   // old canvases keep their hash
+    expect(inputsHash(after, 'codex', '', 1)).not.toBe(inputsHash(before, 'codex', '', 1))
+    const s = buildImagePrompt({ prompt: 'fox', refs: after.refs, groups: after.groups, count: 1, outDir: 'o' })
+    expect(s).toContain('Input 1 — use as the brief says:\n- inputs/ref1.png\n- inputs/ref2.png')
+    expect(s).toContain(`Input 3 — ${REF_ROLES.find((r) => r.id === 'color')!.phrase}:\n- inputs/palette.png`)
+    // one plain input: the old wording
+    expect(buildImagePrompt({ prompt: 'fox', refs: ['a.png'], groups: [{ n: 1, role: 'any', refs: ['a.png'] }], count: 1, outDir: 'o' })).toContain('open and use them as the brief says')
+  })
+  it('roles survive a save, drop with their slot, and old canvases parse', () => {
+    const { c2, p } = three()
+    const c3 = { ...c2, cards: c2.cards.map((k) => (k.id === p.id && k.kind === 'processor' ? { ...k, data: withRole(withRole(k.data, 's3', 'style'), 's1', 'subject') } : k)) }
+    const back = parseCanvas(JSON.stringify(c3)).cards.find((k) => k.id === p.id)
+    expect(back?.kind === 'processor' && back.data.roles).toEqual({ s3: 'style', s1: 'subject' })
+    const gone = removeSlot(c3, p.id, 's3').cards.find((k) => k.id === p.id)
+    expect(gone?.kind === 'processor' && gone.data.roles).toEqual({ s1: 'subject' })
+    const reset = withRole({ slots: ['a'], agent: 'codex', model: '', count: 1, roles: { a: 'color' } }, 'a', 'any')
+    expect(reset.roles).toBeUndefined()
+    const junk = parseCanvas(JSON.stringify({ cards: [{ id: 'p', kind: 'processor', data: { slots: ['a'], roles: { a: 'nonsense', zz: 'color' } } }] })).cards[0]
+    expect(junk.kind === 'processor' && junk.data.roles).toBeUndefined()
   })
 })

@@ -1,4 +1,5 @@
 import { promises as fs, mkdtempSync, writeFileSync, realpathSync, lstatSync } from 'fs'
+import { hideWorkbenchDir } from '../platform/winFs'
 import { tmpdir } from 'os'
 import { execFileSync } from 'child_process'
 import { join, relative, resolve, sep, basename, dirname } from 'path'
@@ -106,6 +107,7 @@ export function mimeForPath(rel: string): string {
 
 // Write base64 bytes to a file inside root (creating parent dirs). For attachments.
 export async function writeBinary(root: string, relPath: string, base64: string): Promise<void> {
+  if (relPath.replace(/\\/g, '/').startsWith('.workbench/')) setTimeout(() => hideWorkbenchDir(root), 1000)
   const abs = ensureInside(root, relPath)
   await fs.mkdir(dirname(abs), { recursive: true })
   await fs.writeFile(abs, Buffer.from(base64, 'base64'))
@@ -151,6 +153,7 @@ export async function readTextFile(root: string, relPath: string): Promise<strin
 }
 
 export async function writeTextFile(root: string, relPath: string, content: string): Promise<void> {
+  if (relPath.replace(/\\/g, '/').startsWith('.workbench/')) setTimeout(() => hideWorkbenchDir(root), 1000)
   const abs = ensureInside(root, relPath)
   await fs.mkdir(dirname(abs), { recursive: true }) // create parent dirs (e.g. notes/) if missing
   await fs.writeFile(abs, content, 'utf8')

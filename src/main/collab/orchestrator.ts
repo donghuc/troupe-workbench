@@ -1,4 +1,5 @@
 import { BrowserWindow, type WebContents } from 'electron'
+import { hideWorkbenchDir } from '../platform/winFs'
 import { join } from 'path'
 import { createHash } from 'crypto'
 import { mkdirSync, writeFileSync, appendFileSync, statSync, readdirSync, readFileSync, existsSync } from 'fs'
@@ -138,7 +139,7 @@ const retargetTasks = (drafts: CollabTaskDraft[], runDir: string, outDir: string
 function writePlanMd(run: CollabRun, tasks: CollabTask[]): void {
   try {
     const dir = runDirFor(run)
-    mkdirSync(dir, { recursive: true })
+    mkdirSync(dir, { recursive: true }); hideWorkbenchDir(run.projectCwd)
     const lines = [
       `# Collab plan`, '', `**Goal:** ${run.goal}`, '',
       ...(run.outputDir ? [`**Deliverables folder:** \`${run.outputDir}/\``, ''] : []),
@@ -165,7 +166,7 @@ function writePlanMd(run: CollabRun, tasks: CollabTask[]): void {
 }
 function appendStatus(run: CollabRun, line: string): void {
   try {
-    const dir = runDirFor(run); mkdirSync(dir, { recursive: true })
+    const dir = runDirFor(run); mkdirSync(dir, { recursive: true }); hideWorkbenchDir(run.projectCwd)
     appendFileSync(join(dir, 'STATUS.md'), `\n${line}\n`, 'utf8')
   } catch { /* best-effort */ }
 }

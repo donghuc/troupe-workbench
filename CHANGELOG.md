@@ -20,6 +20,26 @@ Each version here matches a packaged build — the dmg is named
 
 ## [Unreleased]
 
+## [2.14.0] - 2026-10-21
+
+### Added
+- Image Creation: tell the agent what each reference image is for. Every image input on a Processor has a small chip — Any use, For color, For style, For subject or For composition — and the agent gets the images listed by input number with that instruction.
+
+### Changed
+- Deleting a chat also deletes the files you attached in it (Troupe's copies in the project — your originals stay). The confirmation says how many.
+- Your message bubbles are light blue in every mode, with dark text, so they stay readable in dark mode.
+- Google Sans is now part of the app, so it looks the same offline.
+- Opening a program, script or installer from Troupe on the Mac (an `.app`, `.command`, `.pkg`, or any executable file) asks first.
+- Windows: the project's `.workbench` folder is hidden in Explorer, as it is in Finder.
+
+### Fixed
+- The Collab card's task ticks no longer sit on a grey box.
+- Audio files in the artifact viewer sit on a white panel, like file cards.
+
+### Security
+- A folder becomes a project folder only when you pick it in the folder dialog.
+- The app is built with Electron's hardening switches on (no `NODE_OPTIONS`, no debugger flags, app code only from its own archive).
+
 ## [2.13.0] - 2026-10-21
 
 ### Changed

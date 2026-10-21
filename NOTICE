@@ -9,3 +9,7 @@ You may obtain a copy of the License at
 
 Troupe drives third-party command-line tools (Claude Code, Codex, Grok, Antigravity)
 that are installed, licensed and signed in separately by the user. It does not bundle them.
+
+Bundled fonts: Google Sans and Google Sans Code (Copyright 2025 The Google Sans Project
+Authors; The Google Sans Code Project Authors), licensed under the SIL Open Font License 1.1.
+License texts: src/renderer/src/assets/fonts/OFL-*.txt.

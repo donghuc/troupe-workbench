@@ -275,7 +275,7 @@ export default function ImageView({ active = true }: { active?: boolean }) {
       const { agent, model, count } = p.data
       const hash = inputsHash(inputs, agent, model, count)
       try {
-        const runId: string = await api.image.run({ agent, model, prompt: inputs.prompt, refs: inputs.refs, count })
+        const runId: string = await api.image.run({ agent, model, prompt: inputs.prompt, refs: inputs.refs, groups: inputs.groups, count })
         const cid = canvasIdRef.current
         if (cid) setRuns((m) => ({ ...m, [runId]: { runId, label: 'Starting…', startedAt: Date.now(), hash, canvasId: cid, pid: id } }))
       } catch (e) { failed('Run')(e) }

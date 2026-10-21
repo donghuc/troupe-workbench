@@ -87,6 +87,8 @@ export interface WorkbenchApi {
     create(projectId: string, title: string, provider: ProviderId): Promise<Conversation>
     rename(id: string, title: string): Promise<Conversation>
     remove(id: string): Promise<void>
+    /** Files this chat attached (its own attachments folder) — said in the delete confirmation. */
+    attachmentCount(id: string): Promise<number>
     setPinned(id: string, pinned: boolean): Promise<void>
     setPermissionMode(id: string, mode: string): Promise<void>
     branch(id: string, throughMessageId: string | null): Promise<Conversation>

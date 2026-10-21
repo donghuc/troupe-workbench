@@ -1,6 +1,6 @@
 {
   "name": "ai-workbench",
-  "version": "2.13.0",
+  "version": "2.14.0",
   "description": "Local-first workspace for multiple AI agent runtimes",
   "author": "Hien Do",
   "license": "Apache-2.0",
@@ -27,6 +27,7 @@
     "knip": "knip --no-progress --include files,exports,dependencies,unlisted,duplicates"
   },
   "devDependencies": {
+    "@electron/fuses": "1.8.0",
     "@electron/rebuild": "^4.2.0",
     "@types/better-sqlite3": "^7.6.11",
     "@types/node": "^22.10.0",

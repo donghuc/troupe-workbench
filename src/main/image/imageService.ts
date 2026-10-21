@@ -21,7 +21,7 @@ import { IPC } from '../../shared/ipc'
 import {
   IMAGE_FOLDER_SETTING, CANVAS_FILE, INPUTS_DIR, OUTPUTS_DIR, SAVED_DIR, HISTORY_DIR, savedName, emptyCanvas, parseCanvas, newId,
   CANVASES_DIR, CANVAS_INDEX_FILE, parseCanvasIndex, nextCanvasName, addTab, renameTab, removeTab, copyName, isCanvasId, type CanvasIndex,
-  buildImagePrompt, isImageAgent, isVectorAgent, isSelfSavingAgent, isImagePath, imagePathsInReply,
+  buildImagePrompt, isImageAgent, isVectorAgent, isSelfSavingAgent, isImagePath, imagePathsInReply, isRefRole,
   type Canvas, type ImageRunInput, type ImageRunDone, type ImageRunEvent
 } from '../../shared/imageCanvas'
 
@@ -390,7 +390,13 @@ export function startImageRun(sender: WebContents, input: ImageRunInput): string
   const outRel = `${OUTPUTS_DIR}/${runId}`
   const outDir = ensureInside(root, outRel)
   const model = runModel(input.agent, input.model || '')
-  const prompt = buildImagePrompt({ prompt: input.prompt, refs: refAbs.map((a) => toRel(root, a)), count: input.count, outDir: outRel, vector: isVectorAgent(input.agent), selfSaving: isSelfSavingAgent(input.agent) })
+  // Groups (D-131): which input each image came from and what it's for; same order as refs.
+  const known = new Set(refAbs.map((a) => toRel(root, a)))
+  const groups = (Array.isArray(input.groups) ? input.groups : [])
+    .filter((g) => g && Number.isInteger(g.n) && Array.isArray(g.refs))
+    .map((g) => ({ n: g.n, role: isRefRole(g.role) ? g.role : 'any' as const, refs: g.refs.filter((r) => typeof r === 'string').map((r) => { try { return toRel(root, ensureInside(root, r)) } catch { return '' } }).filter((r) => known.has(r)) }))
+    .filter((g) => g.refs.length)
+  const prompt = buildImagePrompt({ prompt: input.prompt, refs: refAbs.map((a) => toRel(root, a)), groups, count: input.count, outDir: outRel, vector: isVectorAgent(input.agent), selfSaving: isSelfSavingAgent(input.agent) })
   const mcpOff = [...new Set([...mcpOffFor(getSetting(MCP_OFF_SETTING), input.agent), ...(input.agent === 'codex' ? codexServers() : [])])]
   const entry = { provider, cancelled: false }
   live.set(runId, entry)

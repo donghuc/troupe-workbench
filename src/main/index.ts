@@ -1,4 +1,6 @@
 import { app, BrowserWindow, nativeImage, protocol } from 'electron'
+import { listProjects } from './projects/projectsRepo'
+import { hideWorkbenchDir } from './platform/winFs'
 import { promises as fsp } from 'fs'
 import { join } from 'path'
 import { existsSync, createReadStream } from 'fs'
@@ -115,6 +117,8 @@ const thumbDeps = {
 
 app.whenReady().then(() => {
   void pruneThumbs(thumbDeps.dir).catch(() => {})
+  // Windows: projects made before D-130 get their .workbench folder hidden too.
+  if (process.platform === 'win32') setTimeout(() => { try { for (const p of listProjects()) hideWorkbenchDir(p.folderPath) } catch { /* not ready */ } }, 5000)
   logInfo('app ready', { version: app.getVersion?.() })
   protocol.handle('wbfile', async (req) => {
     try {

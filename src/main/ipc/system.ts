@@ -1,8 +1,8 @@
-import { app, shell, clipboard, nativeImage, ClipboardItem } from 'electron'
+import { app, shell, clipboard, nativeImage, ClipboardItem, dialog, BrowserWindow } from 'electron'
 import { handle } from './handle'
 import { openArtifactWindow } from '../window/artifactWindow'
 import { ensureInside } from '../filesystem/fsService'
-import { existsSync, copyFileSync, mkdirSync, readFileSync } from 'fs'
+import { existsSync, copyFileSync, mkdirSync, readFileSync, statSync } from 'fs'
 import { homedir, arch } from 'os'
 import { dirname, basename, join, isAbsolute, resolve } from 'path'
 import { listAgentTools, addMcpServer, removeMcpServer, refreshLiveMcpNames } from '../tools/toolsService'
@@ -24,6 +24,12 @@ function buildCommit(): string {
     try { commit = String(JSON.parse(readFileSync(join(app.getAppPath(), 'package.json'), 'utf8')).troupeCommit ?? '') } catch { commit = '' }
   }
   return commit
+}
+
+const MAC_PROGRAM = /\.(app|command|tool|terminal|sh|zsh|bash|csh|ksh|pkg|mpkg|scpt|scptd|applescript|workflow|action|jar|prefPane|kext|plugin|webloc|inetloc|fileloc)$/i
+function runsWhenOpened(abs: string): boolean {
+  if (MAC_PROGRAM.test(abs)) return true
+  try { const st = statSync(abs); return st.isFile() && (st.mode & 0o111) !== 0 } catch { return false }
 }
 
 export function registerSystemIpc(): void {
@@ -69,6 +75,15 @@ export function registerSystemIpc(): void {
       // D-120: on Windows "open" runs programs and scripts outright; refuse those (a file an
       // agent or a cloned repo put in the project shouldn't run from a click in a reply).
       if (process.platform === 'win32' && /\.(exe|com|bat|cmd|ps1|psm1|vbs|vbe|js|jse|wsf|wsh|msi|msp|scr|hta|cpl|lnk|reg|pif|appref-ms)$/i.test(abs)) return false
+      // Security review #9: on the Mac, opening an app, script or installer runs it. Ask first,
+      // in a dialog drawn by main (the window can't skip it). Programs = known types, plus any
+      // file with the executable bit (a bare binary opens Terminal and runs).
+      if (process.platform !== 'win32' && runsWhenOpened(abs)) {
+        const win = BrowserWindow.fromWebContents(_e.sender) ?? undefined
+        const opts = { type: 'warning' as const, buttons: ['Cancel', 'Open'], defaultId: 0, cancelId: 0, message: `“${basename(abs)}” is a program or installer.`, detail: 'Opening it runs it on your Mac, with your permissions. Only open it if you know what it does — an agent or a downloaded project may have put it here.' }
+        const { response } = win ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts)
+        if (response !== 1) return false
+      }
       const err = await shell.openPath(abs)
       return err === ''
     } catch { return false }

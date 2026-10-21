@@ -34,3 +34,19 @@ export async function removeProjectAttachment(root: string, rel: string): Promis
   const parts = rel.split('/')
   if (parts.length === 4) await fs.rmdir(ensureInside(root, parts.slice(0, 3).join('/'))).catch(() => { /* not empty */ })
 }
+
+const chatDir = (chatId: string): string => {
+  const id = chatId.replace(/[^A-Za-z0-9_-]/g, '')
+  if (!id) throw new Error('Not a chat.')
+  return `${ATTACH_DIR}/${id}`
+}
+
+/** How many files this chat attached (its own folder only — older shared files aren't counted). */
+export async function countChatAttachments(root: string, chatId: string): Promise<number> {
+  try { return (await fs.readdir(ensureInside(root, chatDir(chatId)), { withFileTypes: true })).filter((e) => e.isFile() && !e.name.startsWith('.')).length } catch { return 0 }
+}
+
+/** Delete a chat's attachment folder — called when the chat is deleted. Older shared files stay. */
+export async function removeChatAttachments(root: string, chatId: string): Promise<void> {
+  await fs.rm(ensureInside(root, chatDir(chatId)), { recursive: true, force: true })
+}

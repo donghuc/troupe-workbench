@@ -6,6 +6,7 @@
     "src/renderer/src/main.tsx",
     "src/renderer/src/ArtifactWindow.tsx",
     "scripts/*.mjs",
+    "scripts/*.cjs",
     "electron.vite.config.ts"
   ],
   "project": [

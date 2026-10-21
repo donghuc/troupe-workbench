@@ -39,7 +39,17 @@ export interface RunRecord {
 
 export interface PromptData { text: string }
 export interface MediaData { files: string[] }                      // relative to the image folder
-export interface ProcessorData { slots: string[]; agent: ProviderId; model: string; count: number }
+/** What a reference input is for (Hien, 2026-10-14). 'any' = as the brief says. */
+export type RefRole = 'any' | 'color' | 'style' | 'subject' | 'composition'
+export const REF_ROLES: { id: RefRole; label: string; phrase: string }[] = [
+  { id: 'any', label: 'Any', phrase: 'use as the brief says' },
+  { id: 'color', label: 'Color', phrase: 'use only for its colour palette — not its subject or layout' },
+  { id: 'style', label: 'Style', phrase: 'use for its style (medium, rendering, texture, mood) — not its subject' },
+  { id: 'subject', label: 'Subject', phrase: 'use for the subject — who or what to show' },
+  { id: 'composition', label: 'Composition', phrase: 'use for the layout and composition — framing, placement, proportions' }
+]
+export const isRefRole = (v: unknown): v is RefRole => REF_ROLES.some((r) => r.id === v)
+export interface ProcessorData { slots: string[]; agent: ProviderId; model: string; count: number; roles?: Record<string, RefRole> }
 export interface OutputData {
   runs: RunRecord[]
   selected: string[]                 // files passed on to the next card
@@ -134,11 +144,19 @@ export function removeCard(c: Canvas, id: string): Canvas {
   return { ...c, cards: c.cards.filter((k) => k.id !== id), edges: c.edges.filter((e) => e.from !== id && e.to !== id) }
 }
 
+/** Set what an image input is for; 'any' removes the entry. */
+export function withRole(d: ProcessorData, slot: string, role: RefRole): ProcessorData {
+  const roles = { ...(d.roles ?? {}) }
+  if (role === 'any') delete roles[slot]; else roles[slot] = role
+  const { roles: _old, ...rest } = d
+  return Object.keys(roles).length ? { ...rest, roles } : rest
+}
+
 export function removeSlot(c: Canvas, cardId: string, slot: string): Canvas {
   return {
     ...c,
     cards: c.cards.map((k) => (k.id === cardId && k.kind === 'processor' && k.data.slots.length > 1
-      ? { ...k, data: { ...k.data, slots: k.data.slots.filter((s) => s !== slot) } } : k)),
+      ? { ...k, data: withRole({ ...k.data, slots: k.data.slots.filter((s) => s !== slot) }, slot, 'any') } : k)),
     edges: c.edges.filter((e) => !(e.to === cardId && e.slot === slot))
   }
 }
@@ -154,28 +172,43 @@ export function outputImages(card: Card): string[] {
   return last ? last.files : []
 }
 
-export interface ProcessorInputs { prompt: string; refs: string[] }
+/** One reference input, numbered as on the Processor card. */
+export interface RefGroup { n: number; role: RefRole; refs: string[] }
+export interface ProcessorInputs { prompt: string; refs: string[]; groups?: RefGroup[] }
+
+/** Images and text in slot order; an image already given by an earlier input isn't repeated. */
+function collect(slots: string[], roles: Record<string, RefRole> | undefined, srcOf: (slot: string) => Card | undefined): ProcessorInputs {
+  const texts: string[] = []
+  const refs: string[] = []
+  const groups: RefGroup[] = []
+  slots.forEach((slot, i) => {
+    const src = srcOf(slot)
+    if (!src) return
+    if (src.kind === 'prompt') { if (src.data.text.trim()) texts.push(src.data.text.trim()); return }
+    const files = src.kind === 'media' ? src.data.files : src.kind === 'output' ? outputImages(src) : []
+    const fresh = [...new Set(files)].filter((f) => !refs.includes(f))
+    if (!fresh.length) return
+    refs.push(...fresh)
+    groups.push({ n: i + 1, role: roles?.[slot] ?? 'any', refs: fresh })
+  })
+  return { prompt: texts.join('\n\n'), refs, groups }
+}
 
 /** What a Processor receives: text joined in slot order, reference images de-duplicated. */
 export function gatherInputs(c: Canvas, processorId: string): ProcessorInputs {
   const p = c.cards.find((k) => k.id === processorId)
   if (!p || p.kind !== 'processor') return { prompt: '', refs: [] }
-  const texts: string[] = []
-  const refs: string[] = []
-  for (const slot of p.data.slots) {
+  return collect(p.data.slots, p.data.roles, (slot) => {
     const e = c.edges.find((x) => x.to === p.id && x.slot === slot)
-    const src = e && c.cards.find((k) => k.id === e.from)
-    if (!src) continue
-    if (src.kind === 'prompt' && src.data.text.trim()) texts.push(src.data.text.trim())
-    else if (src.kind === 'media') refs.push(...src.data.files)
-    else if (src.kind === 'output') refs.push(...outputImages(src))
-  }
-  return { prompt: texts.join('\n\n'), refs: [...new Set(refs)] }
+    return e ? c.cards.find((k) => k.id === e.from) : undefined
+  })
 }
 
 /** Stable fingerprint of a run's inputs + engine (FNV-1a), for "inputs changed" markers. */
 export function inputsHash(inp: ProcessorInputs, agent: string, model: string, count: number): string {
-  const s = JSON.stringify([inp.prompt, inp.refs, agent, model, count])
+  // Roles only count once one is set, so canvases from before roles keep their hashes.
+  const roles = (inp.groups ?? []).filter((g) => g.role !== 'any').map((g) => [g.n, g.role])
+  const s = JSON.stringify(roles.length ? [inp.prompt, inp.refs, agent, model, count, roles] : [inp.prompt, inp.refs, agent, model, count])
   let h = 0x811c9dc5
   for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0 }
   return h.toString(16)
@@ -219,17 +252,10 @@ export function indexCanvas(c: Canvas): CardIndex {
 export function gatherInputsIx(ix: CardIndex, processorId: string): ProcessorInputs {
   const p = ix.byId.get(processorId)
   if (!p || p.kind !== 'processor') return { prompt: '', refs: [] }
-  const texts: string[] = []
-  const refs: string[] = []
-  for (const slot of p.data.slots) {
+  return collect(p.data.slots, p.data.roles, (slot) => {
     const e = ix.inSlot.get(`${p.id}|${slot}`)
-    const src = e && ix.byId.get(e.from)
-    if (!src) continue
-    if (src.kind === 'prompt' && src.data.text.trim()) texts.push(src.data.text.trim())
-    else if (src.kind === 'media') refs.push(...src.data.files)
-    else if (src.kind === 'output') refs.push(...outputImages(src))
-  }
-  return { prompt: texts.join('\n\n'), refs: [...new Set(refs)] }
+    return e ? ix.byId.get(e.from) : undefined
+  })
 }
 
 /**
@@ -261,7 +287,7 @@ export function connectChecker(c: Canvas, fromId: string): (toId: string, slot: 
  *  changed"). Computed for every card from one index; plain data, so a card whose view didn't
  *  change keeps the same object and doesn't re-render (see stabilize). */
 export interface CardView {
-  slots?: { slot: string; label: string; filled: boolean }[]
+  slots?: { slot: string; label: string; filled: boolean; image?: boolean; role?: RefRole }[]
   lastRun?: { at: string; error?: string; ok: boolean }
   procId?: string
   stale?: boolean
@@ -281,7 +307,11 @@ export function cardViews(c: Canvas, running: (processorId: string) => boolean, 
   const out = new Map<string, CardView>()
   for (const k of c.cards) {
     if (k.kind === 'processor') {
-      const slots = k.data.slots.map((slot) => { const e = ix.inSlot.get(`${k.id}|${slot}`); const src = e && ix.byId.get(e.from); return { slot, label: sourceLabel(src), filled: !!src } })
+      const slots = k.data.slots.map((slot) => {
+        const e = ix.inSlot.get(`${k.id}|${slot}`); const src = e && ix.byId.get(e.from)
+        const image = !!src && (src.kind === 'media' || src.kind === 'output')
+        return { slot, label: sourceLabel(src), filled: !!src, ...(image ? { image, role: k.data.roles?.[slot] ?? 'any' } : {}) }
+      })
       let last: RunRecord | undefined
       for (const e of ix.outOf.get(k.id) ?? []) {
         const o = ix.byId.get(e.to)
@@ -323,14 +353,22 @@ export function validateRun(inp: ProcessorInputs): string | null {
  * have is the instruction, so it pins the count, the folder and the reply format, and
  * the service still sweeps for images saved elsewhere (imageService.collect).
  */
-export function buildImagePrompt(opts: { prompt: string; refs: string[]; count: number; outDir: string; vector?: boolean; selfSaving?: boolean }): string {
+export function buildImagePrompt(opts: { prompt: string; refs: string[]; groups?: RefGroup[]; count: number; outDir: string; vector?: boolean; selfSaving?: boolean }): string {
   const n = Math.max(1, Math.min(4, Math.round(opts.count) || 1))
   const ext = opts.vector ? 'svg' : 'png'
   const lines = [opts.vector
     ? `Create ${n === 1 ? 'one illustration' : `${n} separate illustrations`} for the brief below as self-contained SVG files (you have no image generation tool, so draw it as vector art). Use a viewBox (e.g. 0 0 1024 1024), no external references, scripts or fonts that need loading; make it as rich and polished as the brief deserves.`
     : `Generate ${n === 1 ? 'one image' : `${n} separate images`} for the brief below, using your image generation tool. Make a real raster image — not SVG, HTML or code.`
   ]
-  if (opts.refs.length) {
+  const groups = (opts.groups ?? []).filter((g) => g.refs.length)
+  if (groups.length && groups.some((g) => g.role !== 'any' || groups.length > 1)) {
+    // Grouped by input, numbered as on the Processor card, each with what it's for.
+    lines.push('', `Reference images (${groups.reduce((n, g) => n + g.refs.length, 0)}), relative to the current folder, by input — open each and use it only as its input says:`)
+    for (const g of groups) {
+      lines.push(`Input ${g.n} — ${REF_ROLES.find((r) => r.id === g.role)?.phrase ?? 'use as the brief says'}:`)
+      for (const r of g.refs) lines.push(`- ${r}`)
+    }
+  } else if (opts.refs.length) {
     lines.push('', `Reference images (${opts.refs.length}), relative to the current folder — open and use them as the brief says (subject, style, composition):`)
     for (const r of opts.refs) lines.push(`- ${r}`)
   }
@@ -366,7 +404,9 @@ export function parseCanvas(raw: string | null | undefined): Canvas {
     else if (k.kind === 'media') cards.push({ ...base, kind: 'media', data: { files: strs(d.files) } })
     else if (k.kind === 'processor') {
       const slots = strs(d.slots)
-      cards.push({ ...base, kind: 'processor', data: { slots: slots.length ? slots : [newId('s')], agent: isImageAgent(d.agent) ? d.agent : 'codex', model: typeof d.model === 'string' ? d.model : '', count: Math.max(1, Math.min(4, num(d.count, 1))) } })
+      const roles: Record<string, RefRole> = {}
+      if (d.roles && typeof d.roles === 'object') for (const [k2, v] of Object.entries(d.roles)) if (slots.includes(k2) && isRefRole(v) && v !== 'any') roles[k2] = v
+      cards.push({ ...base, kind: 'processor', data: { slots: slots.length ? slots : [newId('s')], agent: isImageAgent(d.agent) ? d.agent : 'codex', model: typeof d.model === 'string' ? d.model : '', count: Math.max(1, Math.min(4, num(d.count, 1))), ...(Object.keys(roles).length ? { roles } : {}) } })
     } else if (k.kind === 'output') {
       const runs: RunRecord[] = (Array.isArray(d.runs) ? d.runs : []).filter((r: any) => r && typeof r.id === 'string').map((r: any) => ({
         id: r.id, at: typeof r.at === 'string' ? r.at : '', agent: isImageAgent(r.agent) ? r.agent : 'codex',
@@ -421,7 +461,7 @@ export function withoutRun(card: Card, runId: string): Card {
 }
 
 // ── IPC payloads ─────────────────────────────────────────────────────────────
-export interface ImageRunInput { agent: ProviderId; model: string; prompt: string; refs: string[]; count: number }
+export interface ImageRunInput { agent: ProviderId; model: string; prompt: string; refs: string[]; groups?: RefGroup[]; count: number }
 export interface ImageRunDone { runId: string; files: string[]; error?: string }
 export interface ImageRunEvent { runId: string; label: string }
 

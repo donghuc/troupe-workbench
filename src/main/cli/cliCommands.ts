@@ -1,5 +1,6 @@
 import { listProjects, getProject } from '../projects/projectsRepo'
-import { listConversations, getConversation, createConversation, listRecentConversations, renameConversation, deleteConversation, searchAll } from '../conversations/conversationsRepo'
+import { listConversations, getConversation, createConversation, listRecentConversations, renameConversation, searchAll } from '../conversations/conversationsRepo'
+import { deleteChatWithFiles } from '../attachments/deleteChat'
 import { listMessages, lastUserTurn } from '../conversations/messagesRepo'
 import { startTurn, cancelTurn, isBusy, getTurnState } from '../agent/turns'
 import { senderForRun, broadcastConversationsChanged } from '../agent/headless'
@@ -86,11 +87,11 @@ function startedFromCli(c: Conversation): boolean {
   if (users.length) return users.every((m) => m.metadata?.via === 'cli')
   return readRunLog(0).some((e) => e.chat === c.id && e.source === 'cli')
 }
-function remove(q: Params): CliResult {
+async function remove(q: Params): Promise<CliResult> {
   const c = findChat(q.get('chat') ?? '')
   if (!startedFromCli(c)) throw new CliError('Only chats started from the command line can be deleted here. Delete other chats in the app.', 403)
   if (isBusy(c.id) || listCollabRuns(c.id).some((r) => ['planning', 'awaiting_confirmation', 'running'].includes(r.status))) throw new CliError('This chat is running. Stop it first.', 409)
-  deleteConversation(c.id); broadcastConversationsChanged()
+  await deleteChatWithFiles(c.id); broadcastConversationsChanged()
   logInfo('[cli] delete', { chat: c.id })
   return ok({ deleted: c.id }, `Deleted "${c.title}".`)
 }
@@ -282,7 +283,7 @@ export async function runCliCommand(cmd: string, q: Params, closed: () => boolea
       case 'runs': return runs(q)
       case 'schedules': return schedules(q)
       case 'rename': return rename(q)
-      case 'delete': return remove(q)
+      case 'delete': return await remove(q)
       case 'search': return search(q)
       case 'context': return context(q)
       case 'files': return await files(q)

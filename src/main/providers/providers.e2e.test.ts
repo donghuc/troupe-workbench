@@ -32,7 +32,10 @@ let savedPath: string | undefined
 beforeAll(() => { mkdirSync(bin); mkdirSync(project); mkdirSync(rec); savedPath = process.env.PATH; process.env.PATH = `${bin}:${savedPath}` })
 afterAll(() => { process.env.PATH = savedPath })
 
-describe('providers through CliProcess (D-096)', () => {
+// The fake CLIs are `#!/usr/bin/env node` scripts on PATH, which Windows can't run by name
+// (no shebangs; it would need .cmd shims) — and Gemini isn't offered on Windows. The Windows
+// side of spawning is covered by the platform tests and the CI smoke run instead.
+describe.skipIf(process.platform === 'win32')('providers through CliProcess (D-096)', () => {
   it('Claude: prompt on stdin, stream-json mapped, system prompt file passed', async () => {
     fake('claude', [
       { type: 'system', subtype: 'init', session_id: 's1', model: 'claude-x' },

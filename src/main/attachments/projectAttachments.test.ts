@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 vi.mock('../conversations/conversationsRepo', () => ({ getConversation: (id: string) => (id === 'c1' ? { title: 'Taxes' } : null) }))
-const { listProjectAttachments, removeProjectAttachment } = await import('./projectAttachments')
+const { listProjectAttachments, removeProjectAttachment, countChatAttachments, removeChatAttachments } = await import('./projectAttachments')
 
 describe('project attachments (D-126)', () => {
   it('lists per-chat and older files, deletes only inside the attachments folder', async () => {
@@ -22,5 +22,20 @@ describe('project attachments (D-126)', () => {
     expect(existsSync(join(base, 'c1'))).toBe(false)       // emptied chat folder removed
     expect(existsSync(join(root, 'secret.txt'))).toBe(true)
     expect(await listProjectAttachments(mkdtempSync(join(tmpdir(), 'pa-')))).toEqual([])
+  })
+
+  it('deleting a chat takes its own attachment folder, never older shared files (D-130)', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'pa-'))
+    const base = join(root, '.workbench', 'attachments')
+    mkdirSync(join(base, 'c1'), { recursive: true })
+    writeFileSync(join(base, 'c1', '1-a.pdf'), 'x'); writeFileSync(join(base, 'c1', '2-b.png'), 'x')
+    writeFileSync(join(base, '1-shared.txt'), 'z')
+    expect(await countChatAttachments(root, 'c1')).toBe(2)
+    expect(await countChatAttachments(root, 'nope')).toBe(0)
+    await expect(removeChatAttachments(root, '../..')).rejects.toThrow()
+    await removeChatAttachments(root, 'c1')
+    expect(existsSync(join(base, 'c1'))).toBe(false)
+    expect(existsSync(join(base, '1-shared.txt'))).toBe(true)
+    await removeChatAttachments(root, 'c1')   // already gone: fine
   })
 })

@@ -1,3 +1,4 @@
+import { IMAGE_FOLDER_SETTING } from '../../shared/imageCanvas'
 import { handle } from './handle'
 import { listContextFiles, addContextFile, removeContextFile } from '../context/contextRepo'
 import { inspectContext } from '../context/contextBuilder'
@@ -29,6 +30,8 @@ export function registerContextIpc(): void {
   handle('outcomes.list', (_e, projectId: string) => { const p = getProject(expectString(projectId, 'projectId')); return p ? listOutcomes(p) : [] })
   handle('settings.get', (_e, key: string) => getSetting(key))
   handle('settings.set', async (_e, key: string, value: string) => {
+    // The Image folder is a file root: only the folder picker in main sets it (review #6).
+    if (key === IMAGE_FOLDER_SETTING) throw new Error('Choose the Image folder with the folder picker.')
     setSetting(key, value)
     if (key === CLI_ACCESS_SETTING) await refreshCliAccess()   // D-117: open/close the socket now
   })

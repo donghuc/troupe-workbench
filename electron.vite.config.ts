@@ -10,8 +10,8 @@ import type { Plugin } from 'vite'
 //
 // What each source is for:
 //   script-src  'self'                      app bundle only
-//   style-src   'unsafe-inline' + Google    React inline styles, Vite-injected CSS, the web font
-//   font-src    fonts.gstatic + data:       the web font, pdf.js embedded fonts
+//   style-src   'unsafe-inline'             React inline styles, Vite-injected CSS
+//   font-src    'self' + data:              the bundled Google Sans files (D-130), pdf.js embedded fonts
 //   img-src     data: blob: wbfile:         data-URL previews, pdf.js canvases, project images
 //   media-src   wbfile: blob:               video artifacts
 //   frame-src   wbfile: blob: about:        HTML/PDF artifacts (sandboxed iframes)
@@ -25,8 +25,8 @@ function csp(dev: boolean): string {
   return [
     "default-src 'self'",
     `script-src ${script}`,
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    'font-src \'self\' data: https://fonts.gstatic.com',
+    "style-src 'self' 'unsafe-inline'",
+    "font-src 'self' data:",
     "img-src 'self' data: blob: wbfile:",
     'media-src wbfile: blob:',
     'frame-src wbfile: blob: about:',
