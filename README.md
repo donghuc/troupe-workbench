@@ -6,6 +6,8 @@ Troupe is a local-first Mac app for thinking with AI agents — Claude Code, Cod
 
 > **Status:** macOS on Apple silicon only · single maintainer · built for one designer's daily workflow and shared as-is. Issues and PRs are welcome; response times are best-effort. Licensed under [Apache-2.0](LICENSE).
 
+![Troupe workspace: projects in the sidebar, a conversation in the centre, context panel on the right](docs/screenshots/01-workspace.png)
+
 ## What it does
 
 **Think across agents**
@@ -27,6 +29,17 @@ Troupe is a local-first Mac app for thinking with AI agents — Claude Code, Cod
 - **Scheduled tasks, skills, notes**, per-chat permission modes (Read-only / Auto / Full access), MCP servers and Claude in Chrome, all switched on or off in Settings.
 
 > **Naming.** "AI Workbench" is the code name (package `ai-workbench` and the data folder `~/Library/Application Support/AI Workbench`). **Troupe** is the app's name.
+
+## Screenshots
+
+| | |
+|---|---|
+| ![Compare card summarising every agent's reply: verdict, agreements, disagreements](docs/screenshots/02-compare.png) | ![Debate mode: two agents argue for and against, a third judges](docs/screenshots/03-debate.png) |
+| **Compare**: one verdict from several agents | **Debate**: for, against, and a judge |
+| ![Context Inspector listing every section of the prompt in order, with sizes](docs/screenshots/04-context.png) | ![Save outcome turning a reply into a dated decision record](docs/screenshots/05-decisions.png) |
+| **Context Inspector**: exactly what each agent is told | **Save outcome**: turn a reply into a decision |
+
+![Image Creation canvas with Prompt, Media, Processor and Output cards wired together](docs/screenshots/06-image.png)
 
 ## Stack
 

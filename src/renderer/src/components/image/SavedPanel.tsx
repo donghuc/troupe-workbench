@@ -3,7 +3,8 @@ import { OS_WORDS } from '../../../../shared/platform'
 import Icon from '../Icon'
 import { api } from '../../api'
 import { failed, notify } from '../../notices'
-import { thumbUrl, IMAGE_REF_TYPE } from './geometry'
+import { thumbUrl, fileUrl, IMAGE_REF_TYPE } from './geometry'
+import { copyImageFile } from '../../copyImage'
 import { SAVED_DIR, isImagePath } from '../../../../shared/imageCanvas'
 import type { FileNode } from '../../../../shared/types'
 import { IconButton } from '../ui/Button'
@@ -42,7 +43,7 @@ export default function SavedPanel({ root, version, onOpen, onClose }: Props) {
                   title="Click to view · drag onto a Media card (or the canvas) to use as a reference"
                   onDragStart={(e) => { e.dataTransfer.setData(IMAGE_REF_TYPE, f.relPath); e.dataTransfer.effectAllowed = 'copy' }} />
                 <div className="img-shot-actions">
-                  {!/\.svg$/i.test(f.name) && <button title="Copy image" onClick={() => api.system.copyImage(root, f.relPath).then((ok: boolean) => ok && notify('Image copied')).catch(failed('Copy image'))}><Icon name="copy" size="sm" /></button>}
+                  {!/\.svg$/i.test(f.name) && <button title="Copy image" onClick={() => void copyImageFile(root, f.relPath, fileUrl(root, f.relPath)).then((ok) => notify(ok ? 'Image copied' : 'Couldn’t copy this image.'))}><Icon name="copy" size="sm" /></button>}
                   <button title="Open in its own window" onClick={() => api.system.openArtifactWindow(root, f.relPath).catch(failed('Open window'))}><Icon name="popout" size="sm" /></button>
                   <button title={OS_WORDS.showInFolder} onClick={() => api.system.revealItem(root, f.relPath).catch(failed(OS_WORDS.showInFolder))}><Icon name="folder-open" size="sm" /></button>
                 </div>

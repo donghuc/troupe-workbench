@@ -20,6 +20,12 @@ Each version here matches a packaged build — the dmg is named
 
 ## [Unreleased]
 
+## [2.14.2] - 2026-10-21
+
+### Fixed
+- The Copy button in the full-size image preview did nothing (no hover, no click): it sat over the window's title-bar drag area. Same fix for dialogs and the command palette near the top of the window.
+- Copy image works for every format the app can show (WebP, GIF and others, not only PNG and JPEG) — in the image preview, the artifact viewer, Image creation cards and the Saved panel — and says so when it can't copy.
+
 ## [2.14.1] - 2026-10-21
 
 ### Changed

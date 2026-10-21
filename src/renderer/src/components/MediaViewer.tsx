@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import Icon from './Icon'
-import { api } from '../api'
+import { copyImageFile } from '../copyImage'
+import { notify } from '../notices'
 
 interface Props { src: string; alt?: string; root?: string; relPath?: string; onClose: () => void }
 
@@ -16,8 +17,8 @@ export default function MediaViewer({ src, alt, root, relPath, onClose }: Props)
   }, [onClose])
   const copy = async () => {
     if (!root || !relPath) return
-    const ok = await api.system.copyImage(root, relPath)
-    if (ok) { setCopied(true); setTimeout(() => setCopied(false), 1200) }
+    if (await copyImageFile(root, relPath, src)) { setCopied(true); setTimeout(() => setCopied(false), 1200) }
+    else notify('Couldn’t copy this image.')
   }
   return (
     <div className="media-viewer" role="dialog" aria-modal="true" onClick={onClose}>

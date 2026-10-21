@@ -9,7 +9,8 @@ import { presetsFor } from '../../models'
 import { CARD_LABEL, isVectorAgent, OUTPUT_SLOT, REF_ROLES, withRole, type Card, type RefRole, type CardView as CardDerived } from '../../../../shared/imageCanvas'
 import type { ProviderId, ProviderInfo } from '../../../../shared/types'
 import type { CardUi, CardLink } from './ImageCanvas'
-import { thumbUrl, IMAGE_REF_TYPE } from './geometry'
+import { thumbUrl, fileUrl, IMAGE_REF_TYPE } from './geometry'
+import { copyImageFile } from '../../copyImage'
 import { Button, IconButton } from '../ui/Button'
 
 export interface RunState { runId: string; label: string; startedAt: number; hash: string }
@@ -262,7 +263,7 @@ function OutputCard({ card, ui, ctx, d, link, lod }: CardProps<'output'>) {
                   <button className={card.data.saved[f] ? 'on' : ''} aria-pressed={!!card.data.saved[f]}
                     title={card.data.saved[f] ? `Saved as ${card.data.saved[f]} — click to remove that copy` : 'Save — copy into the saved/ folder'}
                     onClick={() => ctx.toggleSaved(card.id, f, hint)}><Icon name={card.data.saved[f] ? 'check' : 'download'} size="sm" /></button>
-                  {!/\.svg$/i.test(f) && <button title="Copy image" onClick={() => api.system.copyImage(ctx.root, f).then((ok: boolean) => ok && notify('Image copied')).catch(failed('Copy image'))}><Icon name="copy" size="sm" /></button>}
+                  {!/\.svg$/i.test(f) && <button title="Copy image" onClick={() => void copyImageFile(ctx.root, f, fileUrl(ctx.root, f)).then((ok) => notify(ok ? 'Image copied' : 'Couldn’t copy this image.'))}><Icon name="copy" size="sm" /></button>}
                   <button title="Open in its own window" onClick={() => api.system.openArtifactWindow(ctx.root, f).catch(failed('Open window'))}><Icon name="popout" size="sm" /></button>
                   <button title={OS_WORDS.showInFolder} onClick={() => api.system.revealItem(ctx.root, f).catch(failed(OS_WORDS.showInFolder))}><Icon name="folder-open" size="sm" /></button>
                 </div>

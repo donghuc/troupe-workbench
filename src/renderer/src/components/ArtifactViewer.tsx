@@ -5,6 +5,9 @@ import { kindOf } from '../fileKinds'
 import Icon from './Icon'
 import FilePreview, { normalizePath } from './FilePreview'
 import { IconButton } from './ui/Button'
+import { copyImageFile } from '../copyImage'
+import { notify } from '../notices'
+import { wbfileSrc } from '../chatFiles'
 
 interface Props { root: string; relPath: string; onClose: () => void; popout?: boolean }
 
@@ -17,7 +20,7 @@ export default function ArtifactViewer({ root, relPath, onClose, popout }: Props
 
   const kind = kindOf(current)
   const copy = async () => { try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1200) } catch { /* ignore */ } }
-  const copyImage = async () => { const ok = await api.system.copyImage(root, current); if (ok) { setCopied(true); setTimeout(() => setCopied(false), 1200) } }
+  const copyImage = async () => { if (await copyImageFile(root, current, wbfileSrc(root, current))) { setCopied(true); setTimeout(() => setCopied(false), 1200) } else notify('Couldn’t copy this image.') }
 
   const openLink = (href: string) => {
     let h = href

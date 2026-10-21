@@ -94,13 +94,15 @@ export function registerSystemIpc(): void {
   handle('system.copyImage', async (_e, root: string, relPath: string) => {
     try {
       const abs = ensureInside(assertProjectRoot(root), expectString(relPath, 'path'))
-      if (!existsSync(abs)) return false
+      if (!existsSync(abs)) { logError('[copy-image] file not found', relPath); return false }
       const img = nativeImage.createFromPath(abs)
-      if (img.isEmpty()) return false
+      // nativeImage decodes PNG and JPEG; other formats come back empty and the window copies
+      // what it shows instead (renderer/src/copyImage.ts).
+      if (img.isEmpty()) { logError('[copy-image] could not decode', relPath); return false }
       const png = new Blob([new Uint8Array(img.toPNG())], { type: 'image/png' })
       await clipboard.write([new ClipboardItem({ 'image/png': png })])
       return true
-    } catch { return false }
+    } catch (e) { logError('[copy-image] failed', `${relPath}: ${e instanceof Error ? e.message : String(e)}`); return false }
   })
   // Codex's own model list (D-076); the renderer merges the typed extras itself.
   // Each agent's own model list, newest first (D-076 Codex, D-079 Gemini); the renderer

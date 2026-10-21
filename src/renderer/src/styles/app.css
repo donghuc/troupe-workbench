@@ -1542,6 +1542,10 @@ select.field-input {
 .media-viewer { position: fixed; inset: 0; z-index: var(--z-top); display: flex; align-items: center; justify-content: center; background: var(--scrim-strong); animation: overlay-in var(--dur-base) ease-out both; }
 .media-viewer-img { max-width: 92vw; max-height: 92vh; object-fit: contain; border-radius: var(--r-md); box-shadow: var(--shadow-lg); cursor: default; }
 .media-viewer-actions { position: fixed; top: 16px; right: 16px; display: flex; gap: var(--sp-2); }
+/* The viewer's buttons sit over the window's title-bar strip, which is a drag region in every
+   view: without this the window's drag area swallows hover and clicks (Copy did nothing).
+   Same for dialogs and the command palette, whose top edge can reach that strip. */
+.media-viewer, .media-viewer-actions, .media-viewer-btn, .modal-overlay, .palette-overlay { -webkit-app-region: no-drag; }
 .media-viewer-btn { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border: none; border-radius: var(--r-full); background: var(--glass); color: var(--surface-white); cursor: pointer; }
 .media-viewer-btn:hover { background: var(--glass-hover); }
 /* A media item = thumbnail (opens the lightbox) + a link below (opens the artifact viewer). */
