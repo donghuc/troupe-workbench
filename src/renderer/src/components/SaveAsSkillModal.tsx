@@ -37,13 +37,13 @@ export default function SaveAsSkillModal({ content, cwd, onClose, onSaved }: Pro
       <Button variant="primary" disabled={!name.trim() || !body.trim() || busy} onClick={save}>Save skill</Button>
     </>}>
       <label className="field-label">Name</label>
-      <input className="field-input" autoFocus value={name} placeholder="e.g. Portfolio review" onChange={(e) => setName(e.target.value)} />
+      <input className="field-input" autoFocus value={name} placeholder="e.g. Release notes" onChange={(e) => setName(e.target.value)} />
       <label className="field-label">Description <span className="field-optional">(when to use it)</span></label>
-      <input className="field-input" value={description} placeholder="e.g. Review a portfolio and flag rebalancing actions" onChange={(e) => setDescription(e.target.value)} />
+      <input className="field-input" value={description} placeholder="e.g. Turn a list of changes into short release notes" onChange={(e) => setDescription(e.target.value)} />
       <label className="field-label">Instructions</label>
       <textarea className="field-textarea" value={body} onChange={(e) => setBody(e.target.value)} />
       <label className="field-label">Auto-apply triggers <span className="field-optional">(optional)</span></label>
-      <input className="field-input" value={triggers} placeholder="e.g. portfolio, rebalance" onChange={(e) => setTriggers(e.target.value)} />
+      <input className="field-input" value={triggers} placeholder="e.g. release notes, changelog" onChange={(e) => setTriggers(e.target.value)} />
       <label className="field-label">Scope</label>
       <select className="field-input" value={scope} onChange={(e) => setScope(e.target.value as SkillScope)}>
         <option value="global">Global — all projects</option>

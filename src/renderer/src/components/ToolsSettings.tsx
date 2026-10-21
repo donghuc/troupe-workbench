@@ -26,6 +26,8 @@ interface Props {
   chromeAccess: boolean; setChromeAccess: (v: boolean) => void
 }
 
+const listWords = (xs: string[]): string => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`)
+
 // Settings ▸ Tools (D-077): the one place MCP servers and built-in tool access are
 // switched on or off — for every project. The chat side panel only shows what's active.
 export default function ToolsSettings({ agents, mcpOff, setMcpOff, webAccess, setWebAccess, shellAccess, setShellAccess, shellSandbox, setShellSandbox, shellDomains, setShellDomains, cliAccess, setCliAccess, chromeAccess, setChromeAccess }: Props) {
@@ -50,15 +52,16 @@ export default function ToolsSettings({ agents, mcpOff, setMcpOff, webAccess, se
     setMcpOff(on ? mcpOff.filter((k) => !keys.includes(k)) : [...new Set([...mcpOff, ...keys])])
   }
   const remove = async (name: string) => {
-    if (!(await confirmDialog({ title: 'Remove MCP server?', message: `“${name}” is removed from Claude and Codex.`, confirmLabel: 'Remove' }))) return
+    if (!(await confirmDialog({ title: 'Remove MCP server?', message: `“${name}” is removed from Claude, Codex and Grok (Grok also loads Claude’s servers).`, confirmLabel: 'Remove' }))) return
     setRemoving(name)
     const r = await api.system.mcpRemove(name).catch(failed('Remove MCP server'))
     if (r && !r.ok) reportError('Remove MCP server', r.error || 'Failed.')
     else if (r?.warning) notify(r.warning)
+    else if (r?.removedFrom?.length) notify(`Removed “${name}” from ${listWords(r.removedFrom)}.`)
     setRemoving(null); load()
   }
 
-  const row = (m: McpServer, opts: { removable?: boolean; indent?: boolean } = {}) => {
+  const row = (m: McpServer, opts: { removable?: boolean; indent?: boolean; noSwitch?: boolean } = {}) => {
     const d = mcpDisplay(m.name)
     const on = isOn(m.name)
     return (
@@ -77,7 +80,7 @@ export default function ToolsSettings({ agents, mcpOff, setMcpOff, webAccess, se
             {removing === m.name ? <span className="activity-spinner spinner-xs" /> : <Icon name="close" size="sm" />}
           </IconButton>
         )}
-        <Switch on={on} label={`${d.label} ${on ? 'on' : 'off'}`} onChange={(v) => setOn([m.name], v)} />
+        {!opts.noSwitch && <Switch on={on} label={`${d.label} ${on ? 'on' : 'off'}`} onChange={(v) => setOn([m.name], v)} />}
       </div>
     )
   }
@@ -101,19 +104,38 @@ export default function ToolsSettings({ agents, mcpOff, setMcpOff, webAccess, se
       {loading && !tools && <div className="skeleton-stack"><div className="skeleton skeleton-row" /><div className="skeleton skeleton-row short" /></div>}
       {g && tools!.mcp.length === 0 && <p className="field-hint">No MCP servers set up for {agentEntry(agent).label}.</p>}
 
-      {g && g.own.length > 0 && (
+      {agent === 'grok' && tools && tools.mcp.length > 0 && (() => {
+        // D-133: Grok can't leave out one server for a run, so its servers switch on and off together.
+        const names = tools.mcp.map((m) => m.name)
+        const on = names.some(isOn)
+        return (
+          <div>
+            <div className="settings-group">
+              <div className={`settings-row tools-row${on ? '' : ' off'}`}>
+                <div className="settings-row-text">
+                  <div className="settings-row-title">Let Grok use MCP servers</div>
+                  <div className="settings-row-sub">Grok can’t leave out a single server, so these switch on and off together. To drop one for good, remove it here (Claude’s servers) or run <code>grok mcp remove &lt;name&gt;</code>.</div>
+                </div>
+                <Switch on={on} label={`Grok MCP servers ${on ? 'on' : 'off'}`} onChange={(v) => setOn(names, v)} />
+              </div>
+              {tools.mcp.map((m) => row({ ...m, status: on ? m.status : 'unknown' }, { indent: true, noSwitch: true, removable: !!m.detail?.startsWith('From Claude') }))}
+            </div>
+          </div>
+        )
+      })()}
+      {agent !== 'grok' && g && g.own.length > 0 && (
         <div>
           <div className="tools-group-label">Your servers</div>
           <div className="settings-group">{g.own.map((m) => row(m, { removable: true }))}</div>
         </div>
       )}
-      {g && g.connectors.length > 0 && (
+      {agent !== 'grok' && g && g.connectors.length > 0 && (
         <div>
           <div className="tools-group-label">claude.ai connectors <span className="tools-group-hint">· connect or remove them on claude.ai</span></div>
           <div className="settings-group">{g.connectors.map((m) => row(m))}</div>
         </div>
       )}
-      {g && g.plugins.length > 0 && (
+      {agent !== 'grok' && g && g.plugins.length > 0 && (
         <div>
           <div className="tools-group-label">Plugins <span className="tools-group-hint">· install or remove with /plugin in Claude Code</span></div>
           <div className="settings-group">

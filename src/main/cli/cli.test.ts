@@ -39,7 +39,7 @@ const P = (o: Record<string, string>) => new URLSearchParams(o)
 function seed(): void {
   const d = testDb(); const now = Date.now()
   d.prepare(`INSERT INTO projects (id, name, folder_path, created_at, last_opened_at) VALUES ('p-sandbox-0001', 'Workbench sandbox', '/tmp/wb', ?, ?)`).run(now, now)
-  d.prepare(`INSERT INTO projects (id, name, created_at, last_opened_at) VALUES ('p-finance-0002', 'Personal finance', ?, ?)`).run(now, now)
+  d.prepare(`INSERT INTO projects (id, name, created_at, last_opened_at) VALUES ('p-proj-0002', 'My project', ?, ?)`).run(now, now)
 }
 function reply(chatId: string, text: string): void {
   const b = busy.get(chatId)!; busy.delete(chatId)
@@ -53,7 +53,7 @@ describe('cli commands (D-117)', () => {
     const r = await runCliCommand('projects', P({}))
     expect(r.status).toBe(200)
     expect(r.text).toContain('Workbench sandbox  (0 chats)  /tmp/wb')
-    expect((await runCliCommand('chats', P({ project: 'finance' }))).text).toBe('No chats in this project.')
+    expect((await runCliCommand('chats', P({ project: 'project' }))).text).toBe('No chats in this project.')
     expect((await runCliCommand('chats', P({ project: 'nope' }))).status).toBe(404)
   })
 
@@ -127,7 +127,7 @@ describe.skipIf(process.platform === 'win32')('troupe script over the socket (D-
     resetTestDb(); seed(); busy.clear(); started.length = 0
     await startCliServer(sock)
     expect(statSync(sock).mode & 0o777).toBe(0o600)
-    expect((await troupe(['projects'])).out).toContain('Personal finance')
+    expect((await troupe(['projects'])).out).toContain('My project')
     const sent = await troupe(['send', 'sandbox', 'quote "this" & that\nsecond line', '--agent', 'codex', '--json'])
     expect(sent.code).toBe(0)
     const { run, chat } = JSON.parse(sent.out)

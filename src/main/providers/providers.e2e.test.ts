@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
-import { mkdtempSync, writeFileSync, chmodSync, readFileSync, mkdirSync } from 'fs'
+import { mkdtempSync, writeFileSync, chmodSync, readFileSync, mkdirSync, existsSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { testDb } from '../testing/memoryDb'
@@ -11,7 +11,7 @@ const tmp = mkdtempSync(join(tmpdir(), 'wb-prov-'))
 vi.mock('electron', () => ({ app: { getPath: () => tmp } }))
 vi.mock('../database/db', () => ({ getDb: () => testDb() }))
 vi.mock('../util/logger', () => ({ logInfo: () => {}, logWarn: () => {}, logError: () => {} }))
-vi.mock('../tools/toolsService', () => ({ configuredClaudeMcpNames: () => [], liveClaudeMcpNames: () => [] }))
+vi.mock('../tools/toolsService', () => ({ configuredClaudeMcpNames: () => [], liveClaudeMcpNames: () => [], grokServers: () => [] }))
 
 const bin = join(tmp, 'bin'); const project = join(tmp, 'project'); const rec = join(tmp, 'rec')
 const fake = (name: string, frames: unknown[], exit = 0, stderr = '') => {
@@ -109,7 +109,13 @@ describe.skipIf(process.platform === 'win32')('providers through CliProcess (D-0
     const evs = await collect(new GrokProvider().run(req()))
     expect(evs.filter((e) => e.type === 'text_delta').map((e: any) => e.text).join('')).toContain('Four.')
     expect(evs.at(-1)?.type).toBe('complete')
-    expect(recorded('grok').argv).toContain('-p')
+    // D-133: the prompt goes in a file, deleted afterwards; the fixed rules go in --rules
+    const argv = recorded('grok').argv
+    const file = argv[argv.indexOf('--prompt-file') + 1]
+    expect(argv).not.toContain('-p')
+    expect(file).toMatch(/troupe-grok-.*\.md$/)
+    expect(existsSync(file)).toBe(false)
+    expect(argv).toContain('--rules')
   })
   it('Grok in Auto pre-approves its file tools; a cancelled turn says so (D-121)', async () => {
     fake('grok', [{ text: 'I will write facts.md now.', stopReason: 'cancelled', sessionId: 'k2' }])
@@ -121,6 +127,23 @@ describe.skipIf(process.platform === 'win32')('providers through CliProcess (D-0
     expect(argv[argv.indexOf('--tools') + 1]).toContain('write')
     expect(argv[argv.indexOf('--tools') + 1]).not.toContain('run_terminal_command')
     expect(evs.filter((e) => e.type === 'text_delta').map((e: any) => e.text).join('')).toMatch(/Grok stopped before finishing \(`cancelled`\)/)
+  })
+  it('an older Grok without --prompt-file / --rules gets -p with the rules in the prompt (D-133)', async () => {
+    const f = join(bin, 'grok')
+    writeFileSync(f, `#!/usr/bin/env node
+const a = process.argv.slice(2)
+const bad = ['--prompt-file', '--rules', '--disable-web-search'].find((x) => a.includes(x))
+if (bad) { process.stderr.write("error: unexpected argument '" + bad + "' found\\n"); process.exit(2) }
+require('fs').writeFileSync(${JSON.stringify(join(rec, 'grok'))}, JSON.stringify({ argv: a, stdin: '' }))
+console.log(JSON.stringify({ text: 'Old grok.', sessionId: 'k3' }))`)
+    chmodSync(f, 0o755)
+    const { GrokProvider } = await import('./GrokProvider')
+    const evs = await collect(new GrokProvider().run(req({ permissionMode: 'auto' })))
+    expect(evs.filter((e) => e.type === 'text_delta').map((e: any) => e.text).join('')).toContain('Old grok.')
+    const argv = recorded('grok').argv
+    expect(argv).toContain('-p')
+    expect(argv).not.toContain('--rules')
+    expect(argv[argv.indexOf('-p') + 1]).toContain('<workbench_context>')
   })
   it('Custom (text): prompt as one argument, context preamble, plain text streamed', async () => {
     fake('mytool', ['Four.'])

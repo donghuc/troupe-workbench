@@ -4,7 +4,7 @@ vi.mock('../util/logger', () => ({ logInfo: () => {}, logError: () => {}, logWar
 import { mkdtempSync, mkdirSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-const { grokStopNote, grokModeRule, grokPermFlags, grokPermFlagsLegacy, grokToolsListRejected, grokBlockedTool, withGrokDependants, learnGrokRequirements } = await import('./GrokProvider')
+const { grokStopNote, grokModeRule, grokPermFlags, grokPermFlagsLegacy, grokToolsListRejected, grokRejectedFlag, grokBlockedTool, withGrokDependants, learnGrokRequirements } = await import('./GrokProvider')
 const { PERMISSION_BLOCKED_RE } = await import('../../shared/collabRecovery')
 
 describe('Grok stop reasons and the Auto rule (D-121)', () => {
@@ -23,7 +23,7 @@ describe('Grok stop reasons and the Auto rule (D-121)', () => {
   })
 
   it('names the tool a cancelled turn was blocked on, in words the orchestrator recognises', async () => {
-    const home = mkdtempSync(join(tmpdir(), 'gh-')); const cwd = '/Users/x/Dropbox/AI workflow/Workbench'
+    const home = mkdtempSync(join(tmpdir(), 'gh-')); const cwd = '/Users/x/My Projects/App'
     const dir = join(home, '.grok', 'sessions', encodeURIComponent(cwd), 's1'); mkdirSync(dir, { recursive: true })
     writeFileSync(join(dir, 'events.jsonl'), [
       { type: 'permission_resolved', tool_name: 'read_file', decision: 'allow' },
@@ -65,5 +65,18 @@ describe('Grok stop reasons and the Auto rule (D-121)', () => {
     expect(learnGrokRequirements(err)).toEqual(['scheduler_list', 'exit_plan_mode', 'monitor'])
     expect(learnGrokRequirements(err)).toEqual([])                       // already known: no second retry
     expect(grokPermFlagsLegacy('auto', { web: true }).at(-1)).toContain('monitor')
+  })
+  it('MCP off for Grok as a whole; unknown newer options are remembered once (D-133)', () => {
+    const auto = grokPermFlags('auto', { web: true, mcpOff: true })
+    expect(auto.join(' ')).not.toContain('MCPTool --allow')
+    expect(auto[auto.indexOf('--tools') + 1]).not.toContain('use_tool')
+    expect(auto.slice(-2)).toEqual(['--deny', 'MCPTool'])
+    expect(grokPermFlags('auto', { web: true })[grokPermFlags('auto', { web: true }).indexOf('--tools') + 1]).toContain('use_tool')
+    const full = grokPermFlagsLegacy('full', { web: true, mcpOff: true })
+    expect(full.join(' ')).toContain('search_tool,use_tool')
+    expect(full.slice(-2)).toEqual(['--deny', 'MCPTool'])
+    expect(grokRejectedFlag("error: unexpected argument '--disable-web-search' found")).toBe('--disable-web-search')
+    expect(grokRejectedFlag("error: unexpected argument '--disable-web-search' found")).toBeNull()   // once
+    expect(grokRejectedFlag("error: unexpected argument '--frobnicate' found")).toBeNull()           // not ours
   })
 })

@@ -142,7 +142,7 @@ export interface McpAddInput {
   headers?: McpKeyVal[]
   scope: McpScope
 }
-export interface McpMutationResult { ok: boolean; error?: string; warning?: string }
+export interface McpMutationResult { ok: boolean; error?: string; warning?: string; removedFrom?: string[] }
 
 export interface AgentTools {
   provider: ProviderId

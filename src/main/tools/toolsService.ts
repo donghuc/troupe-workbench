@@ -45,14 +45,20 @@ function codexMcp(): McpServer[] {
   } catch { return [] }
 }
 
-// Best-effort: Grok reads MCP servers from ~/.grok/config.toml [mcp_servers.<name>]
-// (same convention as Codex). Empty if the file/format differs.
-function grokMcp(): McpServer[] {
+// Grok's MCP servers (D-133): its own ~/.grok/config.toml [mcp_servers.<name>] AND Claude's
+// servers — removing one through Claude removed it from Grok too (Hien's test, 2026-10-21).
+// Best-effort: empty if a file is missing or its format differs.
+export function grokServers(cwd?: string): { name: string; source: 'grok' | 'claude' }[] {
+  const out: { name: string; source: 'grok' | 'claude' }[] = []
   try {
     const toml = readFileSync(join(homedir(), '.grok', 'config.toml'), 'utf8')
-    const names = [...toml.matchAll(/^\s*\[mcp_servers\.([^\]]+)\]/gm)].map((m) => m[1].trim())
-    return names.map((name) => ({ name, status: 'unknown' as const }))
-  } catch { return [] }
+    for (const m of toml.matchAll(/^\s*\[mcp_servers\.([^\]]+)\]/gm)) out.push({ name: m[1].trim().replace(/^"|"$/g, ''), source: 'grok' })
+  } catch { /* no grok config */ }
+  for (const name of configuredClaudeMcpNames(cwd)) if (!out.some((o) => o.name === name)) out.push({ name, source: 'claude' })
+  return out
+}
+function grokMcp(cwd?: string): McpServer[] {
+  return grokServers(cwd).map(({ name, source }) => ({ name, status: 'unknown' as const, detail: source === 'grok' ? 'From Grok’s own config (~/.grok/config.toml)' : 'From Claude’s setup — Grok loads Claude’s servers too' }))
 }
 
 // Fast (no-spawn) read of the Claude MCP server names configured for this cwd, from
@@ -71,7 +77,7 @@ export function configuredClaudeMcpNames(cwd?: string): string[] {
 
 export async function listAgentTools(provider: ProviderId, cwd?: string): Promise<AgentTools> {
   const builtin = isProviderId(provider) ? agentEntry(provider).builtinTools : []
-  const mcp = provider === 'claude-code' ? await claudeMcp(cwd) : provider === 'grok' ? grokMcp() : provider === 'gemini' ? [] : codexMcp()   // Gemini's MCP list: not read yet (D-079)
+  const mcp = provider === 'claude-code' ? await claudeMcp(cwd) : provider === 'grok' ? grokMcp(cwd) : provider === 'gemini' ? [] : codexMcp()   // Gemini's MCP list: not read yet (D-079)
   return { provider, builtin, mcp }
 }
 
@@ -147,9 +153,19 @@ function withCodexNote(r: McpMutationResult, codexErr: string | null, verb: 'Add
   return r.ok ? { ok: true, warning: `${verb} for Claude, but not for Codex: ${codexErr}` } : { ...r, error: `${r.error ?? 'Failed.'} Codex: ${codexErr}` }
 }
 
-export function removeMcpServer(name: string, scope?: string, cwd?: string): Promise<McpMutationResult> {
+export async function removeMcpServer(name: string, scope?: string, cwd?: string): Promise<McpMutationResult> {
   const args = ['mcp', 'remove', name]
   if (scope) args.push('-s', scope)
+  const inGrok = grokServers(cwd).some((g) => g.name === name && g.source === 'grok')
   const codexErr = CODEX_NAME_OK(name) ? applyCodexEdit(name, null) : null
-  return runClaude(args, cwd).then((r) => withCodexNote(r, codexErr, 'Removed'))
+  const r = withCodexNote(await runClaude(args, cwd), codexErr, 'Removed')
+  if (!r.ok) return r
+  // D-133: say where it went. Grok loads Claude's servers, so removing it from Claude removes it
+  // from Grok too — unless it's also in Grok's own config: remove it there with Grok's own command.
+  let grokErr: string | null = null
+  if (inGrok) grokErr = await new Promise<string | null>((done) => execFileCli('grok', ['mcp', 'remove', name], { env: buildEnv(), cwd, timeout: 30000 }, (err, out, errOut) => done(err ? (errOut || out || err.message).trim().slice(0, 200) : null)))
+  if (grokErr) logError(`[grok-config] remove ${name} failed: ${grokErr}`)
+  const removedFrom = ['Claude', ...(codexErr ? [] : ['Codex']), ...(grokErr ? [] : ['Grok'])]
+  const grokNote = grokErr ? `Grok still has “${name}” in its own config. Remove it in ${process.platform === 'win32' ? 'a terminal' : 'Terminal'}: grok mcp remove ${name}` : ''
+  return { ...r, removedFrom, ...(grokNote ? { warning: [r.warning, grokNote].filter(Boolean).join(' ') } : {}) }
 }

@@ -20,6 +20,15 @@ Each version here matches a packaged build — the dmg is named
 
 ## [Unreleased]
 
+## [2.14.1] - 2026-10-21
+
+### Changed
+- Grok gets its prompt from a file instead of the command line: no length limit (Windows capped it), and the prompt no longer shows in the process list.
+- Grok's ground rules (the work folder, what the permission mode allows) go into its system prompt instead of the top of your message.
+- Web access off in Settings ▸ Tools now also switches off Grok's own web search.
+- Settings ▸ Tools ▸ Grok shows where each MCP server comes from (Grok's config or Claude's — Grok loads both) and has one switch for them all, because Grok can't leave out a single server. Off means Grok gets no MCP tools.
+- Removing an MCP server removes it from Grok's own config too, and says which agents it was removed from.
+
 ## [2.14.0] - 2026-10-21
 
 ### Added

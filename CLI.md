@@ -15,10 +15,10 @@ Troupe must be open. The command talks to it over a private socket that only you
 **Projects and chats**
 ```
 troupe projects                          # list projects
-troupe context "Personal finance"        # a project's instructions and memory (read-only)
+troupe context "My project"              # a project's instructions and memory (read-only)
 troupe chats "Workbench sandbox"         # a project's chats (name, part of a name, or id)
 troupe show <chat> --last 5              # read the last messages
-troupe search "rebalance"                # search every chat
+troupe search "release notes"            # search every chat
 troupe rename <chat> "CLI test"          # rename a chat
 troupe delete <chat>                     # delete a chat started from the command line
 troupe agents                            # agents you can use, and their models
@@ -28,8 +28,8 @@ troupe agents                            # agents you can use, and their models
 ```
 troupe send "Workbench sandbox" "summarise PLAN.md"        # new chat → prints a run id
 troupe send <chat> "now draft the plan" --agent codex      # continue a chat
-troupe send "Personal finance" "what do you see?" --attach ~/Desktop/ssi.png
-troupe send "Idea Research" "remote work is better" --think debate
+troupe send "My project" "what do you see?" --attach ~/Desktop/screenshot.png
+troupe send "Research" "remote work is better" --think debate
 troupe status <run> --wait 600           # running / done / error / stopped, the reply, and files changed
 troupe stop <run>
 troupe runs --since 10:00                # what ran since 10:00, and whether it failed (also 2h, 1d, a date)
@@ -46,14 +46,14 @@ troupe schedules run "Positive news"     # run one now
 
 **Project files (read-only)**
 ```
-troupe files "Personal finance" [folder] # list files
-troupe cat "Personal finance" docs/portfolio-management.md
+troupe files "My project" [folder]       # list files
+troupe cat "My project" docs/notes.md
 ```
 Text files only, up to 5 MB, inside the project folder. Keys and credentials (`.env`, `*.pem`, `id_rsa`, `.ssh/` …) are never listed, shown or attached.
 
 **Collab**
 ```
-troupe collab start "Workbench sandbox" "Build a rebalancing sheet"   # the Planner drafts a plan
+troupe collab start "Workbench sandbox" "Draft a project checklist"   # the Planner drafts a plan
 troupe collab status <run|chat> --wait 600   # plan, task progress, and fixes when it's stuck
 troupe collab approve <run>                  # run the plan        (troupe collab reject <run> to drop it)
 troupe collab fix <run> <n>                  # apply the Planner's fix n

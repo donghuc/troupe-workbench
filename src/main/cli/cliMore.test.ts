@@ -53,14 +53,14 @@ const dir = mkdtempSync(join(tmpdir(), 'tm-'))
 const proj = join(dir, 'proj')
 function seed(): void {
   mkdirSync(join(proj, 'docs'), { recursive: true })
-  writeFileSync(join(proj, 'docs', 'portfolio-management.md'), '# Portfolio\nHold 60/40.\n')
+  writeFileSync(join(proj, 'docs', 'notes.md'), '# Notes\nKeep it short.\n')
   writeFileSync(join(proj, '.env'), 'API_KEY=secret\n')
   writeFileSync(join(proj, 'logo.bin'), Buffer.from([0, 1, 2, 3, 0, 255]))
   const d = testDb(); const now = Date.now()
-  d.prepare(`INSERT INTO projects (id, name, folder_path, instructions, memory, created_at, last_opened_at) VALUES ('p-fin-0001', 'Personal finance', ?, 'Be brief.', 'Risk: moderate.', ?, ?)`).run(proj, now, now)
+  d.prepare(`INSERT INTO projects (id, name, folder_path, instructions, memory, created_at, last_opened_at) VALUES ('p-proj-0001', 'My project', ?, 'Be brief.', 'Tone: friendly.', ?, ?)`).run(proj, now, now)
 }
 async function chatWithReply(text: string, reply: string, actions: unknown[] = []): Promise<{ run: string; chat: string }> {
-  const r = (await runCliCommand('send', P({ to: 'finance', message: text }))).json as { run: string; chat: string }
+  const r = (await runCliCommand('send', P({ to: 'project', message: text }))).json as { run: string; chat: string }
   const b = busy.get(r.chat)!; busy.delete(r.chat)
   appendMessage({ conversationId: r.chat, role: 'assistant', provider: b.provider as never, content: reply, metadata: { actions } })
   return r
@@ -71,15 +71,15 @@ beforeEach(() => { resetTestDb(); seed(); busy.clear(); started.length = 0; fire
 describe('runs and the run log (D-118)', () => {
   it('lists what finished since a time, newest first, filtered by project or source', async () => {
     const base = { kind: 'chat' as const, chat: 'c', title: 't', agents: ['claude-code'], error: null, files: [] }
-    appendRunLog({ ...base, run: 'a', project: 'Personal finance', source: 'schedule', startedAt: 1, finishedAt: Date.now() - 3 * 3600_000, state: 'done' })
-    appendRunLog({ ...base, run: 'b', project: 'Personal finance', source: 'cli', startedAt: 1, finishedAt: Date.now() - 600_000, state: 'error', error: 'Codex timed out' })
+    appendRunLog({ ...base, run: 'a', project: 'My project', source: 'schedule', startedAt: 1, finishedAt: Date.now() - 3 * 3600_000, state: 'done' })
+    appendRunLog({ ...base, run: 'b', project: 'My project', source: 'cli', startedAt: 1, finishedAt: Date.now() - 600_000, state: 'error', error: 'Codex timed out' })
     appendRunLog({ ...base, run: 'c', project: 'Other', source: 'app', startedAt: 1, finishedAt: Date.now() - 60_000, state: 'done' })
     expect(readRunLog(0).map((e) => e.run)).toEqual(['c', 'b', 'a'])
     const r = await runCliCommand('runs', P({ since: '1h' }))
     expect((r.json as { run: string }[]).map((e) => e.run)).toEqual(['c', 'b'])
     expect(r.text).toContain('ERROR')
     expect(r.text).toContain('error: Codex timed out')
-    expect(((await runCliCommand('runs', P({ since: '1d', project: 'finance' }))).json as unknown[]).length).toBe(2)
+    expect(((await runCliCommand('runs', P({ since: '1d', project: 'project' }))).json as unknown[]).length).toBe(2)
     expect(((await runCliCommand('runs', P({ since: '1d', source: 'schedule' }))).json as unknown[]).length).toBe(1)
     expect((await runCliCommand('runs', P({ since: 'whenever' }))).status).toBe(400)
   })
@@ -87,7 +87,7 @@ describe('runs and the run log (D-118)', () => {
 
 describe('busy chats (D-118)', () => {
   it('a busy chat answers 409 at once, or --wait-free queues the message until the chat is free', async () => {
-    const { chat } = (await runCliCommand('send', P({ to: 'finance', message: 'one' }))).json as { chat: string }
+    const { chat } = (await runCliCommand('send', P({ to: 'project', message: 'one' }))).json as { chat: string }
     const r = await runCliCommand('send', P({ to: chat, message: 'two' }))
     expect(r.status).toBe(409)
     expect(r.text).toMatch(/--wait-free/)
@@ -100,7 +100,7 @@ describe('busy chats (D-118)', () => {
 
 describe('status lists the files a run changed (D-118)', () => {
   it('project-relative, once each, from file events and write tools only', async () => {
-    const { run } = await chatWithReply('rebalance', 'Done.', [
+    const { run } = await chatWithReply('tidy the docs', 'Done.', [
       { kind: 'file', label: 'a.md', path: join(proj, 'docs', 'a.md'), at: 1 },
       { kind: 'tool', label: 'Edit', path: join(proj, 'docs', 'a.md'), at: 2 },
       { kind: 'tool', label: 'Read', path: join(proj, 'docs', 'b.md'), at: 3 },
@@ -118,7 +118,7 @@ describe('rename and delete (D-118)', () => {
     expect((await runCliCommand('rename', P({ chat, title: 'CLI test' }))).text).toBe('Renamed to "CLI test".')
     // a chat the user started in the app
     const d = testDb(); const now = Date.now()
-    d.prepare(`INSERT INTO conversations (id, project_id, title, provider, created_at, updated_at) VALUES ('app-chat-0001', 'p-fin-0001', 'Mine', 'claude-code', ?, ?)`).run(now, now)
+    d.prepare(`INSERT INTO conversations (id, project_id, title, provider, created_at, updated_at) VALUES ('app-chat-0001', 'p-proj-0001', 'Mine', 'claude-code', ?, ?)`).run(now, now)
     appendMessage({ conversationId: 'app-chat-0001', role: 'user', content: 'from the window' })
     const refused = await runCliCommand('delete', P({ chat: 'app-chat-0001' }))
     expect(refused.status).toBe(403)
@@ -126,35 +126,35 @@ describe('rename and delete (D-118)', () => {
     expect((await runCliCommand('show', P({ chat }))).status).toBe(404)
   })
   it('refuses to delete a chat that is running', async () => {
-    const { chat } = (await runCliCommand('send', P({ to: 'finance', message: 'x' }))).json as { chat: string }
+    const { chat } = (await runCliCommand('send', P({ to: 'project', message: 'x' }))).json as { chat: string }
     expect((await runCliCommand('delete', P({ chat }))).status).toBe(409)
   })
 })
 
 describe('read-only project files (D-118)', () => {
   it('lists files without secrets and prints text files', async () => {
-    const f = await runCliCommand('files', P({ project: 'finance' }))
-    expect(f.text).toContain('docs/portfolio-management.md')
+    const f = await runCliCommand('files', P({ project: 'project' }))
+    expect(f.text).toContain('docs/notes.md')
     expect(f.text).not.toContain('.env')
-    expect((await runCliCommand('cat', P({ project: 'finance', path: 'docs/portfolio-management.md' }))).text).toBe('# Portfolio\nHold 60/40.')
+    expect((await runCliCommand('cat', P({ project: 'project', path: 'docs/notes.md' }))).text).toBe('# Notes\nKeep it short.')
   })
   it('refuses secrets, binaries, missing files and paths outside the project', async () => {
-    expect((await runCliCommand('cat', P({ project: 'finance', path: '.env' }))).status).toBe(403)
-    expect((await runCliCommand('cat', P({ project: 'finance', path: 'logo.bin' }))).text).toMatch(/isn't a text file/)
-    expect((await runCliCommand('cat', P({ project: 'finance', path: 'nope.md' }))).status).toBe(404)
-    expect((await runCliCommand('cat', P({ project: 'finance', path: '../../etc/passwd' }))).status).toBe(403)
+    expect((await runCliCommand('cat', P({ project: 'project', path: '.env' }))).status).toBe(403)
+    expect((await runCliCommand('cat', P({ project: 'project', path: 'logo.bin' }))).text).toMatch(/isn't a text file/)
+    expect((await runCliCommand('cat', P({ project: 'project', path: 'nope.md' }))).status).toBe(404)
+    expect((await runCliCommand('cat', P({ project: 'project', path: '../../etc/passwd' }))).status).toBe(403)
   })
 })
 
 describe('attachments (D-118)', () => {
   it('copies files into the project and passes text inline, images by path', async () => {
     const src = mkdtempSync(join(tmpdir(), 'att-'))
-    writeFileSync(join(src, 'notes.txt'), 'buy VTI')
-    writeFileSync(join(src, 'ssi.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 0]))
-    const r = await runCliCommand('send', P({ to: 'finance', message: 'see these', attach: [join(src, 'notes.txt'), join(src, 'ssi.png')] }))
+    writeFileSync(join(src, 'notes.txt'), 'draft outline')
+    writeFileSync(join(src, 'screenshot.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 0]))
+    const r = await runCliCommand('send', P({ to: 'project', message: 'see these', attach: [join(src, 'notes.txt'), join(src, 'screenshot.png')] }))
     expect(r.status).toBe(200)
     const atts = started[0].attachments as { path: string; content?: string; image?: boolean }[]
-    expect(atts[0]).toMatchObject({ content: 'buy VTI', viewable: true })
+    expect(atts[0]).toMatchObject({ content: 'draft outline', viewable: true })
     expect(atts[1]).toMatchObject({ image: true })
     // D-126: in the new chat's own folder
     const chat = (r.json as { chat: string }).chat
@@ -163,40 +163,40 @@ describe('attachments (D-118)', () => {
     expect(existsSync(join(proj, atts[1].path))).toBe(true)
   })
   it('refuses relative paths, missing files and credentials', async () => {
-    expect((await runCliCommand('send', P({ to: 'finance', message: 'x', attach: 'notes.txt' }))).text).toMatch(/must be absolute/)
-    expect((await runCliCommand('send', P({ to: 'finance', message: 'x', attach: '/nope/file.txt' }))).status).toBe(404)
-    expect((await runCliCommand('send', P({ to: 'finance', message: 'x', attach: join(proj, '.env') }))).text).toMatch(/credentials/)
+    expect((await runCliCommand('send', P({ to: 'project', message: 'x', attach: 'notes.txt' }))).text).toMatch(/must be absolute/)
+    expect((await runCliCommand('send', P({ to: 'project', message: 'x', attach: '/nope/file.txt' }))).status).toBe(404)
+    expect((await runCliCommand('send', P({ to: 'project', message: 'x', attach: join(proj, '.env') }))).text).toMatch(/credentials/)
     expect(started).toHaveLength(0)
   })
 })
 
 describe('search, context, schedules, --think (D-118)', () => {
   it('searches chats and shows project context read-only', async () => {
-    await chatWithReply('portfolio rebalance idea', 'Shift to bonds.')
-    expect((await runCliCommand('search', P({ query: 'rebalance' }))).text).toContain('Personal finance')
-    const c = await runCliCommand('context', P({ project: 'finance' }))
+    await chatWithReply('release checklist idea', 'Add a smoke test.')
+    expect((await runCliCommand('search', P({ query: 'checklist' }))).text).toContain('My project')
+    const c = await runCliCommand('context', P({ project: 'project' }))
     expect(c.text).toContain('## Instructions\nBe brief.')
-    expect(c.text).toContain('Risk: moderate.')
+    expect(c.text).toContain('Tone: friendly.')
   })
   it('lists schedules and runs one now', async () => {
     const now = Date.now()
-    testDb().prepare(`INSERT INTO schedules (id, project_id, title, prompt, provider, kind, interval_min, at_min, enabled, target, next_run_at, created_at) VALUES ('s-daily-01', 'p-fin-0001', 'Positive news', 'p', 'claude-code', 'daily', 0, 545, 1, 'new', ?, ?)`).run(now + 3600_000, now)
+    testDb().prepare(`INSERT INTO schedules (id, project_id, title, prompt, provider, kind, interval_min, at_min, enabled, target, next_run_at, created_at) VALUES ('s-daily-01', 'p-proj-0001', 'Positive news', 'p', 'claude-code', 'daily', 0, 545, 1, 'new', ?, ?)`).run(now + 3600_000, now)
     const l = await runCliCommand('schedules', P({}))
-    expect(l.text).toContain('Positive news · Personal finance · Claude · daily at 09:05')
+    expect(l.text).toContain('Positive news · My project · Claude · daily at 09:05')
     const r = await runCliCommand('schedules', P({ do: 'run', task: 'positive' }))
     expect(r.status).toBe(200)
     expect(fired).toEqual(['s-daily-01'])
   })
   it('passes a thinking mode and refuses unknown ones', async () => {
-    await runCliCommand('send', P({ to: 'finance', message: 'stocks vs bonds', think: 'debate' }))
+    await runCliCommand('send', P({ to: 'project', message: 'stocks vs bonds', think: 'debate' }))
     expect(started[0]).toMatchObject({ mode: 'debate' })
-    expect((await runCliCommand('send', P({ to: 'finance', message: 'x', think: 'vibes' }))).status).toBe(400)
+    expect((await runCliCommand('send', P({ to: 'project', message: 'x', think: 'vibes' }))).status).toBe(400)
   })
 })
 
 describe('Collab from the command line (D-118)', () => {
   it('starts, shows the plan, approves; fixes and recovery go to the orchestrator', async () => {
-    const s = await runCliCommand('collab', P({ do: 'start', project: 'finance', goal: 'Build a rebalancing sheet', mode: 'auto' }))
+    const s = await runCliCommand('collab', P({ do: 'start', project: 'project', goal: 'Draft a project checklist', mode: 'auto' }))
     expect(s.status).toBe(200)
     const run = (s.json as { run: string }).run
     expect(s.text).toContain('awaiting confirmation')
@@ -220,7 +220,7 @@ describe('Collab from the command line (D-118)', () => {
     const done = await runCliCommand('runs', P({ since: '1d' }))
     expect(done.json).toMatchObject([{ run, state: 'done' }])
     expect(done.text).toMatch(/done\s+cli/)
-    expect((await runCliCommand('collab', P({ do: 'start', project: 'finance', goal: 'x', mode: 'full' }))).status).toBe(400)
+    expect((await runCliCommand('collab', P({ do: 'start', project: 'project', goal: 'x', mode: 'full' }))).status).toBe(400)
   })
 })
 
@@ -234,15 +234,15 @@ describe.skipIf(process.platform === 'win32')('troupe script, new commands over 
   it('busy is exit code 4; relative --attach paths resolve from the caller; cat and files work', async () => {
     await startCliServer(sock)
     const src = mkdtempSync(join(tmpdir(), 'cwd-')); writeFileSync(join(src, 'brief.md'), 'the brief')
-    const first = await troupe(['send', 'finance', 'one', '--attach', 'brief.md', '--json'], src)
+    const first = await troupe(['send', 'project', 'one', '--attach', 'brief.md', '--json'], src)
     expect(first.code).toBe(0)
     expect((started[0].attachments as { content: string }[])[0].content).toBe('the brief')
     const { chat } = JSON.parse(first.out)
     const again = await troupe(['send', chat, 'two'])
     expect(again.code).toBe(4)
     expect(again.err).toMatch(/already running/)
-    expect((await troupe(['cat', 'finance', 'docs/portfolio-management.md'])).out).toBe('# Portfolio\nHold 60/40.\n')
-    expect((await troupe(['files', 'finance', 'docs'])).out).toContain('docs/portfolio-management.md')
+    expect((await troupe(['cat', 'project', 'docs/notes.md'])).out).toBe('# Notes\nKeep it short.\n')
+    expect((await troupe(['files', 'project', 'docs'])).out).toContain('docs/notes.md')
     expect((await troupe(['collab', 'frobnicate', 'x'])).code).toBe(2)
     expect(readFileSync(script, 'utf8')).toContain('4 chat busy')
   })
@@ -268,10 +268,10 @@ describe('Windows troupe client and token (D-120)', () => {
     expect(denied.code).toBe(1); expect(denied.err).toMatch(/not allowed/)
     writeFileSync(tokenFile, 'right-token\n')
     const list = await troupe(['projects'])
-    expect(list.code).toBe(0); expect(list.out).toContain('Personal finance')
-    expect((await troupe(['cat', 'finance', 'docs/portfolio-management.md'])).out).toBe('# Portfolio\nHold 60/40.\n')
+    expect(list.code).toBe(0); expect(list.out).toContain('My project')
+    expect((await troupe(['cat', 'project', 'docs/notes.md'])).out).toBe('# Notes\nKeep it short.\n')
     expect((await troupe(['frobnicate'])).code).toBe(2)
-    const piped = await troupe(['send', 'finance', '-', '--json', '--new'], undefined, 'from stdin')
+    const piped = await troupe(['send', 'project', '-', '--json', '--new'], undefined, 'from stdin')
     expect(piped.code).toBe(0)
     const { chat } = JSON.parse(piped.out)
     expect(started.some((s) => s.text === 'from stdin')).toBe(true)
@@ -307,11 +307,11 @@ describe('Windows troupe client and token (D-120)', () => {
       })
       expect(open).toBe(0)
       const w = await run(['projects'])
-      expect(w.code).toBe(0); expect(w.out).toContain('Personal finance')
+      expect(w.code).toBe(0); expect(w.out).toContain('My project')
       const r = await run(['search', 'say "60/40" now', '--json'])
       expect(r.code).toBe(0)
       expect((await run(['frobnicate'])).code).toBe(2)
-      const s2 = await run(['send', 'finance', '-', '--new', '--json'], 'piped through the wrapper')
+      const s2 = await run(['send', 'project', '-', '--new', '--json'], 'piped through the wrapper')
       expect(s2.code).toBe(0)
       expect(started.some((x) => x.text === 'piped through the wrapper')).toBe(true)
     }

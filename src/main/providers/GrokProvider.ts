@@ -4,7 +4,9 @@ import { execFileCli } from '../platform/proc'
 import { writtenByOthers } from '../agent/recentWrites'
 import { logInfo, logError } from '../util/logger'
 import { promises as fsp } from 'fs'
-import { homedir } from 'os'
+import { homedir, tmpdir } from 'os'
+import { randomUUID } from 'crypto'
+import { grokServers } from '../tools/toolsService'
 import { join, resolve } from 'path'
 import type { AgentProvider } from './AgentProvider'
 import type {
@@ -15,7 +17,8 @@ import { getSetting } from '../database/settingsRepo'
 import { CliProcess, mediaFilesSince } from './cliProcess'
 import { memoryDelivery, globalMemoryDelivery } from '../context/projectMemory'
 
-// xAI's `grok` CLI (grok-build), run headless: `grok -p "<prompt>" --output-format json`.
+// xAI's `grok` CLI (grok-build), run headless: `grok --prompt-file <file> --output-format json`
+// (`-p "<prompt>"` on a Grok without --prompt-file).
 // Phase 0: non-streaming — we read the single JSON result on close and emit the whole
 // reply as one text_delta. Grok's --permission-mode mirrors Claude Code's, so we map
 // read → plan (no edits), auto → acceptEdits, full → bypassPermissions. All are
@@ -54,15 +57,26 @@ export class GrokProvider implements AgentProvider {
   async *run(req: AgentRequest, resumeSessionId?: string): AsyncIterable<AgentEvent> {
     this.cancelled = false
     const ctx = req.context
-    // Grok has no system-prompt flag → prepend context as a delimited preamble (D-003).
+    // Context goes in a delimited preamble before the prompt (D-003); since D-133 the fixed rules
+    // go in the system prompt (--rules) and the whole prompt is passed as a file.
     // Memory is always injected for Grok (no known native memory file); D-055 rule.
     const memory = memoryDelivery('grok', req.cwd ?? null, ctx?.memory ?? '') === 'injected' ? ctx?.memory : undefined
     const globalMemory = globalMemoryDelivery('grok', ctx?.globalMemory ?? '') === 'injected' ? ctx?.globalMemory : undefined
     const mode0 = req.permissionMode ?? 'auto'
-    const block = [ctx?.instructions, globalMemory, memory, ctx?.persistentContext, workFolderRules(req.cwd, req.addDirs), grokModeRule(mode0, req.toolProfile), ctx?.skillText, ctx?.snapshot, ctx?.attachmentsText].filter(Boolean).join('\n\n')
+    // D-133: the short, fixed rules (work folder, what this mode allows) go in Grok's system
+    // prompt with --rules; memory, snapshot and attachments stay in the prompt (they can be long,
+    // and a command line can't — Windows caps it near 32,000 characters).
+    const rules = [workFolderRules(req.cwd, req.addDirs), grokModeRule(mode0, req.toolProfile)].filter(Boolean).join('\n\n')
+    const rulesInPrompt = unsupportedFlags.has('--rules')
+    const block = [ctx?.instructions, globalMemory, memory, ctx?.persistentContext, rulesInPrompt ? rules : '', ctx?.skillText, ctx?.snapshot, ctx?.attachmentsText].filter(Boolean).join('\n\n')
     const prompt = block.trim()
       ? `<workbench_context>\n${block}\n</workbench_context>\n\n${req.prompt}`
       : req.prompt
+    // D-133: the prompt goes in a file (--prompt-file): no command-line length cap, and not
+    // visible in the process list. Deleted once Grok has answered.
+    const promptFile = join(tmpdir(), `troupe-grok-${randomUUID()}.md`)
+    let wrotePrompt = false
+    if (!unsupportedFlags.has('--prompt-file')) { try { await fsp.writeFile(promptFile, prompt, { mode: 0o600 }); wrotePrompt = true } catch { /* fall back to -p */ } }
 
     const mode = req.permissionMode ?? 'auto'
     // Grok mirrors Claude Code's permission modes; all three are non-interactive.
@@ -72,17 +86,31 @@ export class GrokProvider implements AgentProvider {
     // rule for them. So: auto-approve, but strip the toolset to reading + the image tools —
     // no shell, no web, no file edits. Grok saves into its session dir; the B-042 recovery
     // below copies the images into the project, where the Image service collects them.
+    const off = new Set(req.mcpOff ?? [])
+    const servers = grokServers(req.cwd)
+    // D-133: Grok has no per-run switch for one MCP server, so Settings ▸ Tools turns Grok's MCP
+    // off as a whole: when every server Grok would load is off, it gets no MCP tools at all.
+    const mcpOff = servers.length > 0 && servers.every((g) => off.has(g.name))
+    const webOn = (req.permissionMode ?? 'auto') === 'read' ? getSetting('agent_web_access') !== '0' && !!req.allowWeb : getSetting('agent_web_access') !== '0'
+    const flagOpts = { web: getSetting('agent_web_access') !== '0', allowWeb: !!req.allowWeb, mcpOff }
     const permFlags = req.toolProfile === 'image'
       // B-051: also strip its MCP gateway (search_tool/use_tool) and deny every MCP call — with
       // no shell, Grok had used the Paper MCP server to try to move its image (and edited the
       // user's Paper file) for 10 minutes.
       ? ['--always-approve', '--tools', 'read_file,list_dir,image_gen,image_edit', '--disallowed-tools', 'search_tool,use_tool', '--deny', 'MCPTool']
-      : grokPermFlags(mode, { web: getSetting('agent_web_access') !== '0', allowWeb: !!req.allowWeb })
-    const argsFor = (flags: string[]) => { const a = ['-p', prompt, '--output-format', 'json', ...flags]; if (req.model) a.push('-m', req.model); return a }
+      : grokPermFlags(mode, flagOpts)
+    const argsFor = (flags: string[]) => {
+      const a = [...(wrotePrompt && !unsupportedFlags.has('--prompt-file') ? ['--prompt-file', promptFile] : ['-p', prompt]), '--output-format', 'json', ...flags]
+      if (!rulesInPrompt && rules && !unsupportedFlags.has('--rules')) a.push('--rules', rules)
+      // Web off in Settings (or a Read-only run without web): also switch off Grok's own web search.
+      if ((req.toolProfile === 'image' || !webOn) && !unsupportedFlags.has('--disable-web-search')) a.push('--disable-web-search')
+      if (req.model) a.push('-m', req.model)
+      return a
+    }
     const common = argsFor(permFlags)
     const raw = !!process.env.WB_GROK_RAW
 
-    logInfo('[grok] run', JSON.stringify({ model: req.model || 'default', permMode: req.toolProfile === 'image' ? 'image-tools' : permMode, resume: resumeSessionId ?? null }))
+    logInfo('[grok] run', JSON.stringify({ model: req.model || 'default', permMode: req.toolProfile === 'image' ? 'image-tools' : permMode, resume: resumeSessionId ?? null, promptFile: wrotePrompt, mcpOff, web: webOn }))
     yield { type: 'status', message: 'Working…' }
     const imgSince = Date.now() - 1000
 
@@ -90,22 +118,38 @@ export class GrokProvider implements AgentProvider {
     // design — see agent/runner.ts), so --resume is effectively unused today; kept as
     // a passthrough for a future Phase-10 native-resume mode. (B-041)
     let res = await this.exec(resumeSessionId ? [...common, '--resume', resumeSessionId] : common, req.cwd)
+    // D-133: an older Grok without one of the newer options says so; drop it for the session.
+    for (let i = 0; i < 3 && res.code && !this.cancelled; i++) {
+      const flag = grokRejectedFlag(`${res.stderr}\n${res.stdout}`)
+      if (!flag) break
+      logInfo('[grok] option not supported; running without it', JSON.stringify({ flag }))
+      if (flag === '--rules') { res = { code: 1, stdout: '', stderr: '' }; break }   // the rules must reach the prompt: rebuilt below
+      const again = argsFor(permFlags)
+      res = await this.exec(resumeSessionId ? [...again, '--resume', resumeSessionId] : again, req.cwd)
+    }
+    if (unsupportedFlags.has('--rules') && !rulesInPrompt && !this.cancelled && res.code) {
+      // Re-run the whole turn with the rules folded back into the prompt.
+      await fsp.rm(promptFile, { force: true }).catch(() => {})
+      yield* this.run(req, resumeSessionId)
+      return
+    }
     // D-121: grok refuses to start a session when a tool we removed is required by one we kept
     // (test 6: exit_plan_mode needs enter_plan_mode; scheduler_list needs the scheduler). Its
     // error names each unsatisfied tool: remove those too, remember them, and start once more.
     if (res.code && req.toolProfile !== 'image' && !this.cancelled && grokToolsListRejected(`${res.stderr}\n${res.stdout}`)) {
       logInfo('[grok] --tools list refused; using the older flags', JSON.stringify({ stderr: res.stderr.slice(0, 300) }))
-      const again = argsFor(grokPermFlags(mode, { web: getSetting('agent_web_access') !== '0', allowWeb: !!req.allowWeb }))
+      const again = argsFor(grokPermFlags(mode, flagOpts))
       res = await this.exec(resumeSessionId ? [...again, '--resume', resumeSessionId] : again, req.cwd)
     }
     if (res.code && req.toolProfile !== 'image' && !this.cancelled) {
       const learned = learnGrokRequirements(`${res.stderr}\n${res.stdout}`)
       if (learned.length) {
         logInfo('[grok] removing tools whose requirements were removed', JSON.stringify(learned))
-        const again = argsFor(grokPermFlags(mode, { web: getSetting('agent_web_access') !== '0', allowWeb: !!req.allowWeb }))
+        const again = argsFor(grokPermFlags(mode, flagOpts))
         res = await this.exec(resumeSessionId ? [...again, '--resume', resumeSessionId] : again, req.cwd)
       }
     }
+    if (wrotePrompt) await fsp.rm(promptFile, { force: true }).catch(() => {})
     if (raw) logInfo('[grok] raw', JSON.stringify({ code: res.code, stdout: res.stdout.slice(0, 4000), stderr: res.stderr.slice(0, 2000) }))
     if (this.cancelled) { yield { type: 'complete', usage: {} }; return }
     const parsed = parseGrokJson(res.stdout)
@@ -241,14 +285,25 @@ const GROK_WRITE_TOOLS = ['write', 'search_replace']
 const GROK_MCP_TOOLS = ['search_tool', 'use_tool']
 const GROK_IMAGE_TOOLS = ['image_gen', 'image_edit', 'image_to_video', 'reference_to_video']
 let grokToolsListUnsupported = false
+/** Newer Grok options (D-133) this Grok rejected — not passed again this session. */
+const unsupportedFlags = new Set<string>()
+/** Grok refused an option it doesn't know ("unexpected argument '--x'"): remember it. Returns the flag, once. */
+export function grokRejectedFlag(output: string): string | null {
+  const m = output.match(/unexpected argument '(--[a-z-]+)'/i) ?? output.match(/(?:unknown|unrecognized) (?:option|flag|argument)[:\s]+'?(--[a-z-]+)/i)
+  const flag = m?.[1]
+  if (!flag || !['--prompt-file', '--rules', '--disable-web-search'].includes(flag) || unsupportedFlags.has(flag)) return null
+  unsupportedFlags.add(flag)
+  return flag
+}
 
-export function grokPermFlags(mode: string, opts: { web: boolean; allowWeb?: boolean }): string[] {
+type GrokFlagOpts = { web: boolean; allowWeb?: boolean; mcpOff?: boolean }
+export function grokPermFlags(mode: string, opts: GrokFlagOpts): string[] {
   if (mode === 'full' || grokToolsListUnsupported) return grokPermFlagsLegacy(mode, opts)
   const web = mode === 'read' ? opts.web && !!opts.allowWeb : opts.web
-  const allow = mode === 'read' ? [] : ['Edit', 'MCPTool']
+  const allow = mode === 'read' ? [] : ['Edit', ...(opts.mcpOff ? [] : ['MCPTool'])]
   if (web) allow.push('WebFetch', 'WebSearch')
-  const tools = [...GROK_READ_TOOLS, ...(mode === 'read' ? [] : [...GROK_WRITE_TOOLS, ...GROK_MCP_TOOLS, ...GROK_IMAGE_TOOLS]), ...(web ? ['web_fetch'] : [])]
-  return ['--permission-mode', mode === 'read' ? 'plan' : 'acceptEdits', ...allow.flatMap((r) => ['--allow', r]), '--tools', tools.join(',')]
+  const tools = [...GROK_READ_TOOLS, ...(mode === 'read' ? [] : [...GROK_WRITE_TOOLS, ...(opts.mcpOff ? [] : GROK_MCP_TOOLS), ...GROK_IMAGE_TOOLS]), ...(web ? ['web_fetch'] : [])]
+  return ['--permission-mode', mode === 'read' ? 'plan' : 'acceptEdits', ...allow.flatMap((r) => ['--allow', r]), '--tools', tools.join(','), ...(opts.mcpOff ? ['--deny', 'MCPTool'] : [])]
 }
 /** Grok rejected the `--tools` list (an older or newer CLI with other tool names): fall back for the rest of the session. */
 export function grokToolsListRejected(output: string): boolean {
@@ -258,16 +313,17 @@ export function grokToolsListRejected(output: string): boolean {
 }
 
 /** The D-121 flags: pre-approve, and remove what would still ask (shell removal doesn't hold — see above). */
-export function grokPermFlagsLegacy(mode: string, opts: { web: boolean; allowWeb?: boolean }): string[] {
-  const never = ['ask_user_question', 'enter_plan_mode', 'scheduler_create', 'scheduler_delete']
+export function grokPermFlagsLegacy(mode: string, opts: GrokFlagOpts): string[] {
+  const never = ['ask_user_question', 'enter_plan_mode', 'scheduler_create', 'scheduler_delete', ...(opts.mcpOff ? ['search_tool', 'use_tool'] : [])]
+  const denyMcp = opts.mcpOff ? ['--deny', 'MCPTool'] : []
   const finish = (remove: string[]) => withGrokDependants(remove).join(',')
-  if (mode === 'full') return ['--permission-mode', 'bypassPermissions', '--disallowed-tools', finish(never)]
+  if (mode === 'full') return ['--permission-mode', 'bypassPermissions', '--disallowed-tools', finish(never), ...denyMcp]
   const web = mode === 'read' ? opts.web && !!opts.allowWeb : opts.web
-  const allow = mode === 'read' ? [] : ['Edit', 'MCPTool']
+  const allow = mode === 'read' ? [] : ['Edit', ...(opts.mcpOff ? [] : ['MCPTool'])]
   if (web) allow.push('WebFetch', 'WebSearch')
   const remove = [...never, 'run_terminal_command', ...(web ? [] : ['web_fetch', 'web_search']),
     ...(mode === 'read' ? ['write', 'search_replace', 'search_tool', 'use_tool', 'image_gen', 'image_edit', 'image_to_video', 'reference_to_video'] : [])]
-  return ['--permission-mode', mode === 'read' ? 'plan' : 'acceptEdits', ...allow.flatMap((r) => ['--allow', r]), '--disallowed-tools', finish(remove)]
+  return ['--permission-mode', mode === 'read' ? 'plan' : 'acceptEdits', ...allow.flatMap((r) => ['--allow', r]), '--disallowed-tools', finish(remove), ...denyMcp]
 }
 
 /**

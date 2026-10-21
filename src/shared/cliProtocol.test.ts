@@ -3,7 +3,7 @@ import { encodeRunId, decodeRunId, pickOne, parseMode, titleFrom, clampLast, cla
 
 const items = [
   { id: 'aaaaaaaa-1111', name: 'Workbench sandbox' },
-  { id: 'bbbbbbbb-2222', name: 'Personal finance' },
+  { id: 'bbbbbbbb-2222', name: 'My project' },
   { id: 'cccccccc-3333', name: 'Workbench docs' }
 ]
 const name = (t: { name: string }) => t.name
@@ -22,10 +22,10 @@ describe('run ids', () => {
 
 describe('pickOne', () => {
   it('takes an id, an id prefix, an exact name, or a unique partial name', () => {
-    expect(pickOne(items, 'bbbbbbbb-2222', name, 'project').name).toBe('Personal finance')
+    expect(pickOne(items, 'bbbbbbbb-2222', name, 'project').name).toBe('My project')
     expect(pickOne(items, 'cccccc', name, 'project').name).toBe('Workbench docs')
-    expect(pickOne(items, 'personal FINANCE', name, 'project').id).toBe('bbbbbbbb-2222')
-    expect(pickOne(items, 'finance', name, 'project').id).toBe('bbbbbbbb-2222')
+    expect(pickOne(items, 'my PROJECT', name, 'project').id).toBe('bbbbbbbb-2222')
+    expect(pickOne(items, 'project', name, 'project').id).toBe('bbbbbbbb-2222')
   })
   it('says which ones match when a name is ambiguous', () => {
     expect(() => pickOne(items, 'Workbench', name, 'project')).toThrow(/matches 2 projects: Workbench sandbox \(aaaaaaaa\), Workbench docs \(cccccccc\)/)
