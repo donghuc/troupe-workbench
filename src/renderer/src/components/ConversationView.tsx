@@ -349,7 +349,7 @@ export default function ConversationView({ conversation, providers, pendingSend,
   )
 
   return (
-    <div className="chat-layout" onContextMenu={onContextMenu} onMouseDown={() => { if (sel) setSel(null) }}>
+    <div className={`chat-layout${openArtifact && cwd ? ' viewing-artifact' : ''}`} onContextMenu={onContextMenu} onMouseDown={() => { if (sel) setSel(null) }}>
       <div className="conversation">
         <div className="conv-scroll" ref={scrollRef} onScroll={onScroll}>
           <div className="conv-inner">
@@ -490,7 +490,8 @@ export default function ConversationView({ conversation, providers, pendingSend,
 
       {media && <MediaViewer src={media.src} alt={media.alt} root={cwd} relPath={media.rel} onClose={() => setMedia(null)} />}
       <aside className="chat-side">
-        <ResizeHandle varName="--context-panel-w" edge="left" min={240} max={1200} />
+        {/* The open artifact has its own width, so reading wide doesn't leave the side panel wide (D-136). */}
+        <ResizeHandle key={openArtifact && cwd ? 'artifact' : 'side'} varName={openArtifact && cwd ? '--artifact-panel-w' : '--context-panel-w'} edge="left" min={240} max={1200} />
         {openArtifact && cwd ? (
           <ArtifactViewer root={cwd} relPath={openArtifact} onClose={() => setOpenArtifact(null)} popout />
         ) : null}

@@ -18,7 +18,15 @@ Each version here matches a packaged build — the dmg is named
 > - Bumping rules: PATCH = fixes/small tweaks, MINOR = new features (backward-compatible),
 >   MAJOR = breaking changes or a data format users can't roll back from.
 
-## [Unreleased]
+## [2.15.1] - 2026-10-26
+
+### Added
+- Pin projects: a **Pinned** section above Projects in the sidebar. Pin / Unpin from the project's ⋮ menu; drag to reorder within the section.
+- **Copy project ID** and **Copy chat ID** in the sidebar ⋮ menus, to paste into an agent or the `troupe` command.
+
+### Fixed
+- An open artifact keeps its own width: widening it to read no longer leaves the chat side panel wide after you close it.
+- Menus near the bottom of the window (sidebar chats and projects, message menus) open upwards instead of being cut off.
 
 ## [2.15.0] - 2026-10-26
 

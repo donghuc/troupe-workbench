@@ -8,6 +8,8 @@ import ResizeHandle from './ResizeHandle'
 import { useBusyConversations, useUnreadConversations } from '../turnsStore'
 import type { Project, RecentConversation } from '../../../shared/types'
 import { Menu, MenuItem } from './ui/Menu'
+import { notify, failed } from '../notices'
+import { PINNED_PROJECTS_SETTING, parsePinned } from '../../../shared/pinnedProjects'
 
 const COLLAPSED_KEY = 'sidebar.collapsedProjects'
 
@@ -43,6 +45,11 @@ interface Props {
 
 const PROJECTS_SHOWN = 10
 
+// Copy an id for pasting to an agent or the troupe command.
+const copyId = (id: string, what: string): void => {
+  navigator.clipboard.writeText(id).then(() => notify(`${what} ID copied`), failed(`Copy ${what.toLowerCase()} ID`))
+}
+
 export default function Sidebar(props: Props) {
   const {
     projects, conversations, activeProjectId, activeConversationId,
@@ -72,6 +79,12 @@ export default function Sidebar(props: Props) {
 
   const toggle = (id: string) => setCollapsed((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
 
+  // Pinned projects: their own section above Projects, in the order you pinned them.
+  const [pinned, setPinned] = useState<string[]>([])
+  useEffect(() => { api.settings.get(PINNED_PROJECTS_SETTING).then((v: string | null) => setPinned(parsePinned(v))).catch(() => {}) }, [])
+  const savePinned = (ids: string[]) => { setPinned(ids); api.settings.set(PINNED_PROJECTS_SETTING, JSON.stringify(ids)).catch(failed('Pin project')) }
+  const setProjectPinned = (id: string, on: boolean) => savePinned(on ? [...pinned.filter((x) => x !== id), id] : pinned.filter((x) => x !== id))
+
   // Chats grouped by project (input is updated-desc; pinned float to the top within a group).
   const byProject = useMemo(() => {
     const m = new Map<string, RecentConversation[]>()
@@ -88,12 +101,16 @@ export default function Sidebar(props: Props) {
   const [dragId, setDragId] = useState<string | null>(null)
   const [overId, setOverId] = useState<string | null>(null)
   // Projects arrive already in manual (sort_order) order from the repo.
-  const orderedProjects = projects
+  const pinnedProjects = pinned.map((id) => projects.find((p) => p.id === id)).filter((p): p is Project => !!p)
+  const orderedProjects = projects.filter((p) => !pinned.includes(p.id))
   const onProjDrop = (e: DragEvent, targetId: string) => {
     e.preventDefault(); setOverId(null)
     const id = dragId; setDragId(null)
     if (!id || id === targetId) return
-    const ids = orderedProjects.map((x) => x.id)
+    // Dragging within Pinned reorders the pins; within Projects, the project order. Not across.
+    const inPinned = pinned.includes(id)
+    if (inPinned !== pinned.includes(targetId)) return
+    const ids = inPinned ? pinnedProjects.map((x) => x.id) : orderedProjects.map((x) => x.id)
     const from = ids.indexOf(id); if (from < 0) return
     ids.splice(from, 1)
     const rect = e.currentTarget.getBoundingClientRect()
@@ -101,7 +118,8 @@ export default function Sidebar(props: Props) {
     let to = ids.indexOf(targetId); if (to < 0) return
     if (after) to += 1
     ids.splice(to, 0, id)
-    onReorderProjects(ids)
+    if (inPinned) savePinned(ids)
+    else onReorderProjects([...ids, ...projects.filter((p) => pinned.includes(p.id)).map((p) => p.id)])
   }
   const projShown = showAllProjects ? orderedProjects : orderedProjects.slice(0, PROJECTS_SHOWN)
 
@@ -128,6 +146,7 @@ export default function Sidebar(props: Props) {
             <MenuItem onClick={() => { setMenuId(null); onSetPinned(c.id, !c.pinned) }}>{c.pinned ? 'Unpin' : 'Pin'}</MenuItem>
             <MenuItem onClick={() => { setMenuId(null); onDuplicateConversation(c.id) }}>Duplicate</MenuItem>
             <MenuItem onClick={() => { setMenuId(null); onExportConversation(c.id) }}>Export…</MenuItem>
+            <MenuItem onClick={() => { setMenuId(null); copyId(c.id, 'Chat') }}>Copy chat ID</MenuItem>
             <MenuItem danger onClick={() => { setMenuId(null); void api.conversations.attachmentCount(c.id).catch(() => 0).then((n: number) => confirmDialog({ title: 'Delete chat?', message: `“${c.title}” and its messages are deleted${n ? `, with the ${n === 1 ? 'file' : `${n} files`} you attached in it (Troupe's copies — your originals stay)` : ''}.`, confirmLabel: 'Delete' })).then((ok: boolean) => ok && onDeleteConversation(c.id)) }}><Icon name="trash" size="sm" />Delete</MenuItem>
           </Menu>
         </>
@@ -170,7 +189,9 @@ export default function Sidebar(props: Props) {
               <button className="conv-menu-btn" title="More" onClick={() => setPMenuId(pMenuId === p.id ? null : p.id)}><Icon name="more-vertical" size="md" /></button>
               <Menu open={pMenuId === p.id} onClose={() => setPMenuId(null)}>
                 <MenuItem onClick={() => startPRename(p)}>Rename</MenuItem>
-                <MenuItem danger onClick={() => { setPMenuId(null); void confirmDialog({ title: `Delete “${p.name}”?`, message: "The project and all its chats are deleted. This can't be undone.", confirmLabel: 'Delete' }).then((ok) => ok && onDeleteProject(p.id)) }}><Icon name="trash" size="sm" />Delete</MenuItem>
+                <MenuItem onClick={() => { setPMenuId(null); setProjectPinned(p.id, !pinned.includes(p.id)) }}>{pinned.includes(p.id) ? 'Unpin' : 'Pin'}</MenuItem>
+                <MenuItem onClick={() => { setPMenuId(null); copyId(p.id, 'Project') }}>Copy project ID</MenuItem>
+                <MenuItem danger onClick={() => { setPMenuId(null); void confirmDialog({ title: `Delete “${p.name}”?`, message: "The project and all its chats are deleted. This can't be undone.", confirmLabel: 'Delete' }).then((ok) => { if (!ok) return; if (pinned.includes(p.id)) setProjectPinned(p.id, false); onDeleteProject(p.id) }) }}><Icon name="trash" size="sm" />Delete</MenuItem>
               </Menu>
             </>
           )}
@@ -194,15 +215,22 @@ export default function Sidebar(props: Props) {
         <button className={`nav-item ${skillsActive ? 'active' : ''}`} onClick={onOpenSkills}><Icon name="flash" /> Skills</button>
         <button className={`nav-item ${tasksActive ? 'active' : ''}`} onClick={onOpenTasks}><Icon name="clock" /> Tasks</button>
 
+        {pinnedProjects.length > 0 && (
+          <>
+            <div className="section-label section-label-row"><span>Pinned</span></div>
+            {pinnedProjects.map(projGroup)}
+          </>
+        )}
         <div className="section-label section-label-row">
           <span>Projects</span>
           <button className="section-add" title="New project" onClick={onNewProject}><Icon name="plus" size="md" /></button>
         </div>
         {projects.length === 0 && <div className="sidebar-empty">No projects yet</div>}
+        {projects.length > 0 && orderedProjects.length === 0 && <div className="sidebar-empty">All projects are pinned</div>}
         {projShown.map(projGroup)}
-        {projects.length > PROJECTS_SHOWN && (
+        {orderedProjects.length > PROJECTS_SHOWN && (
           <button className="view-more" onClick={() => setShowAllProjects((v) => !v)}>
-            {showAllProjects ? 'View less' : `View more (${projects.length - PROJECTS_SHOWN})`}
+            {showAllProjects ? 'View less' : `View more (${orderedProjects.length - PROJECTS_SHOWN})`}
           </button>
         )}
       </div>

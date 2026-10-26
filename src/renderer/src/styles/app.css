@@ -848,6 +848,9 @@ body.resizing .resize-handle::after { background: var(--text-tertiary); }
 .main { position: relative; }
 .chat-side { position: absolute; top: 0; right: 0; bottom: 0; width: var(--context-panel-w); min-width: 0; z-index: var(--z-panel); }
 .chat-layout { padding-right: var(--context-panel-w); }
+/* An open artifact keeps its own width (--artifact-panel-w, set by dragging; D-136). */
+.chat-layout.viewing-artifact { padding-right: var(--artifact-panel-w, min(640px, 50vw)); }
+.chat-layout.viewing-artifact .chat-side { width: var(--artifact-panel-w, min(640px, 50vw)); }
 
 /* Right panel sits over the header drag-band — opt its contents out of dragging */
 .chat-side { -webkit-app-region: no-drag; }

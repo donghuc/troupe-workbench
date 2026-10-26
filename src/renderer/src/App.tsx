@@ -124,7 +124,7 @@ export default function App() {
 
   const goBackRef = useRef<() => void>(() => {}); goBackRef.current = goBack
   const goForwardRef = useRef<() => void>(() => {}); goForwardRef.current = goForward
-  useEffect(() => { loadAndApplyAppearance(); restorePanelWidths(['--sidebar-w', '--context-panel-w']); void loadAgentSettings() }, [])
+  useEffect(() => { loadAndApplyAppearance(); restorePanelWidths(['--sidebar-w', '--context-panel-w', '--artifact-panel-w']); void loadAgentSettings() }, [])
   useEffect(() => { void loadModelLists() }, [])
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

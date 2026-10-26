@@ -8,7 +8,8 @@ export default function ResizeHandle({ varName, edge, min, max }: Props) {
   const onDown = (e: React.MouseEvent) => {
     e.preventDefault()
     const startX = e.clientX
-    const start = readVar(varName)
+    // Start from the panel's real width: the variable may be unset (it has a CSS fallback).
+    const start = (e.currentTarget as HTMLElement).parentElement?.getBoundingClientRect().width || readVar(varName)
     const move = (ev: MouseEvent) => {
       const delta = edge === 'right' ? ev.clientX - startX : startX - ev.clientX
       const w = Math.max(min, Math.min(max, start + delta))
