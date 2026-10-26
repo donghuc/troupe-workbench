@@ -18,6 +18,20 @@ Each version here matches a packaged build — the dmg is named
 > - Bumping rules: PATCH = fixes/small tweaks, MINOR = new features (backward-compatible),
 >   MAJOR = breaking changes or a data format users can't roll back from.
 
+## [2.16.1] - 2026-10-26
+
+### Fixed
+- A Collab run can no longer leave its chat locked until restart (no project folder, a missing task, or an error while handling an agent's finish — that now pauses the run with the reason).
+- After Stop on an `@all` message, a stopped agent finishing late can no longer disturb the next message.
+- Queued messages wait while Collab waits for you (a plan to approve, a paused run) — including messages sent after the plan is ready (**Run anyway** sends them now) — pause after a Collab Stop or failure, and no longer push out a stopped run's wrap-up.
+- Image Creation: two results finishing on the same canvas (or a result and an autosave) can no longer overwrite each other.
+- Checking agents no longer freezes the app for a few seconds; agents are checked at once, each with a 10 s limit.
+- Faster launch: the database backup is made only before an upgrade, not every time.
+- Attaching a PDF no longer freezes the app while its text is read.
+- Switching or removing a voice model while a transcription runs no longer frees it mid-transcription.
+- Quitting waits briefly for running agents to stop and save what they wrote.
+- A queue kept across a restart stores attached files by path only, not their text.
+
 ## [2.16.0] - 2026-10-26
 
 ### Added

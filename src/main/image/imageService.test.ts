@@ -11,6 +11,7 @@ vi.mock('../providers/registry', () => ({ createProvider: () => undefined }))
 vi.mock('../util/logger', () => ({ logInfo: () => {}, logError: () => {}, logWarn: () => {} }))
 
 const svc = await import('./imageService')
+const { makeCard, emptyCanvas, outputsOf } = await import('../../shared/imageCanvas')
 const legacy = { version: 1, cards: [{ id: 'p1', kind: 'prompt', x: 10, y: 20, data: { text: 'old canvas' } }], edges: [], view: { x: 0, y: 0, zoom: 1 } }
 
 beforeEach(() => { folder = mkdtempSync(join(tmpdir(), 'troupe-img-')) })
@@ -83,5 +84,22 @@ describe('canvases on disk', () => {
   it('rejects ids that would escape the canvases folder', async () => {
     await expect(svc.loadCanvas('../../etc')).resolves.toEqual(expect.objectContaining({ cards: [] }))
     await expect(svc.clearCanvas('../x')).rejects.toThrow()
+  })
+  it('two run results and an autosave on one canvas all land; no temp file is shared (audit P0-4)', async () => {
+    const id = (await svc.canvasIndex()).active
+    const p = makeCard('processor', 0, 0)
+    const base = { ...emptyCanvas(), cards: [p] }
+    await svc.saveCanvas(id, base)
+    const rec = (n: string) => ({ id: n, at: 't', files: [`${n}.png`], inputsHash: 'h' })
+    await Promise.all([
+      svc.applyRunResultTo(id, p.id, rec('r1')),
+      svc.applyRunResultTo(id, p.id, rec('r2')),
+      svc.applyRunResultTo(id, p.id, rec('r3'))
+    ])
+    const c = await svc.loadCanvas(id)
+    const outs = outputsOf(c, p.id)
+    expect(outs).toHaveLength(1)
+    expect((outs[0] as any).data.runs.map((r: any) => r.id).sort()).toEqual(['r1', 'r2', 'r3'])
+    expect(readdirSync(join(folder, 'canvases')).filter((n) => n.endsWith('.tmp'))).toEqual([])
   })
 })

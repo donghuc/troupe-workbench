@@ -26,9 +26,10 @@ vi.mock('../agent/runner', () => ({
   runTimeoutMs: () => 60_000
 }))
 const locks = new Map<string, string>()
+const released: string[] = []   // outcomes the run reported when it let go of the chat (P0-3)
 vi.mock('../agent/turns', () => ({
   acquireLock: (c: string, h: string) => { const cur = locks.get(c); if (cur && cur !== h) return false; locks.set(c, h); return true },
-  releaseLock: (c: string, h: string) => { if (locks.get(c) === h) locks.delete(c) },
+  releaseLock: (c: string, h: string, outcome = 'done') => { if (locks.get(c) === h) { locks.delete(c); released.push(outcome) } },
   isBusy: () => false, startTurn: () => {}, cancelTurn: async () => {},
   getTurnState: (id: string) => ({ conversationId: id, busy: false, parallel: false, error: null, rev: 0, lanes: [] })
 }))
@@ -72,7 +73,7 @@ const TWO = [
   { title: 'Final review', kind: 'review', scope: '', acceptance: 'meets the goal', dependsOn: [0] }
 ]
 
-beforeEach(() => { resetTestDb(); seed(); runs.length = 0; cancelled.length = 0; locks.clear() })
+beforeEach(() => { resetTestDb(); seed(); runs.length = 0; cancelled.length = 0; locks.clear(); released.length = 0 })
 
 describe('Collab orchestrator (D-121)', () => {
   it('tags every agent run, sizes the budget to the plan, and ends with the Planner wrap-up', () => {
@@ -385,5 +386,45 @@ describe('Reviewers get Troupe\'s record (D-128)', () => {
     expect(r.text).toMatch(/^Switched to Read-only/)
     expect(r.text).toContain('mode: Read-only')
     expect((await runCliCommand('collab', P({ do: 'mode', run: id, mode: 'read' }))).text).toMatch(/^Already Read-only/)
+  })
+})
+
+describe('Collab and the chat lock (audit 2026-10-26, P0-1 / P0-3)', () => {
+  it('a missing project folder fails without locking the chat', () => {
+    const r = orch.startCollab(sender, { conversationId: chat, cwd: '', providerId: 'claude-code', goal: 'x' })
+    expect(r.status).toBe('failed')
+    expect(locks.size).toBe(0)
+  })
+  it('an error while handling a Maker\'s finish pauses the run and unlocks the chat', () => {
+    const id = start()
+    finish(plan(TWO))
+    orch.confirmPlan(sender, id)
+    expect(role(runs[runs.length - 1])).toBe('maker')
+    testDb().exec("CREATE TRIGGER boom BEFORE UPDATE ON collab_tasks BEGIN SELECT RAISE(ABORT, 'disk full'); END")   // the next task update throws
+    finish(handoff, { 'quiz/q.md': 'Q1' })
+    expect(repo.getCollabRunBare(id)?.status).toBe('needs_attention')
+    expect(repo.getCollabRunBare(id)?.reason).toMatch(/error after the Maker finished/)
+    expect(locks.size).toBe(0)
+    expect(released.at(-1)).toBe('waiting')
+  })
+  it('a plan waiting for approval tells the queue to wait, not to run', () => {
+    start(); finish(plan(TWO))
+    expect(locks.size).toBe(0)
+    expect(released).toEqual(['waiting'])
+  })
+  it('Stop keeps the chat until the wrap-up is written, then reports "stopped"', async () => {
+    vi.useFakeTimers()
+    try {
+      const id = start(); finish(plan(TWO)); orch.confirmPlan(sender, id)
+      finish(handoff, { 'quiz/q.md': 'Q1' })              // the Maker worked: Stop gets a wrap-up
+      orch.stopCollab(id)
+      expect(locks.size).toBe(1)                          // nothing queued can start in between
+      vi.advanceTimersByTime(1600)
+      expect(role(runs[runs.length - 1])).toBe('wrapup')
+      expect(locks.size).toBe(1)
+      finish('## Outcome\nStopped early.\n## Files\n- None\n## Decisions for you\n- None\n## Follow-ups\n- None')
+      expect(locks.size).toBe(0)
+      expect(released.at(-1)).toBe('stopped')
+    } finally { vi.useRealTimers() }
   })
 })

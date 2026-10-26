@@ -2,11 +2,11 @@ import { dialog, BrowserWindow } from 'electron'
 import { handle } from './handle'
 import { expectString } from '../security/pathGuard'
 import {
-  getImageFolder, setImageFolder, loadCanvas, saveCanvas, clearCanvas, importMedia, startImageRun, cancelImageRun,
+  getImageFolder, setImageFolder, loadCanvas, saveCanvas, applyRunResultTo, clearCanvas, importMedia, startImageRun, cancelImageRun,
   saveImage, unsaveImage, deleteRun,
   canvasIndex, setActiveCanvas, createCanvas, renameCanvas, duplicateCanvas, deleteCanvas
 } from '../image/imageService'
-import type { Canvas, ImageRunInput } from '../../shared/imageCanvas'
+import type { Canvas, ImageRunInput, RunRecord } from '../../shared/imageCanvas'
 
 // Image canvas (D-088).
 export function registerImageIpc(): void {
@@ -20,6 +20,7 @@ export function registerImageIpc(): void {
   handle('image.canvases', () => canvasIndex())
   handle('image.load', (_e, id: string) => loadCanvas(expectString(id, 'canvas')))
   handle('image.save', (_e, id: string, c: Canvas) => saveCanvas(expectString(id, 'canvas'), c))
+  handle('image.applyRunResult', (_e, id: string, processorId: string, rec: Omit<RunRecord, 'agent' | 'model'>, outputX?: number) => applyRunResultTo(expectString(id, 'canvas'), expectString(processorId, 'card'), rec, typeof outputX === 'number' ? outputX : undefined))
   handle('image.clear', (_e, id: string) => clearCanvas(expectString(id, 'canvas')))
   handle('image.setActive', (_e, id: string) => setActiveCanvas(expectString(id, 'canvas')))
   handle('image.createCanvas', (_e, after?: string) => createCanvas(typeof after === 'string' ? after : undefined))

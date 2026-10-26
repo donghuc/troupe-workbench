@@ -315,6 +315,10 @@ const migrations: Array<(db: Database.Database) => void> = [
   }
 ]
 
+/** Back up the DB file before migrating only when a migration will actually run (audit #6:
+ *  it used to copy the whole file on every launch, on the main thread, before the window). */
+export function shouldBackup(before: number, latest = migrations.length): boolean { return before > 0 && before < latest }
+
 export function runMigrations(db: Database.Database): void {
   const current = db.pragma('user_version', { simple: true }) as number
   if (current > migrations.length) {

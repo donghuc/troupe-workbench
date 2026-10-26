@@ -79,7 +79,8 @@ export function startRun(sender: WebContents, params: RunParams): string {
   }
   const done = (messageId: string | null, error?: string) => {
     active.delete(runId)
-    try { params.onDone?.(messageId, error) } catch { /* notify best-effort */ }
+    // P0-1 (audit 2026-10-26): never swallow silently — a throw here once left a Collab run stuck.
+    try { params.onDone?.(messageId, error) } catch (e) { logError('run onDone handler threw', { run: runId, provider: params.providerId, err: String((e as Error)?.stack ?? e) }) }
   }
 
   if (!provider) { setImmediate(() => done(null, `Unknown provider: ${params.providerId}`)); return runId }
@@ -222,7 +223,17 @@ export async function cancelRun(runId: string): Promise<void> {
   await active.get(runId)?.cancel()
 }
 
-export async function cancelAllRuns(): Promise<void> {
+async function cancelAllRuns(): Promise<void> {
   for (const p of active.values()) { try { await p.cancel() } catch { /* ignore */ } }
+}
+
+/** Quit (audit #18): stop every run, then wait — at most `ms` — for each to report its end, so a
+ *  stopped reply is saved before the database closes instead of being lost without a trace. */
+export async function stopAllRunsForQuit(ms = 3000): Promise<number> {
+  await cancelAllRuns()
+  const until = Date.now() + ms
+  while (active.size && Date.now() < until) await new Promise((r) => setTimeout(r, 50))
+  const left = active.size
   active.clear()
+  return left
 }

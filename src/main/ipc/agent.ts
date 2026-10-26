@@ -1,6 +1,6 @@
 import { handle } from './handle'
 import { describeProviders } from '../providers/registry'
-import { resetLoginPath } from '../providers/env'
+import { refreshLoginPath } from '../providers/env'
 import { startSetup, cancelSetup, checkAgent } from '../agents/setupService'
 import { listCustomAgents, saveCustomAgent, removeCustomAgent, testCustomAgent, detectPresets } from '../agents/customAgentStore'
 import { maybeCompress } from '../agent/snapshotService'
@@ -10,7 +10,8 @@ import { sendOrQueue, getQueue, editQueued, removeQueued, resumeQueue, clearQueu
 
 export function registerAgentIpc(): void {
   // Re-read the login-shell PATH on every check, so a CLI installed while Troupe is open is found (D-103 Re-check).
-  handle('providers.list', () => { resetLoginPath(); return describeProviders() })
+  // Audit #5: re-read without blocking the main process.
+  handle('providers.list', async () => { await refreshLoginPath(); return describeProviders() })
   // Agent setup (2.3, Part A).
   handle('agents.setupStart', (e, id, kind, terminal) => startSetup(e.sender, id, kind, terminal))
   handle('agents.setupCancel', (_e, runId) => cancelSetup(runId))

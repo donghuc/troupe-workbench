@@ -119,7 +119,7 @@ export default function ImageView({ active = true }: { active?: boolean }) {
         setCanvas((c) => applyRunResult(c, st.pid, rec, gap))
       } else {
         // Finished on a canvas that isn't on screen: update its file directly.
-        void api.image.load(st.canvasId).then((c: Canvas) => api.image.save(st.canvasId, applyRunResult(c, st.pid, rec, gap))).catch(failed('Save run result'))
+        void api.image.applyRunResult(st.canvasId, st.pid, rec, gap).catch(failed('Save run result'))
         const name = indexRef.current?.tabs.find((t) => t.id === st.canvasId)?.name
         if (!error && name) notify(`Images ready in “${name}”`)
       }

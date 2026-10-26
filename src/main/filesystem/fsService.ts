@@ -1,7 +1,7 @@
 import { promises as fs, mkdtempSync, writeFileSync, realpathSync, lstatSync } from 'fs'
 import { hideWorkbenchDir } from '../platform/winFs'
 import { tmpdir } from 'os'
-import { execFileSync } from 'child_process'
+import { execFile } from 'child_process'
 import { join, relative, resolve, sep, basename, dirname } from 'path'
 import type { FileNode, FileSearchResult } from '../../shared/types'
 import { removeTempDir } from '../util/tempFiles'
@@ -227,25 +227,26 @@ export async function searchFiles(root: string, query: string): Promise<FileSear
 // macOS, so it needs no poppler and no agent shell. Runs in the app's own process,
 // independent of the agent's Bash toggle. Returns '' on any failure or for a
 // scanned PDF with no text layer (D-044 correction).
-export function extractPdfText(absPath: string): string {
+// Audit #7 (2026-10-26): asynchronous — the sync call froze the main process (streaming, every
+// IPC call) for up to 30 s per PDF attached.
+export async function extractPdfText(absPath: string): Promise<string> {
   if (process.platform === 'win32') return winPdfText(absPath)   // D-120: pdf.js
   if (process.platform !== 'darwin') return ''
+  let dir = ''
   try {
     const jxa = "ObjC.import('Quartz');function run(argv){try{var u=$.NSURL.fileURLWithPath($(argv[0]));var d=$.PDFDocument.alloc.initWithURL(u);if(!d||d.isNil())return '';var s=d.string;return (s&&!s.isNil())?ObjC.unwrap(s):'';}catch(e){return '';}}"
-    const dir = mkdtempSync(join(tmpdir(), 'wb-pdf-'))
-    try {
-      const sf = join(dir, 'extract.js')
-      writeFileSync(sf, jxa, 'utf8')
-      const out = execFileSync('osascript', ['-l', 'JavaScript', sf, absPath], {
-        encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: 30000
-      })
-      return out || ''
-    } finally { removeTempDir(dir) }   // audit #10: was left behind on every extraction
-  } catch { return '' }
+    dir = mkdtempSync(join(tmpdir(), 'wb-pdf-'))
+    const sf = join(dir, 'extract.js')
+    writeFileSync(sf, jxa, 'utf8')
+    return await new Promise<string>((resolve) => {
+      execFile('osascript', ['-l', 'JavaScript', sf, absPath], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: 30000 },
+        (err, out) => resolve(err ? '' : out || ''))
+    })
+  } catch { return '' } finally { if (dir) removeTempDir(dir) }   // audit #10: was left behind on every extraction
 }
 
 // IPC helper: extract text from a PDF inside a project folder.
-export function readPdfText(root: string, relPath: string): string {
+export function readPdfText(root: string, relPath: string): Promise<string> {
   return extractPdfText(ensureInside(root, relPath))
 }
 

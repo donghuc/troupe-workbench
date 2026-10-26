@@ -12,7 +12,7 @@ import { isProviderId, isBuiltinId } from '../../shared/providers'
 import { IPC } from '../../shared/ipc'
 import type { SetupEvent } from '../../shared/agentSetup'
 import type { ProviderId } from '../../shared/types'
-import { buildEnv, resetLoginPath } from '../providers/env'
+import { buildEnv, resetLoginPath, refreshLoginPath } from '../providers/env'
 import { createProvider } from '../providers/registry'
 import { findPresetBin } from '../providers/CustomCliProvider'
 import { logInfo, logError } from '../util/logger'
@@ -85,7 +85,7 @@ export function cancelSetup(runId: unknown): void {
 /** Fresh status for one agent. `fresh` re-reads the login-shell PATH (after an install). */
 export async function checkAgent(id: unknown, fresh?: boolean) {
   if (!isProviderId(id)) throw new Error('Unknown agent')
-  if (fresh) resetLoginPath()
+  if (fresh) await refreshLoginPath()   // audit #5: without blocking the main process
   const p = createProvider(id as ProviderId)
   if (!p) throw new Error('Unknown agent')
   return p.isAvailable()

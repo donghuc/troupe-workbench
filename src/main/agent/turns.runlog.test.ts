@@ -60,4 +60,13 @@ describe('run log from real turns (D-118)', () => {
     await until(() => readRunLog(0).length > 0)
     expect(readRunLog(0)[0]).toMatchObject({ state: 'stopped', error: null })
   })
+  it('a start refused because the agent is off leaves no finish hook behind (audit #18)', async () => {
+    behaviour = 'reply'
+    testDb().prepare(`INSERT OR REPLACE INTO settings (key, value) VALUES ('disabled_agents', 'codex')`).run()
+    const onFinished = vi.fn()
+    expect(() => startTurn(sender, { conversationId: 'c1', text: 'scheduled digest', defaultProvider: 'codex', messageMetadata: { scheduled: true } }, { onFinished })).toThrow()
+    startTurn(sender, { conversationId: 'c1', text: 'an unrelated message', defaultProvider: 'claude-code' })
+    await until(() => readRunLog(0).length > 0)
+    expect(onFinished).not.toHaveBeenCalled()
+  })
 })

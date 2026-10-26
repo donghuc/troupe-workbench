@@ -1,5 +1,5 @@
 import type { ProviderId } from '../../shared/types'
-import type { ProviderDescriptor } from '../../shared/agent'
+import type { ProviderDescriptor, ProviderAvailability } from '../../shared/agent'
 import type { AgentProvider } from './AgentProvider'
 import { ClaudeCodeProvider } from './ClaudeCodeProvider'
 import { CodexProvider } from './CodexProvider'
@@ -35,12 +35,18 @@ export function registerDefaultProviders(): void {
   registerProvider('gemini', () => new GeminiProvider())
 }
 
+const PROBE_TIMEOUT_MS = 10_000
+function withDeadline(p: Promise<ProviderAvailability>, ms: number, name: string): Promise<ProviderAvailability> {
+  let t: ReturnType<typeof setTimeout> | undefined
+  const late = new Promise<ProviderAvailability>((resolve) => { t = setTimeout(() => resolve({ installed: false, authenticated: false, detail: `${name} didn't answer within ${ms / 1000} s. Re-check, or run it once in Terminal.` }), ms) })
+  return Promise.race([p.catch((e) => ({ installed: false, authenticated: false, detail: String(e?.message ?? e) })), late]).finally(() => clearTimeout(t))
+}
+
 export async function describeProviders(): Promise<ProviderDescriptor[]> {
-  const out: ProviderDescriptor[] = []
   const makers: [ProviderId, ProviderFactory][] = [...factories, ...listCustomAgents().filter((a) => !a.archived).map((a): [ProviderId, ProviderFactory] => [a.id, () => new CustomCliProvider(a)])]
-  for (const [id, make] of makers) {
+  // Audit #5: check every agent at once, each with a deadline, so one slow CLI doesn't hold the rest.
+  return Promise.all(makers.map(async ([id, make]): Promise<ProviderDescriptor> => {
     const p = make()
-    out.push({ id, name: p.name, capabilities: p.getCapabilities(), availability: await p.isAvailable() })
-  }
-  return out
+    return { id, name: p.name, capabilities: p.getCapabilities(), availability: await withDeadline(p.isAvailable(), PROBE_TIMEOUT_MS, p.name) }
+  }))
 }

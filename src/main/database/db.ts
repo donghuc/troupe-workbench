@@ -2,7 +2,7 @@ import Database from 'better-sqlite3'
 import { app } from 'electron'
 import { join } from 'path'
 import { mkdirSync, copyFileSync, existsSync } from 'fs'
-import { runMigrations } from './migrations'
+import { runMigrations, shouldBackup } from './migrations'
 import { logInfo, logError } from '../util/logger'
 
 let db: Database.Database | null = null
@@ -22,7 +22,7 @@ export function getDb(): Database.Database {
   db.pragma('busy_timeout = 3000')
   const before = db.pragma('user_version', { simple: true }) as number
   try {
-    if (before > 0 && existsSync(file)) {
+    if (shouldBackup(before) && existsSync(file)) {
       // Fold the WAL into the main file first (D-100): after a crash or force-quit, recent
       // commits live only in workbench.db-wal, and copying the main file alone would leave
       // them out of the backup — which is the only way back once a one-way migration runs.

@@ -20,6 +20,6 @@ export async function saveAttachmentBinary(base64: string, name: string): Promis
 }
 
 // Extract a PDF's text from an absolute path in the store (macOS PDFKit).
-export function extractAttachmentPdf(absPath: string): string {
+export function extractAttachmentPdf(absPath: string): Promise<string> {
   return extractPdfText(absPath)
 }

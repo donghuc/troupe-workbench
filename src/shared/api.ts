@@ -14,7 +14,7 @@ import type { CheckResult } from './contextCheck'
 import type { ProviderId as PId } from './types'
 import type { ProjectAttachment } from './attachmentPaths'
 import type { VoiceStatus, VoiceModelId, VoiceResult, VoiceDownloadEvent } from './voice'
-import type { Canvas, CanvasIndex, ImageRunInput, ImageRunDone, ImageRunEvent } from './imageCanvas'
+import type { Canvas, CanvasIndex, ImageRunInput, ImageRunDone, ImageRunEvent, RunRecord } from './imageCanvas'
 export interface ContextCheckReport { agent: PId; results: CheckResult[]; passed: number; total: number }
 
 export interface AppInfo { version: string; electron: string; chrome: string; node: string; platform: string }
@@ -213,6 +213,7 @@ export interface WorkbenchApi {
     canvases(): Promise<CanvasIndex>
     load(id: string): Promise<Canvas>
     save(id: string, canvas: Canvas): Promise<void>
+    applyRunResult(id: string, processorId: string, rec: Omit<RunRecord, 'agent' | 'model'>, outputX?: number): Promise<void>   // P0-4: off-screen canvas, done in main's write queue
     clear(id: string): Promise<Canvas>
     setActive(id: string): Promise<CanvasIndex>
     createCanvas(after?: string): Promise<CanvasIndex>

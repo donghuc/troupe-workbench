@@ -6,6 +6,7 @@ import { mkdirSync, writeFileSync, appendFileSync, statSync, readdirSync, readFi
 import { IPC } from '../../shared/ipc'
 import { startRun, cancelRun, runTimeoutMs } from '../agent/runner'
 import { acquireLock, releaseLock } from '../agent/turns'
+import type { TurnOutcome } from '../../shared/turnQueue'
 import { getMessage } from '../conversations/messagesRepo'
 import { logInfo, logError } from '../util/logger'
 import { getDb } from '../database/db'
@@ -49,7 +50,26 @@ function wc(runId: string): WebContents | null {
 // D-061: while a collab agent works, the conversation is locked like a chat turn.
 const holder = (runId: string): string => `collab:${runId}`
 function lockFor(run: CollabRun): boolean { return acquireLock(run.conversationId, holder(run.id)) }
-function unlockFor(run: { id: string; conversationId: string }): void { releaseLock(run.conversationId, holder(run.id)) }
+// P0-3 (audit 2026-10-26): say how the run's hold ended, so the chat's queue pauses after a Stop
+// or failure and waits while the run waits for you (plan to approve, needs attention).
+function unlockFor(run: { id: string; conversationId: string }, outcome: TurnOutcome = 'done'): void { releaseLock(run.conversationId, holder(run.id), outcome) }
+
+// P0-1: an error while handling an agent's finish used to vanish (the runner swallows it) and
+// leave the run "running" with the chat locked. Now it is logged and the run pauses, which
+// unlocks the chat; Resume picks it up again.
+function guarded<A extends unknown[]>(runId: string, what: string, fn: (...a: A) => void): (...a: A) => void {
+  return (...a: A) => {
+    try { fn(...a) } catch (e) {
+      logError(`[collab] ${what} failed`, { run: runId, err: String((e as Error)?.stack ?? e) })
+      try { pause(runId, `Troupe hit an error after the ${what} finished (${String((e as Error)?.message ?? e).slice(0, 160)}). Resume to carry on.`) } catch (e2) {
+        // Even the pause failed (database trouble): at least give the chat back.
+        logError('[collab] pause after error failed', { run: runId, err: String(e2) })
+        const r = getCollabRunBare(runId); if (r) unlockFor(r, 'error')
+        emitChanged()
+      }
+    }
+  }
+}
 
 function emitChanged(): void {
   for (const w of BrowserWindow.getAllWindows()) { if (!w.webContents.isDestroyed()) w.webContents.send(IPC.collabChanged) }
@@ -188,13 +208,14 @@ export function startCollab(sender: WebContents, input: CollabStartInput): Colla
     emitChanged()
     return failed
   }
-  if (!lockFor(run)) {
-    const failed = updateCollabRun(run.id, { status: 'failed', reason: 'This conversation is busy with another turn. Wait for it to finish, then start Collab again.' })!
+  // P0-1: check the folder before taking the chat's lock (a failure here used to keep it locked).
+  if (!input.cwd || !input.cwd.trim()) {
+    const failed = updateCollabRun(run.id, { status: 'failed', reason: 'Collab mode requires a project folder.' })!
     emitChanged()
     return failed
   }
-  if (!input.cwd || !input.cwd.trim()) {
-    const failed = updateCollabRun(run.id, { status: 'failed', reason: 'Collab mode requires a project folder.' })!
+  if (!lockFor(run)) {
+    const failed = updateCollabRun(run.id, { status: 'failed', reason: 'This conversation is busy with another turn. Wait for it to finish, then start Collab again.' })!
     emitChanged()
     return failed
   }
@@ -298,7 +319,7 @@ function inlineInputs(run: CollabRun, task: CollabTask): string {
 function runPlanner(runId: string): void {
   const run = getCollabRunBare(runId); if (!run) return
   if (!lockFor(run)) { pause(runId, 'This conversation is busy with another turn. Resume when it finishes.'); return }
-  const sender = wc(runId); if (!sender) { updateCollabRun(runId, { status: 'failed', reason: 'No app window to run in.' }); unlockFor(run); emitChanged(); return }
+  const sender = wc(runId); if (!sender) { updateCollabRun(runId, { status: 'failed', reason: 'No app window to run in.' }); unlockFor(run, 'error'); emitChanged(); return }
   const prompt = [
     `You are the Planner for a Collab run. Goal:`, '', run.goal, '',
     `Read the shared files under \`${relRunDir(run)}/\` if they exist.`,
@@ -310,19 +331,19 @@ function runPlanner(runId: string): void {
     conversationId: run.conversationId, providerId: run.providerId, prompt,
     cwd: run.projectCwd, timeoutMs: timeoutFor('planner'), permissionMode: run.permissionMode, model: strongModel(run.providerId) || undefined, skillIds: [SK_PROTOCOL, SK_PLANNER], noConversationContext: true,
     parallelGroup: `collab:${runId}:planner`, extraMetadata: tag(runId, 'planner'),
-    onDone: (mid, err) => onPlannerDone(runId, mid, err)
+    onDone: guarded(runId, 'Planner', (mid, err) => onPlannerDone(runId, mid, err))
   })
   activeRunId.set(runId, rid)
 }
 
 function onPlannerDone(runId: string, messageId: string | null, err?: string): void {
   const run = getCollabRun(runId); if (!run || run.status === 'stopped') return
-  if (err || !messageId) { updateCollabRun(runId, { status: 'failed', reason: err || 'Planner produced no output.' }); unlockFor(run); emitChanged(); return }
+  if (err || !messageId) { updateCollabRun(runId, { status: 'failed', reason: err || 'Planner produced no output.' }); unlockFor(run, 'error'); emitChanged(); return }
   const text = getMessage(messageId)?.content ?? ''
   const parsed = extractJson<{ tasks?: CollabTaskDraft[]; outputDir?: unknown; conflicts?: unknown }>(text)
   const tasks = parsed?.tasks
   if (!tasks || !Array.isArray(tasks) || tasks.length === 0) {
-    updateCollabRun(runId, { status: 'failed', reason: 'Could not read a task list from the plan. You can start Collab again.' }); unlockFor(run); emitChanged(); return
+    updateCollabRun(runId, { status: 'failed', reason: 'Could not read a task list from the plan. You can start Collab again.' }); unlockFor(run, 'error'); emitChanged(); return
   }
   // D-064: deliverables go to a visible folder; any task path the Planner still put
   // under the hidden run folder is moved there.
@@ -335,7 +356,7 @@ function onPlannerDone(runId: string, messageId: string | null, err?: string): v
   // app's own plan checks (paths outside the folder, two tasks on one file, …). Shown on the
   // card and by `troupe collab status`; the user decides.
   updateCollabRun(runId, { status: 'awaiting_confirmation', reason: checksText(fresh, parsed?.conflicts) })
-  unlockFor(fresh)
+  unlockFor(fresh, 'waiting')   // queued messages wait for your Approve / Stop
   emitChanged()
   logInfo(`[collab] plan ready: ${tasks.length} tasks`)
 }
@@ -371,11 +392,15 @@ export function stopCollab(runId: string): CollabRun | null {
   // D-121: a stopped run still gets a wrap-up — what got done, what didn't — once any task ran.
   const worked = !wasPlanning && (run.tasks ?? []).some((t) => t.attempts > 0)
   const stopped = updateCollabRun(runId, { status: 'stopped', reason: worked ? 'Stopped by you. Writing a short wrap-up…' : 'Stopped by you.', ...(wasPlanning ? {} : { summary: countsSummary(run, true) }) })
-  unlockFor(run)
+  // P0-3: with a wrap-up to write, the run keeps the chat until it's written (onWrapUpDone
+  // releases it as 'stopped'), so a queued message can't run first and push the wrap-up out.
+  if (!worked) unlockFor(run, 'stopped')
   emitChanged()
   logInfo('[collab] stopped', { run: runId, was: run.status, wrapUp: worked })
   // After the cancelled agent has let go of the conversation (its own onDone ignores a stopped run).
-  if (worked) setTimeout(() => { if (!runWrapUp(runId, 'stopped')) { updateCollabRun(runId, { reason: 'Stopped by you.' }); emitChanged() } }, 1500)
+  if (worked) setTimeout(() => {
+    if (!runWrapUp(runId, 'stopped')) { updateCollabRun(runId, { reason: 'Stopped by you.' }); unlockFor(run, 'stopped'); emitChanged() }
+  }, 1500)
   return stopped
 }
 
@@ -458,7 +483,7 @@ function recordText(t: CollabTask): string {
 function runMaker(runId: string, taskId: string): void {
   const run = getCollabRun(runId); if (!run || run.status !== 'running') return
   if (!lockFor(run)) { pause(runId, 'This conversation is busy with another turn. Resume when it finishes.'); return }
-  const task = getTask(taskId); if (!task) return
+  const task = getTask(taskId); if (!task) { pause(runId, 'A task in this run could not be found. Resume to carry on.'); return }   // P0-1: unlocks
   const sender = wc(runId); if (!sender) { pause(runId, 'No app window to run in.'); return }
   // A task assigned to an agent that has since been turned off runs on the run's own agent (D-071).
   const makerProvider = makerProviderOf(run, task)
@@ -496,7 +521,7 @@ function runMaker(runId: string, taskId: string): void {
     conversationId: run.conversationId, providerId: makerProvider, model: makerModel || undefined, prompt,
     cwd: run.projectCwd, timeoutMs: timeoutFor('maker'), permissionMode: run.permissionMode, skillIds: [SK_PROTOCOL, SK_MAKER], noConversationContext: true,
     parallelGroup: `collab:${runId}:maker`, extraMetadata: tag(runId, 'maker', task),
-    onDone: (mid, err) => onMakerDone(runId, taskId, mid, err)
+    onDone: guarded(runId, 'Maker', (mid, err) => onMakerDone(runId, taskId, mid, err))
   })
   activeRunId.set(runId, rid)
   updateTask(taskId, { makerRunId: rid })
@@ -772,8 +797,8 @@ function startRepair(runId: string, taskId: string, opts: { auto: boolean; note?
   const run = getCollabRun(runId); if (!run) return
   const task = getTask(taskId); if (!task) return
   if (!lockFor(run)) { pause(runId, 'This conversation is busy with another turn. Resume when it finishes.'); return }
-  const sender = wc(runId); if (!sender) { unlockFor(run); pause(runId, 'No app window to run in.'); return }
-  if (run.spent.runs >= run.budget.maxRuns) { unlockFor(run); pause(runId, `Budget reached (${run.budget.maxRuns} agent runs) while “${task.title}” needs a fix. Raise the budget, or fix the task yourself below.`); return }
+  const sender = wc(runId); if (!sender) { pause(runId, 'No app window to run in.'); return }
+  if (run.spent.runs >= run.budget.maxRuns) { pause(runId, `Budget reached (${run.budget.maxRuns} agent runs) while “${task.title}” needs a fix. Raise the budget, or fix the task yourself below.`); return }
   updateCollabRun(runId, { status: 'running', reason: `Asking the Planner how to fix “${task.title}”…`, repair: null })
   emitChanged()
   const tasks = run.tasks ?? []
@@ -802,7 +827,7 @@ function startRepair(runId: string, taskId: string, opts: { auto: boolean; note?
     cwd: run.projectCwd, timeoutMs: timeoutFor('repair'), permissionMode: 'read', model: strongModel(run.providerId) || undefined,
     skillIds: [SK_PROTOCOL, SK_PLANNER], noConversationContext: true,
     parallelGroup: `collab:${runId}:planner`, extraMetadata: tag(runId, 'repair', task),
-    onDone: (mid, err) => onRepairDone(runId, taskId, mid, err, opts.auto)
+    onDone: guarded(runId, 'repair run', (mid, err) => onRepairDone(runId, taskId, mid, err, opts.auto))
   })
   activeRunId.set(runId, rid)
 }
@@ -927,7 +952,7 @@ export function applyRepair(sender: WebContents, runId: string, index: number): 
 function runReviewer(runId: string, taskId: string, _isFinal: boolean): void {
   const run = getCollabRun(runId); if (!run || run.status !== 'running') return
   if (!lockFor(run)) { pause(runId, 'This conversation is busy with another turn. Resume when it finishes.'); return }
-  const task = getTask(taskId); if (!task) return
+  const task = getTask(taskId); if (!task) { pause(runId, 'A task in this run could not be found. Resume to carry on.'); return }   // P0-1: unlocks
   const sender = wc(runId); if (!sender) { pause(runId, 'No app window to run in.'); return }
   if (task.kind === 'review') updateTask(taskId, { status: 'in_progress', attempts: task.attempts + 1 })
   emitChanged()
@@ -958,7 +983,7 @@ function runReviewer(runId: string, taskId: string, _isFinal: boolean): void {
     // sources and URLs itself (D-064: several reviews failed for lack of it).
     cwd: run.projectCwd, timeoutMs: timeoutFor('reviewer'), permissionMode: 'read', allowWeb: true, model: strongModel(reviewer) || undefined, skillIds: [SK_PROTOCOL, SK_REVIEWER], noConversationContext: true,
     parallelGroup: `collab:${runId}:reviewer`, extraMetadata: tag(runId, 'reviewer', task),
-    onDone: (mid, err) => onReviewerDone(runId, taskId, mid, err)
+    onDone: guarded(runId, 'Reviewer', (mid, err) => onReviewerDone(runId, taskId, mid, err))
   })
   activeRunId.set(runId, rid)
   updateTask(taskId, { reviewerRunId: rid })
@@ -1044,7 +1069,7 @@ function reviewBlocked(runId: string, taskId: string, why: string[]): void {
 
 function pause(runId: string, reason: string): void {
   const r = updateCollabRun(runId, { status: 'needs_attention', reason })
-  if (r) unlockFor(r)
+  if (r) unlockFor(r, 'waiting')   // the run isn't over: queued messages wait for Resume / Stop
   emitChanged()
 }
 
@@ -1074,7 +1099,7 @@ function finalize(runId: string): void {
   // D-064: a run with unresolved tasks is not "done" — it waits for Resume (retry) or Stop.
   if (failed.length) {
     updateCollabRun(runId, { status: 'needs_attention', summary, reason: `${summary}. Resume retries ${failed.length === 1 ? 'it' : 'them'}; Stop ends the run.` })
-    unlockFor(run); emitChanged()
+    unlockFor(run, 'waiting'); emitChanged()
     return
   }
   // D-121: every finished run ends with the Planner's wrap-up — outcome, files, decisions for
@@ -1122,14 +1147,20 @@ function wrapUpPrompt(run: CollabRun, ending: 'done' | 'stopped'): string {
 function runWrapUp(runId: string, ending: 'done' | 'stopped'): boolean {
   const run = getCollabRun(runId); if (!run) return false
   if (!lockFor(run)) return false
-  const sender = wc(runId); if (!sender) { unlockFor(run); return false }
+  const sender = wc(runId); if (!sender) return false   // the caller releases the lock with the run's outcome
   bumpRuns(runId)
   const rid = startRun(sender, {
     conversationId: run.conversationId, providerId: run.providerId, prompt: wrapUpPrompt(run, ending),
     cwd: run.projectCwd, timeoutMs: timeoutFor('wrapup'), permissionMode: 'read', model: strongModel(run.providerId) || undefined,
     skillIds: [SK_PROTOCOL, SK_PLANNER], noConversationContext: true,
     parallelGroup: `collab:${runId}:planner`, extraMetadata: tag(runId, 'wrapup'),
-    onDone: (mid, err) => onWrapUpDone(runId, ending, mid, err)
+    onDone: (mid, err) => {
+      try { onWrapUpDone(runId, ending, mid, err) } catch (e) {
+        logError('[collab] wrap-up handling failed', { run: runId, err: String((e as Error)?.stack ?? e) })
+        const r = getCollabRunBare(runId); if (r) unlockFor(r, ending === 'stopped' ? 'stopped' : 'done')
+        emitChanged()
+      }
+    }
   })
   wrapUps.set(runId, rid)
   if (ending === 'done') activeRunId.set(runId, rid)
@@ -1151,7 +1182,7 @@ function onWrapUpDone(runId: string, ending: 'done' | 'stopped', messageId: stri
   } else if (run.status === 'stopped') {
     updateCollabRun(runId, { reason: 'Stopped by you.', summary: countsSummary(getCollabRun(runId)!, true) + tail })
   }
-  unlockFor(run)
+  unlockFor(run, ending === 'stopped' ? 'stopped' : 'done')
   emitChanged()
 }
 

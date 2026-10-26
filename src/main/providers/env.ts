@@ -1,6 +1,6 @@
 import { homedir } from 'os'
 import { join } from 'path'
-import { execFileSync } from 'child_process'
+import { execFileSync, execFile } from 'child_process'
 import { winExtraDirs, expandWinVars, parseRegPath, joinWinPath, withWinPath } from '../platform/winEnv'
 import { envPath } from '../platform/winBin'
 
@@ -10,8 +10,15 @@ import { envPath } from '../platform/winBin'
 // login-shell PATH once and merge it in. Best-effort, cached.
 let loginPath: string | null | undefined // undefined = not tried, null = failed/none
 
+let refreshing: Promise<void> | null = null
+
+const lastPathLine = (out: string): string | null =>
+  out.split('\n').map((l) => l.trim()).filter(Boolean).reverse().find((l) => l.includes('/')) ?? null
+
 function resolveLoginPath(): string | null {
   if (loginPath !== undefined) return loginPath
+  // Audit #5: a refresh is reading it without blocking — use the static list until it lands.
+  if (refreshing) return null
   loginPath = null
   if (process.platform !== 'darwin') return loginPath
   try {
@@ -20,14 +27,30 @@ function resolveLoginPath(): string | null {
       encoding: 'utf8', timeout: 4000, stdio: ['ignore', 'pipe', 'ignore']
     })
     // Take the last line that looks like a PATH (skip any shell-startup noise).
-    const cand = out.split('\n').map((l) => l.trim()).filter(Boolean).reverse().find((l) => l.includes('/'))
+    const cand = lastPathLine(out)
     if (cand) loginPath = cand
   } catch { /* best-effort — fall back to the static list below */ }
   return loginPath
 }
 
 /** Forget the cached login-shell PATH, so a CLI installed while the app runs is found on the next check (D-103 Re-check). */
-export function resetLoginPath(): void { loginPath = undefined; winRegPath = undefined }
+export function resetLoginPath(): void { loginPath = undefined; winRegPath = undefined; if (process.platform === 'darwin') void refreshLoginPath() }
+
+/** Re-read the login-shell PATH without blocking the main process (audit #5: the sync read
+ *  froze streaming and every IPC call for up to 4 s on each agent check). Calls share one read. */
+export function refreshLoginPath(): Promise<void> {
+  if (refreshing) return refreshing
+  if (process.platform !== 'darwin') { loginPath = undefined; winRegPath = undefined; return Promise.resolve() }
+  const shell = process.env.SHELL || '/bin/zsh'
+  refreshing = new Promise<void>((resolve) => {
+    execFile(shell, ['-ilc', 'printf %s "$PATH"'], { encoding: 'utf8', timeout: 4000 }, (err, out) => {
+      loginPath = !err || out ? lastPathLine(String(out ?? '')) : null
+      refreshing = null
+      resolve()
+    })
+  })
+  return refreshing
+}
 
 // Windows (D-120): the user + machine PATH as the registry has them now, cached like the
 // login-shell PATH above and re-read after an install (resetLoginPath).

@@ -9,7 +9,7 @@ import type { QueuePause, QueuedMessage, QueueState } from '../../../shared/turn
 // D-138: messages sent while the chat is busy, tucked behind the top of the composer. Each runs
 // as its own turn when the one before it finishes. Remove one, or edit it from ⋯. Stop or a
 // failed reply pauses the queue until you Resume.
-const PAUSE_WORD: Record<QueuePause, string> = { stopped: 'Paused after Stop', error: 'Paused — the last reply failed', restart: 'Paused — Troupe restarted' }
+const PAUSE_WORD: Record<QueuePause, string> = { stopped: 'Paused after Stop', error: 'Paused — the last reply failed', restart: 'Paused — Troupe restarted', collab: 'Waiting — Collab needs you first' }
 
 export default function QueueList({ conversationId }: { conversationId: string }) {
   const q = useQueue(conversationId)
@@ -27,7 +27,7 @@ export default function QueueList({ conversationId }: { conversationId: string }
       {q.paused && (
         <div className="queue-paused" title={q.error ?? undefined}>
           <span>{PAUSE_WORD[q.paused]}</span>
-          <button className="queue-link" onClick={() => act(api.queue.resume(conversationId), 'Resume queue')}>Resume</button>
+          <button className="queue-link" onClick={() => act(api.queue.resume(conversationId), 'Resume queue')} title={q.paused === 'collab' ? 'Run the queued messages now, before you approve or resume Collab' : undefined}>{q.paused === 'collab' ? 'Run anyway' : 'Resume'}</button>
           <button className="queue-link" onClick={() => act(api.queue.clear(conversationId), 'Clear queue')}>Clear</button>
         </div>
       )}

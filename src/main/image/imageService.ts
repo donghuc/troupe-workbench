@@ -6,7 +6,7 @@
 import { promises as fsp, existsSync, statSync, readFileSync } from 'fs'
 import { renameRetry } from '../platform/winFs'
 import { join, resolve, relative, sep, extname, basename, isAbsolute } from 'path'
-import { createHash } from 'crypto'
+import { createHash, randomUUID } from 'crypto'
 import { homedir } from 'os'
 import type { WebContents } from 'electron'
 import { getSetting, setSetting } from '../database/settingsRepo'
@@ -22,6 +22,7 @@ import {
   IMAGE_FOLDER_SETTING, CANVAS_FILE, INPUTS_DIR, OUTPUTS_DIR, SAVED_DIR, HISTORY_DIR, savedName, emptyCanvas, parseCanvas, newId,
   CANVASES_DIR, CANVAS_INDEX_FILE, parseCanvasIndex, nextCanvasName, addTab, renameTab, removeTab, copyName, isCanvasId, type CanvasIndex,
   buildImagePrompt, isImageAgent, isVectorAgent, isSelfSavingAgent, isImagePath, imagePathsInReply, isRefRole,
+  applyRunResult, type RunRecord,
   type Canvas, type ImageRunInput, type ImageRunDone, type ImageRunEvent
 } from '../../shared/imageCanvas'
 
@@ -55,7 +56,9 @@ function requireFolder(): string {
 // canvases/index.json holds the tab list and the active tab; canvases/<id>.json one canvas.
 // Writes go through a temp file + rename; index changes are serialised.
 const writeJson = async (abs: string, data: unknown) => {
-  const tmp = `${abs}.tmp`
+  // P0-4 (audit 2026-10-26): a temp name of its own per write — two writes to one file used to
+  // share `<file>.tmp`, so one could rename the other's half-written file into place.
+  const tmp = `${abs}.${randomUUID().slice(0, 8)}.tmp`
   await fsp.writeFile(tmp, JSON.stringify(data, null, 2), 'utf8')
   await renameRetry(tmp, abs)
 }
@@ -65,6 +68,14 @@ const canvasPath = (f: string, id: string) => {
 }
 let indexChain: Promise<unknown> = Promise.resolve()
 const serial = <T>(fn: () => Promise<T>): Promise<T> => { const r = indexChain.then(fn, fn); indexChain = r.catch(() => {}); return r }
+// P0-4: one canvas's writes (autosave, a run result, Clear) run one at a time, in order.
+const canvasChains = new Map<string, Promise<unknown>>()
+function perCanvas<T>(id: string, fn: () => Promise<T>): Promise<T> {
+  const r = (canvasChains.get(id) ?? Promise.resolve()).then(fn, fn)
+  const tail = r.catch(() => {}); canvasChains.set(id, tail)
+  void tail.then(() => { if (canvasChains.get(id) === tail) canvasChains.delete(id) })
+  return r
+}
 
 /** The tab list. First open: the old single canvas.json becomes "Canvas 1" (moved, not copied). */
 async function readIndex(f: string): Promise<CanvasIndex> {
@@ -103,7 +114,19 @@ export async function saveCanvas(id: string, c: Canvas): Promise<void> {
   const f = requireFolder()
   const ix = await canvasIndex()
   if (!ix.tabs.some((t) => t.id === id)) return   // a deleted canvas must not come back from a late autosave
-  await writeJson(canvasPath(f, id), parseCanvas(JSON.stringify(c)))   // never write anything the loader would reject
+  await perCanvas(id, () => writeJson(canvasPath(f, id), parseCanvas(JSON.stringify(c))))   // never write anything the loader would reject
+}
+
+/** A run finished on a canvas that isn't on screen: read, add the result and write, as one step
+ *  in that canvas's write queue, so two results (or a result and an autosave) can't overwrite each other (P0-4). */
+export async function applyRunResultTo(id: string, processorId: string, rec: Omit<RunRecord, 'agent' | 'model'>, outputX?: number): Promise<void> {
+  const f = requireFolder()
+  const ix = await canvasIndex()
+  if (!ix.tabs.some((t) => t.id === id)) return
+  await perCanvas(id, async () => {
+    const cur = await loadCanvas(id)
+    await writeJson(canvasPath(f, id), parseCanvas(JSON.stringify(applyRunResult(cur, processorId, rec, outputX))))
+  })
 }
 
 async function snapshot(f: string, id: string, why: string): Promise<void> {
@@ -117,9 +140,8 @@ async function snapshot(f: string, id: string, why: string): Promise<void> {
 /** Clear one canvas to blank. The old one is kept in .history/; no image file is deleted. */
 export async function clearCanvas(id: string): Promise<Canvas> {
   const f = requireFolder()
-  await snapshot(f, id, 'cleared')
   const c = emptyCanvas()
-  await writeJson(canvasPath(f, id), c)
+  await perCanvas(id, async () => { await snapshot(f, id, 'cleared'); await writeJson(canvasPath(f, id), c) })
   logInfo('[image] canvas cleared', { id })
   return c
 }

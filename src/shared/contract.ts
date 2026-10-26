@@ -167,6 +167,7 @@ export const INVOKE_PATHS = [
   'image.canvases',
   'image.load',
   'image.save',
+  'image.applyRunResult',
   'image.clear',
   'image.setActive',
   'image.createCanvas',

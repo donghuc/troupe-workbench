@@ -32,8 +32,8 @@ import { thumbnail, pruneThumbs, type ThumbImage } from './image/thumbs'
 import { registerDefaultProviders } from './providers/registry'
 import { loadCustomAgents } from './agents/customAgentStore'
 import { refreshLiveMcpNames } from './tools/toolsService'
-import { cancelAllRuns } from './agent/runner'
-import { logInfo, logError } from './util/logger'
+import { stopAllRunsForQuit } from './agent/runner'
+import { logInfo, logError, logWarn } from './util/logger'
 import { stopWatch } from './filesystem/watcher'
 import { refreshCliAccess, stopCliServer } from './cli/cliAccess'
 import { initRunLog } from './agent/runLog'
@@ -208,4 +208,19 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-app.on('will-quit', () => { void cancelAllRuns(); void cancelAllImageRuns(); stopWatch(); stopSkillsWatch(); stopScheduler(); stopCliServer(); releaseVoice(); closeDb(); logInfo('app quit') })
+// Audit #18: wait (briefly) for running agents to stop and save what they wrote before the
+// database closes; it used to close first, and late replies were lost without a trace.
+let quitReady = false
+app.on('will-quit', (e) => {
+  if (quitReady) return
+  e.preventDefault()
+  quitReady = true
+  stopScheduler(); stopCliServer()
+  void (async () => {
+    void cancelAllImageRuns()
+    const left = await stopAllRunsForQuit(3000).catch(() => 0)
+    if (left) logWarn('quit: some runs did not stop in time', { left })
+    stopWatch(); stopSkillsWatch(); releaseVoice(); closeDb(); logInfo('app quit')
+    app.quit()
+  })()
+})

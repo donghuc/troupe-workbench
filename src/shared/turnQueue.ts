@@ -11,7 +11,7 @@ export interface QueuedMessage {
   queuedAt: number
 }
 
-export type QueuePause = 'stopped' | 'error' | 'restart'
+export type QueuePause = 'stopped' | 'error' | 'restart' | 'collab'
 
 export interface QueueState {
   conversationId: string
@@ -32,18 +32,25 @@ export function queuedText(input: StartTurnInput): string {
   return (typeof shown === 'string' && shown.trim() ? shown : input.text).trim()
 }
 
-export type TurnOutcome = 'done' | 'stopped' | 'error'
+/** How the work holding a chat ended. 'waiting': a Collab run paused for you (plan to approve,
+ *  needs attention) — it isn't over, so queued messages wait for it. */
+export type TurnOutcome = 'done' | 'stopped' | 'error' | 'waiting'
 
 /** After a turn: run the next message, or pause after Stop or a failure. */
 export function afterTurn(q: QueueState, outcome: TurnOutcome): { queue: QueueState; runNext: boolean } {
   if (!q.items.length) return { queue: q.paused ? { ...q, paused: null, error: undefined } : q, runNext: false }
+  if (outcome === 'waiting') return { queue: q.paused ? q : { ...q, paused: 'collab' }, runNext: false }
   if (outcome !== 'done') return { queue: { ...q, paused: outcome }, runNext: false }
+  // A Collab run that held the queue finished: carry on. A pause you caused (Stop) stays.
+  if (q.paused === 'collab') return { queue: { ...q, paused: null, error: undefined }, runNext: true }
   return { queue: q, runNext: !q.paused }
 }
 
-/** A message sent now: start it at once only when the chat is free and nothing is waiting to run. */
-export function startsNow(q: QueueState, busy: boolean): boolean {
-  return !busy && (q.items.length === 0 || q.paused !== null)
+/** A message sent now: start it at once only when the chat is free, nothing is waiting to run,
+ *  and no Collab run in this chat is waiting for you (plan to approve, paused) — D-139 fix: the
+ *  chat is free then, but a message would take it before Approve / Resume. */
+export function startsNow(q: QueueState, busy: boolean, collabWaiting = false): boolean {
+  return !busy && !collabWaiting && (q.items.length === 0 || q.paused !== null)
 }
 
 /** Restore saved queues after a restart: they wait for Resume. Drops empty ones and unknown chats. */
@@ -58,4 +65,16 @@ export function parseSavedQueues(raw: string | null, exists: (conversationId: st
     if (items.length) out.push({ conversationId: q.conversationId, items, paused: 'restart' })
   }
   return out
+}
+
+/** What is saved for a restart (audit #18): attachments by path only. A file's inline text (a text
+ *  file, a PDF's extracted text) isn't written into settings; after a restart the agent is told to
+ *  open the file itself, like a document. */
+export function queuesForDisk(qs: QueueState[]): QueueState[] {
+  return qs.filter((q) => q.items.length).map((q) => ({
+    ...q,
+    items: q.items.map((it) => it.input.attachments?.some((a) => a.content !== undefined)
+      ? { ...it, input: { ...it.input, attachments: it.input.attachments.map(({ content, ...a }) => (content !== undefined && !a.image ? { ...a, doc: true } : a)) } }
+      : it)
+  }))
 }

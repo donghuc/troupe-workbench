@@ -14,7 +14,7 @@ import type { CustomAgentId } from '../../shared/types'
 import { IPC } from '../../shared/ipc'
 import { CustomCliProvider, findPresetBin } from '../providers/CustomCliProvider'
 import { PRESET_RECIPES, presetRecipe } from '../../shared/agentRecipes'
-import { resetLoginPath, buildEnv } from '../providers/env'
+import { refreshLoginPath, buildEnv } from '../providers/env'
 import { removeTempDir } from '../util/tempFiles'
 import { logInfo } from '../util/logger'
 
@@ -102,8 +102,8 @@ export async function testCustomAgent(draft: CustomAgentDraft, id?: CustomAgentI
 }
 
 /** Which bundled presets are installed on this Mac: the first of their binaries found on PATH (no execution). */
-export function detectPresets(): { id: string; found: string | null }[] {
-  resetLoginPath()   // pick up a CLI installed while Troupe is open
+export async function detectPresets(): Promise<{ id: string; found: string | null }[]> {
+  await refreshLoginPath()   // pick up a CLI installed while Troupe is open (audit #5: not blocking)
   const env = buildEnv()
   return PRESET_RECIPES.map((r) => ({ id: r.id, found: findPresetBin(r.id, r.detect, env) }))
 }

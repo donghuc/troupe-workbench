@@ -6,7 +6,7 @@ import { randomUUID } from 'crypto'
 import { BrowserWindow, type WebContents } from 'electron'
 import { IPC } from '../../shared/ipc'
 import type { StartTurnInput, TurnState } from '../../shared/turns'
-import { EMPTY_QUEUE, QUEUE_MAX, TURN_QUEUE_SETTING, afterTurn, parseSavedQueues, queuedText, startsNow, type QueueState } from '../../shared/turnQueue'
+import { EMPTY_QUEUE, QUEUE_MAX, TURN_QUEUE_SETTING, afterTurn, parseSavedQueues, queuedText, startsNow, queuesForDisk, type QueueState } from '../../shared/turnQueue'
 import { startTurn, isBusy, onTurnIdle } from './turns'
 import { senderForRun } from './headless'
 import { getConversation } from '../conversations/conversationsRepo'
@@ -15,12 +15,16 @@ import { cleanErrorMessage } from '../../shared/errors'
 import { logInfo, logWarn } from '../util/logger'
 
 const queues = new Map<string, QueueState>()
+// Chats whose Collab run let go of the chat to wait for you (outcome 'waiting'). Cleared by the
+// next outcome there (the run resumed and ended, or was stopped). Memory only: after a restart a
+// waiting plan doesn't hold the chat.
+const collabWaiting = new Set<string>()
 
 export const getQueue = (conversationId: string): QueueState => queues.get(conversationId) ?? EMPTY_QUEUE(conversationId)
 
 function put(q: QueueState): void {
   if (q.items.length || q.paused) queues.set(q.conversationId, q); else queues.delete(q.conversationId)
-  try { setSetting(TURN_QUEUE_SETTING, JSON.stringify([...queues.values()].filter((x) => x.items.length))) } catch (e) { logWarn('queue save failed', { err: String(e) }) }
+  try { setSetting(TURN_QUEUE_SETTING, JSON.stringify(queuesForDisk([...queues.values()]))) } catch (e) { logWarn('queue save failed', { err: String(e) }) }
   for (const w of BrowserWindow.getAllWindows()) { if (!w.webContents.isDestroyed()) w.webContents.send(IPC.queueChanged, getQueue(q.conversationId)) }
 }
 
@@ -35,9 +39,12 @@ const find = (conversationId: string, id: string) => {
 export function sendOrQueue(sender: WebContents, input: StartTurnInput): { turn?: TurnState; queue: QueueState } {
   const q = getQueue(input.conversationId)
   if (!input.text.trim()) return { queue: q }
-  if (startsNow(q, isBusy(input.conversationId))) return { turn: startTurn(sender, input), queue: q }
+  const busy = isBusy(input.conversationId), waiting = collabWaiting.has(input.conversationId)
+  if (startsNow(q, busy, waiting)) return { turn: startTurn(sender, input), queue: q }
   if (q.items.length >= QUEUE_MAX) throw new Error(`At most ${QUEUE_MAX} messages can wait in a chat's queue.`)
-  put({ ...q, items: [...q.items, { id: randomUUID(), text: queuedText(input), input, queuedAt: Date.now() }] })
+  // Collab is waiting for you and the chat is free: the message waits, labelled as such (Run anyway = Resume).
+  const paused = !busy && waiting ? (q.paused ?? 'collab') : q.paused
+  put({ ...q, paused, items: [...q.items, { id: randomUUID(), text: queuedText(input), input, queuedAt: Date.now() }] })
   logInfo('queue add', { conv: input.conversationId, n: getQueue(input.conversationId).items.length })
   return { queue: getQueue(input.conversationId) }
 }
@@ -87,7 +94,10 @@ function drain(conversationId: string): void {
 /** Call once at startup, after the database is ready. */
 export function initTurnQueue(): void {
   for (const q of parseSavedQueues(getSetting(TURN_QUEUE_SETTING), (id) => !!getConversation(id))) queues.set(q.conversationId, q)
-  onTurnIdle((conversationId, outcome) => {
+  onTurnIdle((conversationId, outcome, holder) => {
+    // Only Collab's own outcomes change whether it waits for you; a chat turn you ran in
+    // between (Run anyway) doesn't end that wait.
+    if (holder) { if (outcome === 'waiting') collabWaiting.add(conversationId); else collabWaiting.delete(conversationId) }
     // After the finishing turn has settled (its broadcast and hooks); a send that slips in
     // meanwhile queues behind these, because startsNow sees waiting messages.
     setImmediate(() => {

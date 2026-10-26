@@ -56,7 +56,7 @@ async function attachOne(src: string, cwd: string | null, chatId?: string): Prom
   if (isText) return { path, content: buf.toString('utf8'), viewable: !absolute }
   if (IMAGE.test(name)) return { path, image: true, viewable: !absolute }
   if (PDF.test(name)) {
-    const text = extractPdfText(absolute ? path : ensureInside(cwd!, path))
+    const text = await extractPdfText(absolute ? path : ensureInside(cwd!, path))
     if (text.trim()) return { path, content: text.length > MAX_PDF_CHARS ? text.slice(0, MAX_PDF_CHARS) + '\n\n…(truncated)' : text, viewable: !absolute }
   }
   return { path, doc: true, viewable: !absolute }

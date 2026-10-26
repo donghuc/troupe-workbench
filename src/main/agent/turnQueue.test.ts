@@ -20,8 +20,8 @@ vi.mock('./runner', async () => {
   }
 })
 
-const { sendOrQueue, getQueue, removeQueued, editQueued, resumeQueue, initTurnQueue } = await import('./turnQueue')
-const { cancelTurn, isBusy } = await import('./turns')
+const { sendOrQueue, getQueue, removeQueued, editQueued, resumeQueue, clearQueue, initTurnQueue } = await import('./turnQueue')
+const { cancelTurn, isBusy, acquireLock, releaseLock } = await import('./turns')
 const { listMessages } = await import('../conversations/messagesRepo')
 const sender = { isDestroyed: () => true, send: () => {} } as never
 const send = (text: string) => sendOrQueue(sender, { conversationId: 'c1', text, defaultProvider: 'claude-code' })
@@ -35,6 +35,7 @@ beforeEach(() => {
   testDb().prepare(`INSERT INTO projects (id, name, folder_path, created_at, last_opened_at) VALUES ('p1', 'Sandbox', '/work/proj', ?, ?)`).run(now, now)
   testDb().prepare(`INSERT INTO conversations (id, project_id, title, provider, created_at, updated_at) VALUES ('c1', 'p1', 'Chat', 'claude-code', ?, ?)`).run(now, now)
   if (!inited) { initTurnQueue(); inited = true }
+  clearQueue('c1')   // the queue lives in memory: start each test empty
 })
 
 describe('message queue (D-138)', () => {
@@ -75,5 +76,52 @@ describe('message queue (D-138)', () => {
     running[0].done(); await tick()
     expect(userTexts()).toEqual(['first', 'second, reworded'])
     running[1].done(); await tick()
+  })
+  it('a late finish from a stopped run does not touch the next turn (P0-2)', async () => {
+    send('first')
+    const stale = running[0]
+    await cancelTurn('c1'); await tick()                   // the stopped run reports once
+    expect(isBusy('c1')).toBe(false)
+    send('second')
+    expect(isBusy('c1')).toBe(true)
+    stale.done(); await tick()                               // …and its process reports again, late
+    expect(isBusy('c1')).toBe(true)                          // the new turn keeps running
+    expect(userTexts()).toEqual(['first', 'second'])
+    running[1].done(); await tick()
+    expect(isBusy('c1')).toBe(false)
+  })
+  it('Collab: waiting holds the queue, stopped pauses it, done carries on (P0-3)', async () => {
+    acquireLock('c1', 'collab:r1'); send('after collab')
+    releaseLock('c1', 'collab:r1', 'waiting'); await tick()
+    expect(getQueue('c1')).toMatchObject({ paused: 'collab', items: [{ text: 'after collab' }] })
+    acquireLock('c1', 'collab:r1'); releaseLock('c1', 'collab:r1', 'done'); await tick()
+    expect(userTexts()).toEqual(['after collab'])            // the run finished: the queue went on
+    running[0].done(); await tick()
+    acquireLock('c1', 'collab:r2'); send('later')
+    releaseLock('c1', 'collab:r2', 'stopped'); await tick()
+    expect(getQueue('c1')).toMatchObject({ paused: 'stopped' })
+    expect(isBusy('c1')).toBe(false)
+  })
+  it('a message sent while a Collab plan waits for approval waits too — the chat is free then (D-139 fix)', async () => {
+    acquireLock('c1', 'collab:r3'); releaseLock('c1', 'collab:r3', 'waiting'); await tick()   // plan ready, nothing queued yet
+    expect(isBusy('c1')).toBe(false)
+    const r = send('sent after the plan was ready')
+    expect(r.turn).toBeUndefined()
+    expect(getQueue('c1')).toMatchObject({ paused: 'collab', items: [{ text: 'sent after the plan was ready' }] })
+    expect(userTexts()).toEqual([])
+    acquireLock('c1', 'collab:r3'); releaseLock('c1', 'collab:r3', 'done'); await tick()       // approved, ran, done
+    expect(userTexts()).toEqual(['sent after the plan was ready'])
+    running[running.length - 1].done(); await tick()
+    send('and now'); expect(userTexts()).toEqual(['sent after the plan was ready', 'and now'])   // no longer waiting
+    running[running.length - 1].done(); await tick()
+  })
+  it('Run anyway sends while Collab still waits; later sends keep waiting', async () => {
+    acquireLock('c1', 'collab:r4'); releaseLock('c1', 'collab:r4', 'waiting'); await tick()
+    send('urgent'); resumeQueue('c1')
+    expect(userTexts()).toEqual(['urgent'])
+    running[running.length - 1].done(); await tick()
+    send('another'); expect(getQueue('c1')).toMatchObject({ paused: 'collab', items: [{ text: 'another' }] })
+    acquireLock('c1', 'collab:r4'); releaseLock('c1', 'collab:r4', 'stopped'); await tick()     // Collab stopped
+    expect(getQueue('c1')).toMatchObject({ paused: 'stopped' })
   })
 })

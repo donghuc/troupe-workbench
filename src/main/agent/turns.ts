@@ -63,12 +63,13 @@ class ConversationBusyError extends Error {
 }
 
 // D-138: told when a conversation becomes free, so the message queue can run its next message.
-const idleListeners = new Set<(conversationId: string, outcome: TurnOutcome) => void>()
-export function onTurnIdle(fn: (conversationId: string, outcome: TurnOutcome) => void): () => void {
+// `holder` is set when a lock holder other than a chat turn (Collab) let go of the chat.
+const idleListeners = new Set<(conversationId: string, outcome: TurnOutcome, holder?: string) => void>()
+export function onTurnIdle(fn: (conversationId: string, outcome: TurnOutcome, holder?: string) => void): () => void {
   idleListeners.add(fn); return () => { idleListeners.delete(fn) }
 }
-function notifyIdle(conversationId: string, outcome: TurnOutcome): void {
-  for (const f of idleListeners) { try { f(conversationId, outcome) } catch (e) { logWarn('turn idle listener failed', { err: String(e) }) } }
+function notifyIdle(conversationId: string, outcome: TurnOutcome, holder?: string): void {
+  for (const f of idleListeners) { try { f(conversationId, outcome, holder) } catch (e) { logWarn('turn idle listener failed', { err: String(e) }) } }
 }
 
 export const isBusy = (conversationId: string): boolean => turns.has(conversationId) || external.has(conversationId)
@@ -154,7 +155,13 @@ function logFinishedTurn(conversationId: string, t: Turn, err: string | null): v
   } catch { /* the log is best-effort */ }
 }
 
-function onEvent(conversationId: string, provider: ProviderId, ev: AgentEvent): void {
+// P0-2 (audit 2026-10-26): a run reports only to the turn that started it. After Stop, a
+// cancelled agent can exit after the next message's turn has begun; its late events and
+// finish must not touch that turn's lanes, step or lock.
+const isCurrent = (conversationId: string, owner: Turn): boolean => turns.get(conversationId) === owner
+
+function onEvent(conversationId: string, provider: ProviderId, ev: AgentEvent, owner?: Turn): void {
+  if (owner && !isCurrent(conversationId, owner)) return
   const now = Date.now()
   const withActivity = (label: string) => (l: TurnLane): TurnLane => ({ ...l, activity: { label, startedAt: l.activity?.startedAt ?? now } })
   switch (ev.type) {
@@ -170,8 +177,8 @@ function onEvent(conversationId: string, provider: ProviderId, ev: AgentEvent): 
   }
 }
 
-function onDone(conversationId: string, provider: ProviderId, runId: string, error?: string): void {
-  const t = turns.get(conversationId); if (!t) return
+function onDone(conversationId: string, provider: ProviderId, runId: string, error: string | undefined, owner: Turn): void {
+  const t = turns.get(conversationId); if (!t || t !== owner) return
   t.runIds.delete(runId)
   if (error) set(conversationId, { error })
   if (t.compare) { bumpRev(conversationId); finish(conversationId); return }   // the Compare run itself just ended
@@ -207,8 +214,8 @@ function dispatch(conversationId: string, provider: ProviderId, chained: boolean
     attachments: t.attachments, skillId: t.skillId, skillIds: t.modeSkill ? [`global/${t.modeSkill}`] : undefined, permissionMode: t.permMode,
     model: modelForProvider(provider, t.model, codexExtra(), parseDisabledModels(getSetting(DISABLED_MODELS_SETTING))) || undefined,   // a model switched off falls back to the agent's default (D-072)
     chained, parallelGroup: t.parallelGroup,
-    onEvent: (ev) => onEvent(conversationId, provider, ev),
-    onDone: (_mid, err) => onDone(conversationId, provider, runId, err)
+    onEvent: (ev) => onEvent(conversationId, provider, ev, t),
+    onDone: (_mid, err) => onDone(conversationId, provider, runId, err, t)
   })
   t.runIds.add(runId)
 }
@@ -247,7 +254,7 @@ function startCompare(conversationId: string): void {
     parallelGroup: t.compare.group,
     extraMetadata: { synthesis: true, synthesisAgent: agent, ...(t.compare.of ? { synthesisOf: t.compare.of } : {}) },
     onEvent: () => { /* the card is shown once saved; no lane */ },
-    onDone: (_mid, err) => { if (err) logWarn('compare failed', { conv: conversationId, err }); onDone(conversationId, agent, runId, undefined) }
+    onDone: (_mid, err) => { if (err) logWarn('compare failed', { conv: conversationId, err }); onDone(conversationId, agent, runId, undefined, t) }
   })
   t.runIds.add(runId)
 }
@@ -285,7 +292,6 @@ function startParallel(conversationId: string): void {
 export function startTurn(sender: WebContents, input: StartTurnInput, h?: { onFinished?: (error?: string) => void }): TurnState {
   if (!input.text.trim()) return getTurnState(input.conversationId)
   if (isBusy(input.conversationId)) throw new ConversationBusyError()
-  if (h) hooks.set(input.conversationId, h)
   let plan = planTurn(input.text, input.defaultProvider, enabledProviderIds(getSetting(DISABLED_AGENTS_SETTING)))
   if (plan.blocked) throw new Error(offMessage(plan.blocked))   // D-071: refused before anything is saved
   // Thinking mode (D-083): the message is the proposition; the template decides who plays what.
@@ -308,6 +314,9 @@ export function startTurn(sender: WebContents, input: StartTurnInput, h?: { onFi
     log: { at: userMsg.createdAt, source: input.messageMetadata?.via === 'cli' ? 'cli' : input.messageMetadata?.scheduled ? 'schedule' : 'app' }
   }
   if (input.permissionMode) setConversationPermissionMode(input.conversationId, input.permissionMode)
+  // Audit #18: only once the turn really starts — a refused start (agent switched off) used to
+  // leave the scheduler's onFinished behind, to fire on the chat's next, unrelated turn.
+  if (h) hooks.set(input.conversationId, h); else hooks.delete(input.conversationId)
   turns.set(input.conversationId, turn)
   lockRow(input.conversationId, plan.chain, plan.mode === 'parallel')
   set(input.conversationId, { busy: true, error: null }, true)
@@ -356,10 +365,16 @@ export function acquireLock(conversationId: string, holder: string): boolean {
   set(conversationId, { busy: true, lanes: [], parallel: false, error: null }, true)
   return true
 }
-export function releaseLock(conversationId: string, holder: string): void {
-  if (external.get(conversationId) !== holder) return
+/** P0-3 (audit 2026-10-26): the holder says how its work ended, so the queue pauses after a
+ *  Collab Stop or failure (as after a chat Stop) and waits while Collab waits for you. */
+export function releaseLock(conversationId: string, holder: string, outcome: TurnOutcome = 'done'): void {
+  if (external.get(conversationId) !== holder) {
+    // Not holding it (e.g. Stop on a plan waiting for approval): still tell a free chat's queue.
+    if (!isBusy(conversationId)) notifyIdle(conversationId, outcome, holder)
+    return
+  }
   external.delete(conversationId)
   unlockRow(conversationId)
   set(conversationId, { busy: false }, true)
-  notifyIdle(conversationId, 'done')
+  notifyIdle(conversationId, outcome, holder)
 }

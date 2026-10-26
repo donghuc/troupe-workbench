@@ -16,14 +16,14 @@ const stream = (buf: Buffer) => new Response(new ReadableStream({
   start(c) { for (let i = 0; i < buf.length; i += 4096) c.enqueue(new Uint8Array(buf.subarray(i, i + 4096))); c.close() }
 }))
 
-function setup(over: { fetchBody?: Buffer; settings?: Record<string, string>; locale?: string } = {}) {
+function setup(over: { fetchBody?: Buffer; settings?: Record<string, string>; locale?: string; gate?: Promise<void> } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'voice-'))
   const events: VoiceDownloadEvent[] = []
   const log: string[] = []
   const fakeCtx = (path: string): WhisperCtx => ({
     transcribeData: (pcm, opts) => {
       log.push(`transcribe ${path.split('/').pop()} ${pcm.byteLength} ${opts.language}`)
-      return { stop: async () => { log.push('stop') }, promise: Promise.resolve({ result: ' hello there ', language: 'en', isAborted: false }) }
+      return { stop: async () => { log.push('stop') }, promise: (over.gate ?? Promise.resolve()).then(() => { log.push('done'); return { result: ' hello there ', language: 'en', isAborted: false } }) }
     },
     release: async () => { log.push(`release ${path.split('/').pop()}`) },
     backend: 'gpu'
@@ -73,7 +73,7 @@ describe('voice service (D-124)', () => {
     const [a, b] = await Promise.all([svc.transcribe(new ArrayBuffer(3200)), svc.transcribe(new ArrayBuffer(6400))])
     expect(a.text).toBe(' hello there ')
     expect(b.language).toBe('en')
-    expect(log).toEqual(['load base.bin', 'transcribe base.bin 3200 vi', 'transcribe base.bin 6400 vi'])   // loaded once
+    expect(log).toEqual(['load base.bin', 'transcribe base.bin 3200 vi', 'done', 'transcribe base.bin 6400 vi', 'done'])   // loaded once
     await svc.release()
     expect(log.at(-1)).toBe('release base.bin')
   })
@@ -120,5 +120,19 @@ describe('voice service (D-124)', () => {
     expect(log).toContain('release base.bin')
     expect(existsSync(join(dir, 'base.bin'))).toBe(false)
     expect((await svc.status()).active).toBeNull()
+  })
+  it('freeing or removing the model waits for a running transcription (audit #11)', async () => {
+    let open!: () => void
+    const { svc, log } = setup({ gate: new Promise<void>((r) => { open = r }) })
+    await svc.download('base')
+    const t = svc.transcribe(new ArrayBuffer(3200))
+    await new Promise((r) => setTimeout(r, 5))           // the transcription is under way
+    const rel = svc.release()
+    const rm = svc.remove('base')
+    await new Promise((r) => setTimeout(r, 5))
+    expect(log).not.toContain('release base.bin')       // not freed under the running job
+    open()
+    await t; await rel; await rm
+    expect(log.indexOf('done')).toBeLessThan(log.indexOf('release base.bin'))
   })
 })

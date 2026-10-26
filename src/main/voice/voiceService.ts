@@ -116,32 +116,43 @@ export function createVoiceService(deps: VoiceDeps) {
 
   function cancelDownload(id: VoiceModelId): void { downloads.get(id)?.ctl.abort() }
 
-  async function release(): Promise<void> {
+  // Audit #11 (2026-10-26): freeing the model goes through the same one-at-a-time queue as
+  // transcribing, so switching or removing a model can't free it under a running transcription.
+  function serial<T>(fn: () => Promise<T>): Promise<T> {
+    const p = queue.then(fn, fn)
+    queue = p.catch(() => {})
+    return p
+  }
+
+  async function releaseNow(): Promise<void> {
     if (idle) { clearTimeout(idle); idle = null }
     const l = loaded; loaded = null
     if (l) await l.ctx.release().catch(() => {})
   }
+  const release = (): Promise<void> => serial(releaseNow)
 
-  async function remove(id: VoiceModelId): Promise<void> {
+  function remove(id: VoiceModelId): Promise<void> {
     const m = find(id)
-    if (!m) return
+    if (!m) return Promise.resolve()
     cancelDownload(m.id)
-    if (loaded?.path === pathOf(m)) await release()
-    await fsp.rm(pathOf(m), { force: true })
+    return serial(async () => {
+      if (loaded?.path === pathOf(m)) await releaseNow()
+      await fsp.rm(pathOf(m), { force: true })
+    })
   }
 
   async function contextFor(path: string): Promise<WhisperCtx> {
     if (loaded?.path === path) return loaded.ctx
     if (loading) await loading.catch(() => {})
     if (loaded?.path === path) return loaded.ctx
-    await release()
+    await releaseNow()
     loading = deps.initWhisper(path)
     try { const ctx = await loading; loaded = { path, ctx }; backend = ctx.backend ?? backend; return ctx } finally { loading = null }
   }
 
   const keepWarm = () => {
     if (idle) clearTimeout(idle)
-    idle = setTimeout(() => { void release() }, deps.idleMs ?? IDLE_MS)
+    idle = setTimeout(() => { void release() }, deps.idleMs ?? IDLE_MS)   // queued behind any transcription
   }
 
   /** Load the model in the background when recording starts, so it's ready when you stop. */
@@ -150,7 +161,7 @@ export function createVoiceService(deps: VoiceDeps) {
     if (!m) return
     const t0 = Date.now()
     const was = loaded?.path === pathOf(m)
-    await contextFor(pathOf(m)).then(() => { keepWarm(); if (!was) deps.log?.('voice: model ready', { model: m.id, loadMs: Date.now() - t0 }) }).catch(() => {})
+    await serial(() => contextFor(pathOf(m))).then(() => { keepWarm(); if (!was) deps.log?.('voice: model ready', { model: m.id, loadMs: Date.now() - t0 }) }).catch(() => {})
   }
 
   /** Transcribe one recording (16 kHz mono s16le). One at a time; the model stays loaded for a while. */
@@ -182,9 +193,7 @@ export function createVoiceService(deps: VoiceDeps) {
         keepWarm()
       }
     }
-    const p = queue.then(run, run)
-    queue = p.catch(() => {})
-    return p
+    return serial(run)
   }
 
   async function cancel(): Promise<void> { await current?.stop().catch(() => {}) }
