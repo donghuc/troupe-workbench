@@ -33,7 +33,13 @@ Sending
 
 Scheduled tasks
   schedules                             List scheduled tasks
-  schedules run <task>                  Run one now
+  schedules show <task>                 Settings and prompt (prompt only for tasks bots can manage)
+  schedules run|pause|resume <task>     Run one now, pause it, or turn it back on
+  schedules add <project> "<title>" --prompt "…" (--daily 08:30 | --every 2h)
+       [--agent A] [--model M] [--mode read|auto] [--same-chat|--new-chat]
+       New tasks wait for your approval in Troupe ▸ Tasks. Use --prompt - to read it from stdin.
+  schedules edit <task> [--title …] [--prompt …] [--daily …|--every …] [--agent …] [--model …] [--mode …]
+  schedules delete <task>               Only tasks bots can manage; Full-access ones wait for you
 
 Project files (read-only)
   files <project> [folder]              List files
@@ -60,6 +66,7 @@ die() { echo "troupe: $*" >&2; exit 2; }
 cmd="$1"; shift
 args=()
 stdin_msg=0
+stdin_prompt=0
 add() { args+=(--data-urlencode "$1=$2"); }
 need() { [ "$1" -ge "$2" ] || die "usage: $3"; }
 
@@ -76,7 +83,16 @@ case "$cmd" in
           if [ "$2" = "-" ]; then stdin_msg=1; else add message "$2"; fi
           shift 2 ;;
   status|stop) need $# 1 "troupe $cmd <run>"; add run "$1"; shift ;;
-  schedules) if [ $# -ge 1 ] && [ "$1" = "run" ]; then need $# 2 "troupe schedules run <task>"; add do run; add task "$2"; shift 2; fi ;;
+  schedules)
+          if [ $# -ge 1 ] && [ "${1#--}" = "$1" ]; then
+            sub="$1"; shift; add do "$sub"
+            case "$sub" in
+              run|show|pause|resume|delete|edit) need $# 1 "troupe schedules $sub <task>"; add task "$1"; shift ;;
+              add) need $# 2 'troupe schedules add <project> "<title>" --prompt "…" --daily 08:30'; add project "$1"; add title "$2"; shift 2 ;;
+              list) ;;
+              *) die "unknown schedules command: $sub (try: troupe --help)" ;;
+            esac
+          fi ;;
   files)  need $# 1 "troupe files <project> [folder]"; add project "$1"; shift
           if [ $# -ge 1 ] && [ "${1#--}" = "$1" ]; then add path "$1"; shift; fi ;;
   cat)    need $# 2 "troupe cat <project> <path>"; add project "$1"; add path "$2"; shift 2 ;;
@@ -98,12 +114,16 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --json) add format json ;;
     --new) add new 1 ;;
+    --same-chat) add chat same ;;
+    --new-chat) add chat new ;;
+    --prompt) [ $# -ge 2 ] || die "--prompt needs text (or - for stdin)"
+      if [ "$2" = "-" ]; then stdin_prompt=1; else add prompt "$2"; fi; shift ;;
     --attach)
       [ $# -ge 2 ] || die "--attach needs a file"
       f="$2"; case "$f" in /*) ;; *) f="$PWD/$f" ;; esac
       add attach "$f"; shift ;;
     --wait-free) [ $# -ge 2 ] || die "--wait-free needs seconds"; add waitfree "$2"; shift ;;
-    --agent|--model|--mode|--last|--wait|--think|--since|--project|--source|--note)
+    --agent|--model|--mode|--last|--wait|--think|--since|--project|--source|--note|--title|--daily|--every)
       [ $# -ge 2 ] || die "$1 needs a value"
       add "${1#--}" "$2"; shift ;;
     *) die "unknown option: $1 (try: troupe --help)" ;;
@@ -111,6 +131,7 @@ while [ $# -gt 0 ]; do
   shift
 done
 [ "$stdin_msg" = 1 ] && args+=(--data-urlencode "message@-")
+[ "$stdin_prompt" = 1 ] && args+=(--data-urlencode "prompt@-")
 
 if [ ! -S "$SOCK" ]; then
   echo "troupe: can't reach Troupe. Open the app and turn on Settings ▸ Tools ▸ Command line." >&2

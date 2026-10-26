@@ -187,10 +187,41 @@ export function runsText(rs: RunLogEntry[]): string {
   }).join('\n')
 }
 
-export interface CliSchedule { id: string; title: string; project: string; agent: string; when: string; enabled: boolean; nextRunAt: number; lastRunAt: number | null; chat: string | null }
+export interface CliSchedule {
+  id: string; title: string; project: string; agent: string; when: string; enabled: boolean; nextRunAt: number; lastRunAt: number | null; chat: string | null
+  // D-134
+  mode?: string; model?: string | null; sameChat?: boolean
+  createdBy?: 'app' | 'cli'           // who made it
+  managed?: boolean                   // "Bots can manage this task"
+  waiting?: 'new' | 'edit' | 'delete' | null   // a change waiting for approval in Tasks
+  prompt?: string | null              // show: only for tasks handed over to bots
+  change?: string[]                   // show: the waiting edit, before → after
+}
+const MODE_TEXT: Record<string, string> = { read: 'Read-only', auto: 'Auto', full: 'Full access' }
+const WAIT_TEXT: Record<string, string> = { new: 'waiting for approval', edit: 'change waiting for approval', delete: 'delete waiting for approval' }
+function scheduleFlags(s: CliSchedule): string {
+  const f: string[] = []
+  if (s.waiting) f.push(WAIT_TEXT[s.waiting])
+  else if (!s.enabled) f.push('off')
+  if (s.managed) f.push('bots can manage')
+  return f.length ? `[${f.join(', ')}] ` : ''
+}
 export function schedulesText(ss: CliSchedule[]): string {
   if (!ss.length) return 'No scheduled tasks.'
-  return ss.map((s) => `${s.id}  ${s.enabled ? '' : '[off] '}${s.title} · ${s.project} · ${s.agent} · ${s.when}\n  next ${s.enabled ? when(s.nextRunAt) : '—'} · last ${s.lastRunAt ? when(s.lastRunAt) : 'never'}`).join('\n')
+  return ss.map((s) => `${s.id}  ${scheduleFlags(s)}${s.title} · ${s.project} · ${s.agent}${s.mode ? ` · ${MODE_TEXT[s.mode] ?? s.mode}` : ''} · ${s.when}\n  next ${s.enabled ? when(s.nextRunAt) : '—'} · last ${s.lastRunAt ? when(s.lastRunAt) : 'never'}`).join('\n')
+}
+/** `troupe schedules show`: one task in full. */
+export function scheduleText(s: CliSchedule): string {
+  const lines = [
+    `${s.title}  ${scheduleFlags(s)}`.trimEnd(),
+    `task ${s.id}`,
+    `project: ${s.project} · agent: ${s.agent}${s.model ? ` (${s.model})` : ''} · mode: ${MODE_TEXT[s.mode ?? ''] ?? s.mode ?? '—'}`,
+    `runs: ${s.when}, ${s.sameChat ? 'in the same chat each time' : 'in a new chat each time'} · next ${s.enabled ? when(s.nextRunAt) : '—'} · last ${s.lastRunAt ? when(s.lastRunAt) : 'never'}`,
+    `made ${s.createdBy === 'cli' ? 'from the command line' : 'in the app'}${s.managed ? ' · bots can manage it' : ' · not handed over to bots (list, run, pause, resume only)'}`
+  ]
+  if (s.change?.length) lines.push('', 'waiting for approval:', ...s.change.map((c) => `  ${c}`))
+  lines.push('', s.prompt != null ? `prompt:\n${s.prompt}` : 'prompt: hidden — the task isn\'t handed over to bots.')
+  return lines.join('\n')
 }
 export function describeSchedule(kind: string, intervalMin: number, atMin: number): string {
   if (kind === 'daily') return `daily at ${pad(Math.floor(atMin / 60))}:${pad(atMin % 60)}`

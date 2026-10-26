@@ -219,6 +219,20 @@ export interface Schedule {
   nextRunAt: number
   lastRunAt: number | null
   createdAt: number
+  /** D-134: who made it — the app, or a bot over the command line. */
+  createdVia: 'app' | 'cli'
+  /** D-134: "Bots can manage this task" — bots may edit and delete it (tasks they made: on). */
+  botManaged: boolean
+  /** D-134: a bot's change waiting for you in Tasks (the task is paused meanwhile). */
+  pending: SchedulePending | null
+}
+/** A command-line change waiting for approval: a new task, an edit to a Full-access task, or its deletion. */
+export interface SchedulePending {
+  kind: 'new' | 'edit' | 'delete'
+  at: number
+  patch?: SchedulePatch          // edit: what the bot asked to change
+  before?: SchedulePatch         // edit: those fields as they were
+  wasEnabled?: boolean           // edit / delete: restored on Discard, kept on Approve
 }
 export interface NewScheduleInput {
   projectId: string
@@ -231,6 +245,10 @@ export interface NewScheduleInput {
   intervalMin?: number
   atMin?: number
   target?: ScheduleTarget
+  createdVia?: 'app' | 'cli'
+  botManaged?: boolean
+  enabled?: boolean
+  pending?: SchedulePending | null
 }
 export interface SchedulePatch {
   title?: string

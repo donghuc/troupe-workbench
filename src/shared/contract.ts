@@ -58,6 +58,8 @@ export const INVOKE_PATHS = [
   'schedules.update',
   'schedules.remove',
   'schedules.runNow',
+  'schedules.setBotManaged',
+  'schedules.review',
 
   'outcomes.draft',
   'outcomes.save',

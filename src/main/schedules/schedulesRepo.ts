@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto'
 import { getDb } from '../database/db'
-import type { Schedule, NewScheduleInput, SchedulePatch, ScheduleKind } from '../../shared/types'
+import type { Schedule, NewScheduleInput, SchedulePatch, ScheduleKind, SchedulePending } from '../../shared/types'
 import { computeNext } from './nextRun'
 
 interface Row {
@@ -8,6 +8,12 @@ interface Row {
   model: string | null; permission_mode: string; kind: string; interval_min: number
   at_min: number; enabled: number; next_run_at: number; last_run_at: number | null; created_at: number
   target: string; conv_id: string | null
+  created_via?: string; bot_managed?: number; pending?: string | null
+}
+
+const readPending = (raw: string | null | undefined): SchedulePending | null => {
+  if (!raw) return null
+  try { const p = JSON.parse(raw); return p && ['new', 'edit', 'delete'].includes(p.kind) ? p as SchedulePending : null } catch { return null }
 }
 
 const toSchedule = (r: Row): Schedule => ({
@@ -16,7 +22,8 @@ const toSchedule = (r: Row): Schedule => ({
   permissionMode: r.permission_mode as Schedule['permissionMode'],
   kind: r.kind as ScheduleKind, intervalMin: r.interval_min, atMin: r.at_min,
   target: (r.target as Schedule['target']) ?? 'new', convId: r.conv_id,
-  enabled: !!r.enabled, nextRunAt: r.next_run_at, lastRunAt: r.last_run_at, createdAt: r.created_at
+  enabled: !!r.enabled, nextRunAt: r.next_run_at, lastRunAt: r.last_run_at, createdAt: r.created_at,
+  createdVia: r.created_via === 'cli' ? 'cli' : 'app', botManaged: !!r.bot_managed, pending: readPending(r.pending)
 })
 
 export function listSchedules(): Schedule[] {
@@ -43,10 +50,11 @@ export function createSchedule(input: NewScheduleInput): Schedule {
   const atMin = input.atMin ?? 540
   const nextRunAt = computeNext(kind, intervalMin, atMin, now)
   getDb().prepare(
-    `INSERT INTO schedules (id, project_id, title, prompt, provider, model, permission_mode, kind, interval_min, at_min, target, conv_id, enabled, next_run_at, last_run_at, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1, ?, NULL, ?)`
+    `INSERT INTO schedules (id, project_id, title, prompt, provider, model, permission_mode, kind, interval_min, at_min, target, conv_id, enabled, next_run_at, last_run_at, created_at, created_via, bot_managed, pending)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, NULL, ?, ?, ?, ?)`
   ).run(id, input.projectId, input.title.trim(), input.prompt, input.provider, input.model ?? null,
-        input.permissionMode ?? 'auto', kind, intervalMin, atMin, input.target ?? 'new', nextRunAt, now)
+        input.permissionMode ?? 'auto', kind, intervalMin, atMin, input.target ?? 'new', input.enabled === false ? 0 : 1, nextRunAt, now,
+        input.createdVia ?? 'app', input.botManaged ? 1 : 0, input.pending ? JSON.stringify(input.pending) : null)
   return getSchedule(id)!
 }
 
@@ -89,6 +97,19 @@ export function advanceNextRun(id: string, from: number): void {
 
 export function setScheduleConv(id: string, convId: string): void {
   getDb().prepare('UPDATE schedules SET conv_id=? WHERE id=?').run(convId, id)
+}
+
+/** D-134: "Bots can manage this task". */
+export function setBotManaged(id: string, on: boolean): void {
+  getDb().prepare('UPDATE schedules SET bot_managed=? WHERE id=?').run(on ? 1 : 0, id)
+}
+/** D-134: a bot's change waiting for approval (null clears it). */
+export function setPending(id: string, pending: SchedulePending | null): void {
+  getDb().prepare('UPDATE schedules SET pending=? WHERE id=?').run(pending ? JSON.stringify(pending) : null, id)
+}
+/** Tasks made over the command line (for the limit). */
+export function countCliSchedules(): number {
+  return (getDb().prepare("SELECT COUNT(*) AS n FROM schedules WHERE created_via = 'cli'").get() as { n: number }).n
 }
 
 export function deleteSchedule(id: string): void {

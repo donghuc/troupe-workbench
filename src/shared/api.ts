@@ -79,6 +79,11 @@ export interface WorkbenchApi {
     update(id: string, patch: SchedulePatch): Promise<Schedule | null>
     remove(id: string): Promise<void>
     runNow(id: string): Promise<void>
+    /** D-134: "Bots can manage this task". */
+    setBotManaged(id: string, on: boolean): Promise<Schedule | null>
+    /** D-134: Approve or Discard a bot's waiting change; null when the task was deleted. */
+    review(id: string, approve: boolean): Promise<Schedule | null>
+    onChanged(cb: () => void): () => void
   }
   conversations: {
     list(projectId: string): Promise<Conversation[]>

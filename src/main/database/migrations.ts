@@ -303,6 +303,15 @@ const migrations: Array<(db: Database.Database) => void> = [
       ALTER TABLE collab_tasks ADD COLUMN meta TEXT;
       ALTER TABLE collab_runs ADD COLUMN repair_json TEXT;
     `)
+  },
+  // v25 — scheduled tasks from the command line (D-134): who made a task, whether bots may
+  // manage it, and a bot's change waiting for approval (JSON).
+  (db) => {
+    db.exec(`
+      ALTER TABLE schedules ADD COLUMN created_via TEXT NOT NULL DEFAULT 'app';
+      ALTER TABLE schedules ADD COLUMN bot_managed INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE schedules ADD COLUMN pending TEXT;
+    `)
   }
 ]
 

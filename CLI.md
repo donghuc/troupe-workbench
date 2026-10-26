@@ -41,8 +41,21 @@ Send options: `--agent NAME`, `--model MODEL`, `--mode read|auto` (default `auto
 **Scheduled tasks**
 ```
 troupe schedules                         # list them, with next and last run
+troupe schedules show "Positive news"    # settings, and the prompt if bots can manage it
 troupe schedules run "Positive news"     # run one now
+troupe schedules pause "Positive news"   # …and resume
+troupe schedules add "My project" "Morning brief" --prompt "Summarise yesterday's chats" --daily 08:30 --mode read
+troupe schedules edit "Morning brief" --every 2h --prompt -   # prompt from stdin
+troupe schedules delete "Morning brief"
 ```
+`add` options: `--daily HH:MM` or `--every 30m|2h` (at most every 15 minutes), `--agent`, `--model`, `--mode read|auto`, `--same-chat` / `--new-chat`.
+
+How bots and your tasks get along:
+- A task made from the command line **starts paused** and waits for you in Troupe ▸ Tasks (**Approve and turn on** or **Discard task**). It can't run before that.
+- Bots can list, run, pause and resume every task. They can **edit and delete** only tasks handed over to them: the ones they made, and any you switch on with **Bots can manage this task** in Tasks.
+- A bot can never use Full access or raise a task's mode; it can lower it.
+- On a handed-over **Full-access** task, a bot's edit (other than lowering the mode) or delete **waits for your approval** in Tasks, and the task is paused until you decide.
+- At most 20 tasks made from the command line.
 
 **Project files (read-only)**
 ```
@@ -68,7 +81,7 @@ Exit codes: `0` ok · `1` Troupe refused (the reason is printed on stderr — `e
 
 ## What it can and can't do
 
-- **Can:** everything above — chats, runs, scheduled tasks, read-only project files, Collab.
+- **Can:** everything above — chats, runs, scheduled tasks (bots' changes follow the rules above), read-only project files, Collab.
 - **Can't:** create images, change settings, edit memory, notes or skills, create or delete projects, delete chats you started in the app, or touch the database directly.
 - Runs use **Read-only** or **Auto** (with the shell sandbox). **Full access is never available** from the command line.
 - Messages sent this way are marked *Sent from the command line* in the chat.
@@ -89,7 +102,8 @@ data, settings or database directly. Run `troupe --help` for every command.
 - If a chat is busy (exit code 4), add `--wait-free 300` instead of retrying.
 - Read a project file: `troupe cat "<project>" <path>`; list them: `troupe files "<project>"`.
 - Pass a file: `--attach <absolute path>` (up to 5).
-- Scheduled tasks: `troupe schedules`, `troupe schedules run "<task>"`.
+- Scheduled tasks: `troupe schedules`, `troupe schedules run "<task>"`. Ask me before you add, edit or delete a task;
+  a task you add stays paused until I approve it in Troupe, and edits to Full-access tasks wait for me too.
 - Clean up your test chats: `troupe delete <chat>` (only chats you started).
 
 ## Modes

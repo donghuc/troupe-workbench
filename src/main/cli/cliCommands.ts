@@ -5,8 +5,6 @@ import { listMessages, lastUserTurn } from '../conversations/messagesRepo'
 import { startTurn, cancelTurn, isBusy, getTurnState } from '../agent/turns'
 import { senderForRun, broadcastConversationsChanged } from '../agent/headless'
 import { readRunLog } from '../agent/runLog'
-import { listSchedules, getSchedule } from '../schedules/schedulesRepo'
-import { runScheduleNow } from '../schedules/scheduler'
 import { listCollabRuns, getCollabRunBare } from '../collab/collabRepo'
 import { listTree, readTextFile } from '../filesystem/fsService'
 import { resolveProjectMemory } from '../context/memoryDelivery'
@@ -17,19 +15,21 @@ import { modelLists } from '../tools/codexModels'
 import { logInfo } from '../util/logger'
 import { attachFiles, checkAttachments } from './cliAttach'
 import { runCollabCommand } from './cliCollab'
+import { runScheduleCommand } from './cliSchedules'
 import type { Conversation, Message, ProviderId, FileNode } from '../../shared/types'
 import {
   CliError, pickOne, parseMode, parseThink, parseSince, titleFrom, clampLast, clampWait, encodeRunId, decodeRunId,
-  projectsText, chatsText, messagesText, statusText, runsText, collabLogState, schedulesText, searchText, describeSchedule,
+  projectsText, chatsText, messagesText, statusText, runsText, collabLogState, searchText,
   filesChanged, isSecretPath, CLI_MAX_MESSAGE,
-  type CliProject, type CliChat, type CliMessage, type CliStatus, type CliSchedule, type CliSearchHit
+  type CliProject, type CliChat, type CliMessage, type CliStatus, type CliSearchHit
 } from '../../shared/cliProtocol'
 
 // Command-line access (D-117, D-118): what the `troupe` command can do. Projects, chats,
 // runs, schedules, read-only project files and Collab — every action goes through the same
 // functions the window uses (repos, startTurn, the Collab orchestrator), never raw database
 // writes. No images, settings, memory/notes/skills edits, project creation/deletion or
-// Full access. Deleting is limited to chats started from the command line.
+// Full access. Deleting is limited to chats started from the command line, and to scheduled
+// tasks handed over to bots (D-134, cliSchedules.ts).
 
 export interface CliResult { status: number; json: unknown; text: string }
 type Params = { get(k: string): string | null; getAll(k: string): string[] }
@@ -215,22 +215,7 @@ function runs(q: Params): CliResult {
 
 // ── schedules ───────────────────────────────────────────────────────────────────
 function schedules(q: Params): CliResult {
-  if (q.get('do') === 'run') {
-    const all = listSchedules()
-    const s = pickOne(all, q.get('task') ?? '', (x) => x.title, 'scheduled task')
-    const before = Date.now()
-    runScheduleNow(getSchedule(s.id) ?? s)
-    const chat = listConversations(s.projectId).filter((c) => c.updatedAt >= before).sort((a, b) => b.updatedAt - a.updatedAt)[0]
-    const sent = chat ? lastUserTurn(chat.id).user : null
-    const run = chat && sent && sent.createdAt >= before ? encodeRunId(chat.id, sent.createdAt) : null
-    logInfo('[cli] schedule run', { task: s.id })
-    return ok({ task: s.id, run, chat: chat?.id ?? null }, run ? `Started "${s.title}".\nrun ${run}\nCheck with: troupe status ${run} --wait 600` : `Asked "${s.title}" to run; it didn't start (its agent may be off or its chat busy). See troupe runs.`)
-  }
-  const list: CliSchedule[] = listSchedules().map((s) => ({
-    id: s.id, title: s.title || 'Scheduled task', project: getProject(s.projectId)?.name ?? '', agent: agentName(s.provider),
-    when: describeSchedule(s.kind, s.intervalMin, s.atMin), enabled: s.enabled, nextRunAt: s.nextRunAt, lastRunAt: s.lastRunAt, chat: s.convId
-  }))
-  return ok(list, schedulesText(list))
+  return runScheduleCommand(q, { findProject, findAgent, agentName })
 }
 
 // ── project files (read-only) ───────────────────────────────────────────────────

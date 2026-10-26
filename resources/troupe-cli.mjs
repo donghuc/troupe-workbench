@@ -31,7 +31,13 @@ Sending
 
 Scheduled tasks
   schedules                             List scheduled tasks
-  schedules run <task>                  Run one now
+  schedules show <task>                 Settings and prompt (prompt only for tasks bots can manage)
+  schedules run|pause|resume <task>     Run one now, pause it, or turn it back on
+  schedules add <project> "<title>" --prompt "…" (--daily 08:30 | --every 2h)
+       [--agent A] [--model M] [--mode read|auto] [--same-chat|--new-chat]
+       New tasks wait for your approval in Troupe ▸ Tasks. Use --prompt - to read it from stdin.
+  schedules edit <task> [--title …] [--prompt …] [--daily …|--every …] [--agent …] [--model …] [--mode …]
+  schedules delete <task>               Only tasks bots can manage; Full-access ones wait for you
 
 Project files (read-only)
   files <project> [folder]              List files
@@ -79,7 +85,12 @@ switch (cmd) {
   }
   case 'status': case 'stop': need(1, `troupe ${cmd} <run>`); add('run', argv.shift()); break
   case 'schedules':
-    if (argv[0] === 'run') { need(2, 'troupe schedules run <task>'); argv.shift(); add('do', 'run'); add('task', argv.shift()) }
+    if (argv.length && !argv[0].startsWith('--')) {
+      const sub = argv.shift(); add('do', sub)
+      if (['run', 'show', 'pause', 'resume', 'delete', 'edit'].includes(sub)) { need(1, `troupe schedules ${sub} <task>`); add('task', argv.shift()) }
+      else if (sub === 'add') { need(2, 'troupe schedules add <project> "<title>" --prompt "…" --daily 08:30'); add('project', argv.shift()); add('title', argv.shift()) }
+      else if (sub !== 'list') die(`unknown schedules command: ${sub} (try: troupe --help)`)
+    }
     break
   case 'files':
     need(1, 'troupe files <project> [folder]'); add('project', argv.shift())
@@ -103,11 +114,15 @@ switch (cmd) {
   default: die(`unknown command: ${cmd} (try: troupe --help)`)
 }
 
-const VALUED = new Set(['--agent', '--model', '--mode', '--last', '--wait', '--think', '--since', '--project', '--source', '--note'])
+const VALUED = new Set(['--agent', '--model', '--mode', '--last', '--wait', '--think', '--since', '--project', '--source', '--note', '--title', '--daily', '--every'])
+let stdinPrompt = false
 while (argv.length) {
   const a = argv.shift()
   if (a === '--json') add('format', 'json')
   else if (a === '--new') add('new', '1')
+  else if (a === '--same-chat') add('chat', 'same')
+  else if (a === '--new-chat') add('chat', 'new')
+  else if (a === '--prompt') { if (!argv.length) die('--prompt needs text (or - for stdin)'); const v = argv.shift(); if (v === '-') stdinPrompt = true; else add('prompt', v) }
   else if (a === '--attach') {
     if (!argv.length) die('--attach needs a file')
     const f = argv.shift()
@@ -119,10 +134,10 @@ while (argv.length) {
 
 const unreachable = (msg) => { process.stderr.write(`troupe: ${msg}\n`); process.exit(3) }
 async function main() {
-  if (stdinMsg) {
+  if (stdinMsg || stdinPrompt) {
     const chunks = []
     for await (const c of process.stdin) chunks.push(c)
-    add('message', Buffer.concat(chunks).toString('utf8'))
+    add(stdinMsg ? 'message' : 'prompt', Buffer.concat(chunks).toString('utf8'))
   }
   let token = ''
   try { token = readFileSync(TOKEN_FILE, 'utf8').trim() } catch { /* app not open */ }

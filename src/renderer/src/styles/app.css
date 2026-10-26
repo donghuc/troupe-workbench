@@ -1400,6 +1400,15 @@ select.field-input {
 .md-read-meta { font-size: var(--fs-sm); color: var(--text-tertiary); margin-bottom: var(--sp-3); }
 .md-read-label { font-size: var(--fs-sm); font-weight: var(--fw-medium); color: var(--text-secondary); margin: var(--sp-4) 0 var(--sp-1); }
 .md-read-label:first-child { margin-top: 0; }
+/* D-134: scheduled tasks from the command line */
+.sched-row-title { display: flex; align-items: center; gap: var(--sp-1-5); min-width: 0; }
+.sched-review { display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3) var(--sp-4); margin-bottom: var(--sp-4); border: 1px solid var(--border-default); border-radius: var(--r-md); background: var(--warning-wash); }
+.sched-review-title { font-size: var(--fs-md); font-weight: var(--fw-medium); color: var(--text-primary); }
+.sched-review-text { font-size: var(--fs-sm); color: var(--text-secondary); }
+.sched-review-changes { margin: 0; padding-left: var(--sp-5); font-size: var(--fs-sm); color: var(--text-primary); display: flex; flex-direction: column; gap: var(--sp-1); }
+.sched-review-actions { display: flex; gap: var(--sp-2); }
+.sched-bots { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-4); }
+.sched-bots-text { min-width: 0; display: flex; flex-direction: column; gap: var(--sp-1); }
 .md-read-text { font-size: var(--fs-md); color: var(--text-primary); white-space: pre-wrap; }
 .md-read-body { font-size: var(--fs-md); color: var(--text-primary); white-space: pre-wrap; line-height: var(--lh-normal); }
 .md-read-body.muted, .md-read-text.muted { color: var(--text-tertiary); }

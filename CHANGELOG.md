@@ -20,6 +20,18 @@ Each version here matches a packaged build — the dmg is named
 
 ## [Unreleased]
 
+## [2.15.0] - 2026-10-26
+
+### Added
+- Bots can manage scheduled tasks through the `troupe` command: `schedules add`, `show`, `edit`, `pause`, `resume` and `delete`, next to `run`.
+- A task a bot creates starts paused and waits in Tasks — **Approve and turn on** or **Discard task**.
+- **Bots can manage this task** switch in Tasks: bots edit and delete only the tasks they made and the ones you hand over. Your other tasks they can only list, run, pause and resume.
+- A bot never gets Full access or a higher mode for a task. On a Full-access task, its edits and deletion wait for your approval, with the change shown before → after.
+
+### Changed
+- The Tasks list updates live when a bot changes a task, and keeps a task's model when you edit it in the app.
+- Database schema v25 (who made each task, whether bots may manage it, a change waiting for you). Older Troupe builds can't open the data afterwards.
+
 ## [2.14.2] - 2026-10-21
 
 ### Fixed

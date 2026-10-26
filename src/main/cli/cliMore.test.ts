@@ -182,15 +182,77 @@ describe('search, context, schedules, --think (D-118)', () => {
     const now = Date.now()
     testDb().prepare(`INSERT INTO schedules (id, project_id, title, prompt, provider, kind, interval_min, at_min, enabled, target, next_run_at, created_at) VALUES ('s-daily-01', 'p-proj-0001', 'Positive news', 'p', 'claude-code', 'daily', 0, 545, 1, 'new', ?, ?)`).run(now + 3600_000, now)
     const l = await runCliCommand('schedules', P({}))
-    expect(l.text).toContain('Positive news · My project · Claude · daily at 09:05')
+    expect(l.text).toContain('Positive news · My project · Claude · Auto · daily at 09:05')
     const r = await runCliCommand('schedules', P({ do: 'run', task: 'positive' }))
     expect(r.status).toBe(200)
     expect(fired).toEqual(['s-daily-01'])
   })
   it('passes a thinking mode and refuses unknown ones', async () => {
-    await runCliCommand('send', P({ to: 'project', message: 'stocks vs bonds', think: 'debate' }))
+    await runCliCommand('send', P({ to: 'project', message: 'tea vs coffee', think: 'debate' }))
     expect(started[0]).toMatchObject({ mode: 'debate' })
     expect((await runCliCommand('send', P({ to: 'project', message: 'x', think: 'vibes' }))).status).toBe(400)
+  })
+})
+
+describe('scheduled tasks from the command line (D-134)', () => {
+  const get = (id: string) => testDb().prepare('SELECT * FROM schedules WHERE id = ?').get(id) as Record<string, unknown> | undefined
+  const appTask = (id: string, mode: string, managed = 0) => testDb().prepare(`INSERT INTO schedules (id, project_id, title, prompt, provider, permission_mode, kind, interval_min, at_min, enabled, target, next_run_at, created_at, bot_managed) VALUES (?, 'p-proj-0001', ?, 'secret prompt', 'claude-code', ?, 'daily', 60, 540, 1, 'new', ?, ?, ?)`).run(id, `Task ${id}`, mode, Date.now() + 3600_000, Date.now(), managed)
+
+  it('a bot\'s new task is paused, handed over and waits for approval; it can\'t run until then', async () => {
+    const r = await runCliCommand('schedules', P({ do: 'add', project: 'project', title: 'Morning brief', prompt: 'Summarise yesterday', daily: '08:30', mode: 'read' }))
+    expect(r.status).toBe(200)
+    expect(r.text).toMatch(/paused until you approve it/)
+    const id = (r.json as { id: string }).id
+    expect(get(id)).toMatchObject({ enabled: 0, created_via: 'cli', bot_managed: 1, permission_mode: 'read', at_min: 510 })
+    expect(JSON.parse(String(get(id)!.pending))).toMatchObject({ kind: 'new' })
+    expect((await runCliCommand('schedules', P({ do: 'run', task: id }))).status).toBe(403)
+    expect((await runCliCommand('schedules', P({ do: 'resume', task: id }))).status).toBe(403)
+    expect((await runCliCommand('schedules', P({}))).text).toContain('[waiting for approval, bots can manage] Morning brief')
+  })
+  it('refuses Full access, too-frequent runs and missing parts', async () => {
+    expect((await runCliCommand('schedules', P({ do: 'add', project: 'project', title: 'x', prompt: 'y', every: '2h', mode: 'full' }))).status).toBe(400)
+    expect((await runCliCommand('schedules', P({ do: 'add', project: 'project', title: 'x', prompt: 'y', every: '5m' }))).status).toBe(403)
+    expect((await runCliCommand('schedules', P({ do: 'add', project: 'project', title: 'x', prompt: 'y' }))).text).toMatch(/--daily|--every/)
+  })
+  it('your own tasks: run, pause and resume yes; edit, delete and the prompt no', async () => {
+    appTask('s-app-0001', 'auto')
+    expect((await runCliCommand('schedules', P({ do: 'pause', task: 's-app-0001' }))).status).toBe(200)
+    expect(get('s-app-0001')!.enabled).toBe(0)
+    expect((await runCliCommand('schedules', P({ do: 'resume', task: 's-app-0001' }))).status).toBe(200)
+    expect((await runCliCommand('schedules', P({ do: 'edit', task: 's-app-0001', prompt: 'do something else' }))).status).toBe(403)
+    expect((await runCliCommand('schedules', P({ do: 'delete', task: 's-app-0001' }))).status).toBe(403)
+    const show = await runCliCommand('schedules', P({ do: 'show', task: 's-app-0001' }))
+    expect(show.text).not.toContain('secret prompt')
+    expect(show.text).toContain('not handed over')
+  })
+  it('handed-over task: edits apply, the mode never rises, delete works', async () => {
+    appTask('s-bot-0001', 'read', 1)
+    expect((await runCliCommand('schedules', P({ do: 'edit', task: 's-bot-0001', mode: 'auto' }))).status).toBe(403)
+    const e = await runCliCommand('schedules', P({ do: 'edit', task: 's-bot-0001', prompt: 'new words', every: '30m' }))
+    expect(e.status).toBe(200)
+    expect(get('s-bot-0001')).toMatchObject({ prompt: 'new words', kind: 'interval', interval_min: 30, pending: null })
+    expect((await runCliCommand('schedules', P({ do: 'show', task: 's-bot-0001' }))).text).toContain('new words')
+    expect((await runCliCommand('schedules', P({ do: 'delete', task: 's-bot-0001' }))).status).toBe(200)
+    expect(get('s-bot-0001')).toBeUndefined()
+  })
+  it('handed-over Full-access task: lowering applies; other edits and delete wait for you; Approve / Discard', async () => {
+    appTask('s-full-0001', 'full', 1)
+    const e = await runCliCommand('schedules', P({ do: 'edit', task: 's-full-0001', prompt: 'rm everything' }))
+    expect(e.text).toMatch(/waits for approval/)
+    expect(get('s-full-0001')).toMatchObject({ prompt: 'secret prompt', enabled: 0 })
+    expect((await runCliCommand('schedules', P({ do: 'edit', task: 's-full-0001', mode: 'auto' }))).status).toBe(403)   // a change already waits
+    const { reviewSchedule } = await import('../schedules/scheduleChanges')
+    reviewSchedule('s-full-0001', false)                                      // Discard
+    expect(get('s-full-0001')).toMatchObject({ prompt: 'secret prompt', enabled: 1, pending: null })
+    await runCliCommand('schedules', P({ do: 'edit', task: 's-full-0001', title: 'Renamed' }))
+    reviewSchedule('s-full-0001', true)                                       // Approve
+    expect(get('s-full-0001')).toMatchObject({ title: 'Renamed', enabled: 1, pending: null })
+    expect((await runCliCommand('schedules', P({ do: 'edit', task: 's-full-0001', mode: 'auto' }))).text).toMatch(/Updated/)   // lowering: at once
+    expect(get('s-full-0001')!.permission_mode).toBe('auto')
+    testDb().prepare("UPDATE schedules SET permission_mode = 'full' WHERE id = 's-full-0001'").run()
+    expect((await runCliCommand('schedules', P({ do: 'delete', task: 's-full-0001' }))).text).toMatch(/waits for you to confirm/)
+    reviewSchedule('s-full-0001', true)
+    expect(get('s-full-0001')).toBeUndefined()
   })
 })
 

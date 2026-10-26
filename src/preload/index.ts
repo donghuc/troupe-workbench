@@ -23,6 +23,7 @@ const on = (channel: string, withPayload = true) => (cb: (payload?: any) => void
 const subscriptions: Record<string, Record<string, unknown>> = {
   files: { onChanged: on(IPC.filesChanged) },
   conversations: { onCompressing: on(IPC.convCompressing), onChanged: on(IPC.conversationsChanged, false) },
+  schedules: { onChanged: on(IPC.schedulesChanged, false) },
   turns: { onChanged: on(IPC.turnsChanged), onDelta: on(IPC.turnsDelta) },
   skills: { onChanged: on(IPC.skillsChanged, false) },
   image: { onEvent: on(IPC.imageEvent), onDone: on(IPC.imageDone) },

@@ -8,6 +8,10 @@ import type { PermissionMode } from '../../../shared/agent'
 import { Menu, MenuItem } from './ui/Menu'
 import { Button, IconButton } from './ui/Button'
 import { Segmented } from './ui/Segmented'
+import { Badge } from './ui/Badge'
+import Switch from './settings/Switch'
+import { describeChange } from '../../../shared/scheduleRules'
+import { failed } from '../notices'
 
 interface Props {
   projects: Project[]
@@ -46,7 +50,7 @@ export default function SchedulesView({ projects, providers, onRun }: Props) {
   const [target, setTarget] = useState<ScheduleTarget>('new')
 
   const load = () => api.schedules.list().then(setSchedules)
-  useEffect(() => { load() }, [])
+  useEffect(() => { load(); return api.schedules.onChanged(() => { void load() }) }, [])   // D-134: bots change tasks too
 
   const selId = sel.mode === 'view' || sel.mode === 'edit' ? sel.id : null
   const current = selId ? schedules.find((s) => s.id === selId) ?? null : null
@@ -71,7 +75,7 @@ export default function SchedulesView({ projects, providers, onRun }: Props) {
   const cancelEdit = () => setSel(current ? { mode: 'view', id: current.id } : { mode: 'none' })
 
   const fields = () => ({
-    title: title.trim() || 'Scheduled task', prompt: prompt.trim(), provider, model: null,
+    title: title.trim() || 'Scheduled task', prompt: prompt.trim(), provider, model: editing && editing.provider === provider ? editing.model : null,
     permissionMode: permMode, kind, target,
     intervalMin: kind === 'interval' ? (everyUnit === 'hours' ? everyN * 60 : everyN) : undefined,
     atMin: kind === 'daily' ? hhmmToMin(atTime) : undefined
@@ -82,6 +86,15 @@ export default function SchedulesView({ projects, providers, onRun }: Props) {
     else { await api.schedules.create({ projectId, ...fields() }); await load(); setSel({ mode: 'none' }) }
   }
   const toggle = async (s: Schedule) => { await api.schedules.update(s.id, { enabled: !s.enabled }); load() }
+  // D-134: a bot's change waiting for you, and handing a task over to bots.
+  const review = async (s: Schedule, approve: boolean) => {
+    if (!approve && s.pending?.kind === 'new' && !(await confirmDialog({ title: 'Discard this task?', message: `“${s.title}” was made by a bot and never ran. Discarding deletes it.`, confirmLabel: 'Discard' }))) return
+    if (approve && s.pending?.kind === 'delete' && !(await confirmDialog({ title: 'Delete task?', message: `A bot asked to delete “${s.title}”. It stops running and is removed.`, confirmLabel: 'Delete' }))) return
+    const r = await api.schedules.review(s.id, approve).catch(failed('Review task'))
+    await load()
+    if (r === null) setSel({ mode: 'none' })
+  }
+  const setManaged = async (s: Schedule, on: boolean) => { await api.schedules.setBotManaged(s.id, on).catch(failed('Bots can manage this task')); load() }
   const remove = async (s: Schedule) => { if (await confirmDialog({ title: 'Delete task?', message: `“${s.title}” stops running and is removed.`, confirmLabel: 'Delete' })) { await api.schedules.remove(s.id); await load(); setSel({ mode: 'none' }) } }
 
   const overflow = (s: Schedule) => (
@@ -106,11 +119,11 @@ export default function SchedulesView({ projects, providers, onRun }: Props) {
       <>
         <span className="md-head-title truncate">{current.title}</span>
         <div className="md-head-ops">
-          <Button size="sm" onClick={() => onRun(current)}>Run now</Button>
-          <Button size="sm" onClick={() => toggle(current)}>{current.enabled ? 'Pause' : 'Enable'}</Button>
+          <Button size="sm" disabled={!!current.pending} onClick={() => onRun(current)}>Run now</Button>
+          <Button size="sm" disabled={!!current.pending} onClick={() => toggle(current)}>{current.enabled ? 'Pause' : 'Enable'}</Button>
         </div>
         <span className="md-head-spacer" />
-        <Button size="sm" onClick={() => openEdit(current)}><Icon name="edit" size="sm" />Edit</Button>
+        <Button size="sm" disabled={!!current.pending} onClick={() => openEdit(current)}><Icon name="edit" size="sm" />Edit</Button>
         {overflow(current)}
       </>
     )
@@ -126,8 +139,8 @@ export default function SchedulesView({ projects, providers, onRun }: Props) {
           {schedules.map((s) => (
             <div key={s.id} className={`md-row ${selId === s.id ? 'active' : ''} ${s.enabled ? '' : 'md-row-off'}`} onClick={() => openView(s)}>
               <div className="md-row-main">
-                <div className="truncate md-row-title">{s.title}</div>
-                <div className="truncate md-row-sub">{projName(s.projectId)} · {cadence(s)} · {s.enabled ? `next ${when(s.nextRunAt)}` : 'paused'}</div>
+                <div className="sched-row-title"><span className="truncate md-row-title">{s.title}</span>{s.pending && <Badge tone="warning" appearance="soft">Waiting for you</Badge>}</div>
+                <div className="truncate md-row-sub">{projName(s.projectId)} · {cadence(s)} · {s.pending ? 'waiting for approval' : s.enabled ? `next ${when(s.nextRunAt)}` : 'paused'}{s.botManaged ? ' · bots can manage' : ''}</div>
               </div>
             </div>
           ))}
@@ -141,6 +154,21 @@ export default function SchedulesView({ projects, providers, onRun }: Props) {
 
       {sel.mode === 'view' && current && (
         <div className="md-read">
+          {current.pending && (
+            <div className="sched-review" role="region" aria-label="Waiting for your approval">
+              <div className="sched-review-title">{current.pending.kind === 'new' ? 'A bot made this task from the command line' : current.pending.kind === 'delete' ? 'A bot asked to delete this task' : 'A bot changed this task'}</div>
+              <div className="sched-review-text">
+                {current.pending.kind === 'new' ? 'It won’t run until you approve it. Check the instructions, agent and permission below.'
+                  : current.pending.kind === 'delete' ? 'It runs in Full access, so deleting it needs your OK. It’s paused until you decide.'
+                  : 'It runs in Full access, so the change needs your OK. It’s paused until you decide.'}
+              </div>
+              {current.pending.kind === 'edit' && <ul className="sched-review-changes">{describeChange(current.pending).map((l) => <li key={l}>{l}</li>)}</ul>}
+              <div className="sched-review-actions">
+                <Button variant="primary" size="sm" onClick={() => review(current, true)}>{current.pending.kind === 'delete' ? 'Delete task' : current.pending.kind === 'new' ? 'Approve and turn on' : 'Approve change'}</Button>
+                <Button size="sm" onClick={() => review(current, false)}>{current.pending.kind === 'new' ? 'Discard task' : current.pending.kind === 'delete' ? 'Keep task' : 'Discard change'}</Button>
+              </div>
+            </div>
+          )}
           <div className="md-read-meta">
             {projName(current.projectId)} · {cadence(current)} · {current.enabled ? `next ${when(current.nextRunAt)}` : 'Paused'}
             {current.lastRunAt ? ` · last run ${when(current.lastRunAt)}` : ''}
@@ -151,6 +179,14 @@ export default function SchedulesView({ projects, providers, onRun }: Props) {
           <div className="md-read-text">{provName(current.provider)} · {permLabel(current.permissionMode)}</div>
           <div className="md-read-label">Each run</div>
           <div className="md-read-text">{current.target === 'same' ? 'Continues the same thread' : 'Starts a new thread'}</div>
+          <div className="md-read-label">Command line</div>
+          <div className="sched-bots">
+            <div className="sched-bots-text">
+              <div className="md-read-text">Bots can manage this task{current.createdVia === 'cli' ? ' · made from the command line' : ''}</div>
+              <div className="field-hint">Bots using the <code>troupe</code> command can always list, run, pause and resume tasks. With this on they can also edit and delete this one — never raising its permission, and a Full-access task’s edits and deletion still wait for you.</div>
+            </div>
+            <Switch on={current.botManaged} label={`Bots can manage this task ${current.botManaged ? 'on' : 'off'}`} onChange={(v) => setManaged(current, v)} />
+          </div>
         </div>
       )}
 

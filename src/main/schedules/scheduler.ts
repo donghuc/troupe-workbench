@@ -20,6 +20,8 @@ function notify(title: string, body: string): void {
 function fire(s: Schedule): void {
   const project = getProject(s.projectId)
   if (!project) return
+  // D-134: a bot's task or change waiting for your approval never runs.
+  if (s.pending) { logInfo(`[scheduler] not running "${s.title}" — waiting for approval`); return }
   try {
     const label = s.title.trim() || 'Scheduled task'
     // D-071: a task whose agent is turned off is skipped (no empty thread is created).
