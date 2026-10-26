@@ -107,6 +107,12 @@ export const INVOKE_PATHS = [
   'turns.compare',
   'turns.get',
   'turns.snapshot',
+  'queue.send',
+  'queue.get',
+  'queue.edit',
+  'queue.remove',
+  'queue.resume',
+  'queue.clear',
 
   'context.list',
   'context.add',

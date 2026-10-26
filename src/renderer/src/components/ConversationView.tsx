@@ -22,6 +22,7 @@ import ChatSidePanel from './ChatSidePanel'
 import { collectChatFiles, replyFiles, toRelPath, usageMain, usageBreakdown, wbfileSrc } from '../chatFiles'
 import Icon from './Icon'
 import ResizeHandle from './ResizeHandle'
+import QueueList from './QueueList'
 import { type PendingAttachment, type RunAttachment, resolveAttachment } from '../attachments'
 import { api } from '../api'
 import type { ProviderInfo, ProviderId, Conversation, Message, CollabRun } from '../../../shared/types'
@@ -460,6 +461,7 @@ export default function ConversationView({ conversation, providers, pendingSend,
           <div className="conv-composer-inner">
             {compressing && <div className="compressing-note"><span className="activity-spinner" /> Compressing conversation…</div>}
             {memSaved && <div className="mem-saved-note">Saved to project memory</div>}
+            <QueueList conversationId={conversation.id} />
             <Composer
               providers={providers}
               onSend={sendWithAttachments}

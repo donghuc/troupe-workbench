@@ -18,6 +18,14 @@ Each version here matches a packaged build — the dmg is named
 > - Bumping rules: PATCH = fixes/small tweaks, MINOR = new features (backward-compatible),
 >   MAJOR = breaking changes or a data format users can't roll back from.
 
+## [2.16.0] - 2026-10-26
+
+### Added
+- Send while an agent is working: the message waits in a queue above the composer and runs as soon as the reply finishes, each as its own turn. Edit or remove any queued message. Stop or a failed reply pauses the queue until you **Resume**; a queue left at quit is kept, paused.
+
+### Fixed
+- Links to files whose names contain &, a comma, ; or # (for example "Systems & Ops.pdf") open again.
+
 ## [2.15.1] - 2026-10-26
 
 ### Added

@@ -18,4 +18,11 @@ describe('local file links (B-048)', () => {
     expect(normalizeRel('./docs/My%20Notes.md#intro')).toBe('docs/My Notes.md')
     expect(normalizeRel('<src/app.ts:12:5>')).toBe('src/app.ts')
   })
+  it('decodes every escape in a file name, keeping encoded # and ? (B-067)', () => {
+    expect(normalizeRel('file:///Users/me/JD%20-%20Senior%20Design%20Systems%20%26%20Ops%20Designer.pdf')).toBe('/Users/me/JD - Senior Design Systems & Ops Designer.pdf')
+    expect(normalizeRel('<out/R&D, Q3; final.pdf>')).toBe('out/R&D, Q3; final.pdf')
+    expect(normalizeRel('notes/Issue%20%2312.md#top')).toBe('notes/Issue #12.md')
+    expect(normalizeRel('a/What%3F.md')).toBe('a/What?.md')
+    expect(normalizeRel('a/100% done.md')).toBe('a/100% done.md')
+  })
 })

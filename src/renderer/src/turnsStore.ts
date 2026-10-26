@@ -6,6 +6,7 @@ import type { TurnState, TurnAttachment } from '../../shared/turns'
 import { EMPTY_TURN, applyTurnDelta, type TurnDelta } from '../../shared/turns'
 import { cleanErrorMessage } from '../../shared/errors'
 import { reportError } from './notices'
+import { applyQueue } from './queueStore'
 
 // Renderer mirror of main's turn state (D-061). Main owns sequencing, the per-
 // conversation lock and the live lanes; this file only subscribes, re-syncs on
@@ -85,7 +86,7 @@ export function setActiveConversation(id: string | null): void {
   if (id && unread.delete(id)) { recompute(); emit() }
 }
 
-// ── commands: thin wrappers; main refuses a send on a busy conversation ─────────
+// ── commands: thin wrappers; a send on a busy conversation waits in its queue (D-138) ──
 export async function sendMessage(
   convId: string, cwd: string | undefined, text: string, defaultProvider: ProviderId,
   attachments?: TurnAttachment[], skillId?: string, model?: string, permissionMode?: PermissionMode,
@@ -93,7 +94,10 @@ export async function sendMessage(
 ): Promise<void> {
   if (!text.trim()) return
   try {
-    apply(await api.turns.start({ conversationId: convId, text, defaultProvider, cwd, attachments, skillId, model, permissionMode, messageMetadata, mode }))
+    // D-138: a busy chat queues the message instead of refusing it.
+    const r = await api.queue.send({ conversationId: convId, text, defaultProvider, cwd, attachments, skillId, model, permissionMode, messageMetadata, mode })
+    applyQueue(r.queue)
+    if (r.turn) apply(r.turn)
   } catch (e) {
     apply({ ...getRun(convId), error: cleanErrorMessage(e) })
   }

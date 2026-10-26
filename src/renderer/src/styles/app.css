@@ -2017,3 +2017,21 @@ select.field-input {
 .attach-row-name { flex: 1; min-width: 0; font-size: var(--fs-sm); color: var(--text-primary); }
 .attach-row-meta { font-size: var(--fs-xs); color: var(--text-tertiary); white-space: nowrap; }
 
+
+/* ===== Message queue above the composer (D-138) =====
+   A tab tucked behind the composer's top edge: inset, top corners rounded, the composer overlaps its bottom.
+   No z-index on the list itself: that would trap its ⋯ menu under the composer. */
+.queue-list { position: relative; margin: 0 var(--sp-3) calc(-1 * var(--r-lg)); padding: var(--sp-1) var(--sp-2) calc(var(--r-lg) + var(--sp-1)); border: 1px solid var(--border-subtle); border-bottom: none; border-radius: var(--r-lg) var(--r-lg) 0 0; background: var(--bg-composer); font-size: var(--fs-sm); }
+.queue-list + .composer { position: relative; z-index: 1; }
+.queue-paused { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-1) var(--sp-1-5); color: var(--warning); }
+.queue-link { color: var(--text-secondary); font-size: var(--fs-sm); }
+.queue-link:hover { color: var(--text-primary); text-decoration: underline; }
+.queue-item { display: flex; align-items: center; gap: var(--sp-2); min-height: 32px; padding: var(--sp-0-5) var(--sp-1-5); border-radius: var(--r-sm); }
+.queue-icon { flex: none; color: var(--text-tertiary); }
+.queue-text { flex: 1; min-width: 0; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.queue-edit { flex: 1; min-width: 0; resize: none; font: inherit; color: var(--text-primary); background: var(--bg-panel); border: 1px solid var(--border-default); border-radius: var(--r-sm); padding: var(--sp-1) var(--sp-2); }
+.queue-meta { flex: none; color: var(--text-tertiary); font-size: var(--fs-xs); }
+.queue-actions { flex: none; display: flex; align-items: center; gap: var(--sp-0-5); }
+.queue-more { position: relative; }
+.queue-btn { width: 26px; height: 26px; display: grid; place-items: center; border-radius: var(--r-sm); color: var(--text-tertiary); }
+.queue-btn:hover { background: var(--bg-hover); color: var(--text-primary); }

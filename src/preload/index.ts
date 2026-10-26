@@ -25,6 +25,7 @@ const subscriptions: Record<string, Record<string, unknown>> = {
   conversations: { onCompressing: on(IPC.convCompressing), onChanged: on(IPC.conversationsChanged, false) },
   schedules: { onChanged: on(IPC.schedulesChanged, false) },
   turns: { onChanged: on(IPC.turnsChanged), onDelta: on(IPC.turnsDelta) },
+  queue: { onChanged: on(IPC.queueChanged) },
   skills: { onChanged: on(IPC.skillsChanged, false) },
   image: { onEvent: on(IPC.imageEvent), onDone: on(IPC.imageDone) },
   collab: { onChanged: on(IPC.collabChanged, false) },

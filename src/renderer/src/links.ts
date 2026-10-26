@@ -14,9 +14,12 @@ export function linkUrlTransform(url: string): string {
 /** A link target as a path: scheme, ./, #anchor, ?query and a trailing :line[:col] removed. */
 export function normalizeRel(href: string): string {
   let h = href.trim().replace(/^<|>$/g, '')
-  try { h = decodeURI(h) } catch { /* leave as-is */ }
+  // #anchor and ?query go before decoding, so an encoded # or ? in a file name (%23, %3F) stays
+  // part of the name. Then decode every escape: decodeURI kept %26 (&), %2C (,), %3B (;)… as
+  // text, so "Systems%20%26%20Ops.pdf" looked for a file named "Systems %26 Ops.pdf" (B-067).
+  h = h.split('#')[0].split('?')[0]
+  try { h = decodeURIComponent(h) } catch { try { h = decodeURI(h) } catch { /* a bare % in the name: leave as-is */ } }
   if (IS_WINDOWS) h = h.replace(/\\/g, '/').replace(/^file:\/\/\/([a-z]:)/i, '$1')   // D-120: C:\…, file:///C:/…
   h = h.replace(FILE_SCHEME, '').replace(/^\.\//, '')
-  h = h.split('#')[0].split('?')[0]
   return h.replace(/:\d+(?::\d+)?$/, '')   // editor-style "file.md:12" / "file.ts:12:5"
 }

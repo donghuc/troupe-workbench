@@ -5,6 +5,7 @@ import type { ProviderId } from '../../shared/types'
 import type { AgentEvent } from '../../shared/agent'
 import type { TurnState, TurnLane, StartTurnInput, RegenerateInput, TurnAttachment } from '../../shared/turns'
 import { EMPTY_TURN, turnDelta } from '../../shared/turns'
+import type { TurnOutcome } from '../../shared/turnQueue'
 import { startRun, cancelRun } from './runner'
 import { planTurn } from './turnPlan'
 import { appendMessage, deleteMessagesFrom, listMessages } from '../conversations/messagesRepo'
@@ -26,8 +27,8 @@ import { MODES, parseModeTemplates, buildModeSteps, describeCast, MODES_SETTING,
 // one turn → one run, an @a @b chain, or an @all fan-out. Main owns the
 // per-conversation lock and the live lane state; windows only mirror it.
 //
-// Lock rule (Hien, 2026-09-21): a second send on a busy conversation is REFUSED,
-// not queued. An @all fan-out holds one lock until its last lane finishes.
+// Lock rule (Hien, 2026-09-21): a second turn on a busy conversation is refused here.
+// Since D-138 the app's composer sends through turnQueue.ts, which queues instead. An @all fan-out holds one lock until its last lane finishes.
 
 interface Turn {
   plan: { mode: 'sequential' | 'parallel'; chain: ProviderId[]; prompt: string }
@@ -59,6 +60,15 @@ const hooks = new Map<string, { onFinished?: (error?: string) => void }>()
 
 class ConversationBusyError extends Error {
   constructor() { super('This conversation is already running a turn. Wait for it to finish or stop it.'); this.name = 'ConversationBusyError' }
+}
+
+// D-138: told when a conversation becomes free, so the message queue can run its next message.
+const idleListeners = new Set<(conversationId: string, outcome: TurnOutcome) => void>()
+export function onTurnIdle(fn: (conversationId: string, outcome: TurnOutcome) => void): () => void {
+  idleListeners.add(fn); return () => { idleListeners.delete(fn) }
+}
+function notifyIdle(conversationId: string, outcome: TurnOutcome): void {
+  for (const f of idleListeners) { try { f(conversationId, outcome) } catch (e) { logWarn('turn idle listener failed', { err: String(e) }) } }
 }
 
 export const isBusy = (conversationId: string): boolean => turns.has(conversationId) || external.has(conversationId)
@@ -125,6 +135,7 @@ function finish(conversationId: string): void {
   set(conversationId, { busy: false, lanes: [], parallel: false, phase: undefined }, true)
   const h = hooks.get(conversationId); hooks.delete(conversationId)
   try { h?.onFinished?.(err ?? undefined) } catch { /* best-effort */ }
+  notifyIdle(conversationId, t?.cancelled ? 'stopped' : err ? 'error' : 'done')
 }
 
 // D-118: one run-log line per finished turn: outcome, agents and the files they edited.
@@ -350,4 +361,5 @@ export function releaseLock(conversationId: string, holder: string): void {
   external.delete(conversationId)
   unlockRow(conversationId)
   set(conversationId, { busy: false }, true)
+  notifyIdle(conversationId, 'done')
 }

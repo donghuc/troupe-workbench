@@ -161,7 +161,7 @@ export default function Composer({ providers, onSend, disabled, placeholder = 'H
   const [modesOpen, setModesOpen] = useState(false)
   // @collab → plan & run with several agents (D-129): it replaced the Chat/Collab switch.
   const collabMode = !!onStartCollab && hasCollab(text)
-  const collabBlocked = collabMode && (!collabAvailable || !!collabBusy)
+  const collabBlocked = collabMode && (!collabAvailable || !!collabBusy || !!busy)   // a Collab run isn't queued (D-138)
   const showCollabMention = !!onStartCollab && mentionQuery !== null && 'collab'.startsWith(mentionQuery)
 
   const choose = (pid: ProviderId, m: string) => { setProviderId(pid); setModel(m); setPmOpen(false); setHovered(null) }
@@ -200,10 +200,11 @@ export default function Composer({ providers, onSend, disabled, placeholder = 'H
     requestAnimationFrame(() => { el?.focus(); try { el?.setSelectionRange(before.length, before.length) } catch { /* noop */ } })
   }
 
+  const hasInput = !!(collabMode ? stripCollab(text) : text.trim()) || !!(selections.length && !memoryMode)
   const submit = () => {
     const t = text.trim()
     const hasSel = selections.length > 0 && !memoryMode
-    if ((!t && !hasSel) || disabled || busy) return
+    if ((!t && !hasSel) || disabled) return   // busy: the message waits in the queue (D-138)
     setMentionQuery(null)
     if (memoryMode) { onQuickMemory!(t.replace(/^#\s+/, '')); setText(''); return }
     if (collabMode) {
@@ -468,9 +469,9 @@ export default function Composer({ providers, onSend, disabled, placeholder = 'H
             </Menu>
           </div>
           <VoiceButton scope={rootRef} onText={insertSpoken} disabled={disabled} owner={draftKey} />
-          {busy && onStop
-            ? <button className="send-btn stop-btn" onClick={onStop} title="Stop"><Icon name="stop" size="md" /></button>
-            : <button className="send-btn" disabled={(!(collabMode ? stripCollab(text) : text.trim()) && !(selections.length && !memoryMode)) || disabled || collabBlocked} onClick={submit} title={collabMode ? (collabBlocked ? (collabAvailable ? 'A Collab run is already active' : 'Collab needs a project folder') : 'Plan with Collab') : 'Send'}><Icon name="send" size="md" /></button>}
+          {busy && onStop && <button className="send-btn stop-btn" onClick={onStop} title="Stop"><Icon name="stop" size="md" /></button>}
+          {/* D-138: while busy, Send queues the message; it runs when the reply finishes. With nothing typed, only Stop shows. */}
+          {(!busy || !onStop || hasInput) && <button className="send-btn" disabled={!hasInput || disabled || collabBlocked} onClick={submit} title={collabMode ? (collabBlocked ? (!collabAvailable ? 'Collab needs a project folder' : collabBusy ? 'A Collab run is already active' : 'Collab starts when the chat is free — wait for the reply or stop it') : 'Plan with Collab') : busy ? 'Queue — runs when the reply finishes' : 'Send'}><Icon name="send" size="md" /></button>}
         </div>
       </div>
 

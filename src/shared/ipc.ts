@@ -13,5 +13,6 @@ export const IPC = {
   customAgentsChanged: 'customAgents:changed',   // 2.4: the user-added agent list
   conversationsChanged: 'conversations:changed',
   schedulesChanged: 'schedules:changed',
+  queueChanged: 'queue:changed',   // D-138: a chat's queued messages
   voiceDownload: 'voice:download',   // D-124: model download progress   // D-117: a chat was created outside the window (CLI, scheduler)
 } as const

@@ -8,6 +8,7 @@ import {
 import { listMessages, appendMessage, deleteMessagesFrom } from '../conversations/messagesRepo'
 import { setSetting } from '../database/settingsRepo'
 import { deleteChatWithFiles, chatAttachmentCount } from '../attachments/deleteChat'
+import { clearQueue } from '../agent/turnQueue'
 import { providerLabel } from '../../shared/providers'
 
 export function registerConversationIpc(): void {
@@ -17,7 +18,7 @@ export function registerConversationIpc(): void {
   handle('conversations.create', (_e, projectId: string, title: string, provider: ProviderId) =>
     createConversation(projectId, title, provider))
   handle('conversations.rename', (_e, id: string, title: string) => renameConversation(id, title))
-  handle('conversations.remove', (_e, id: string) => deleteChatWithFiles(id))
+  handle('conversations.remove', (_e, id: string) => { clearQueue(id); return deleteChatWithFiles(id) })
   handle('conversations.attachmentCount', (_e, id: string) => chatAttachmentCount(id))
   handle('conversations.setPinned', (_e, id: string, pinned: boolean) => setConversationPinned(id, pinned))
   // Remember the composer's permission mode for this chat AND as the app-wide last

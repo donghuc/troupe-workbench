@@ -16,6 +16,7 @@ import { registerSkillIpc } from './ipc/skills'
 import { registerCollabIpc } from './ipc/collab'
 import { sweepInterruptedRuns } from './collab/collabRepo'
 import { sweepInterruptedTurns } from './agent/turns'
+import { initTurnQueue } from './agent/turnQueue'
 import { sweepStaleTempDirs } from './util/tempFiles'
 import { registerNoteIpc } from './ipc/notes'
 import { registerMemoryIpc } from './ipc/memory'
@@ -170,6 +171,7 @@ app.whenReady().then(() => {
   try { getDb() } catch (e) { logError('startup failed', String(e)); throw e }
   // Park collab runs the previous process left mid-flight (D-060 item 4).
   sweepInterruptedTurns()
+  try { initTurnQueue() } catch (e) { logError('message queue failed to load', String(e)) }   // D-138
   try { migrateProjectMcpOff() } catch (e) { logError('mcp migration failed', String(e)) }
   try { migrateExtraModels() } catch (e) { logError('model list migration failed', String(e)) }
   try { loadCustomAgents() } catch (e) { logError('custom agents failed to load', String(e)) }

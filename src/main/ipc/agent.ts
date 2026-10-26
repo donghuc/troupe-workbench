@@ -6,6 +6,7 @@ import { listCustomAgents, saveCustomAgent, removeCustomAgent, testCustomAgent, 
 import { maybeCompress } from '../agent/snapshotService'
 import { startTurn, regenerateTurn, cancelTurn, getTurnState, snapshotTurns, compareTurn } from '../agent/turns'
 import type { StartTurnInput, RegenerateInput } from '../../shared/turns'
+import { sendOrQueue, getQueue, editQueued, removeQueued, resumeQueue, clearQueue } from '../agent/turnQueue'
 
 export function registerAgentIpc(): void {
   // Re-read the login-shell PATH on every check, so a CLI installed while Troupe is open is found (D-103 Re-check).
@@ -28,4 +29,11 @@ export function registerAgentIpc(): void {
   handle('turns.compare', (e, conversationId: string) => compareTurn(e.sender, conversationId))
   handle('turns.get', (_e, conversationId: string) => getTurnState(conversationId))
   handle('turns.snapshot', () => snapshotTurns())
+  // D-138: the composer sends here — start now, or wait in the chat's queue.
+  handle('queue.send', (e, input: StartTurnInput) => sendOrQueue(e.sender, input))
+  handle('queue.get', (_e, conversationId: string) => getQueue(conversationId))
+  handle('queue.edit', (_e, conversationId: string, id: string, text: string) => editQueued(conversationId, id, text))
+  handle('queue.remove', (_e, conversationId: string, id: string) => removeQueued(conversationId, id))
+  handle('queue.resume', (_e, conversationId: string) => resumeQueue(conversationId))
+  handle('queue.clear', (_e, conversationId: string) => clearQueue(conversationId))
 }

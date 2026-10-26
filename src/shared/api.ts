@@ -1,4 +1,5 @@
 import type { TurnState, TurnDelta, StartTurnInput, RegenerateInput } from './turns'
+import type { QueueState } from './turnQueue'
 import type {
   Project, NewProjectInput, ProjectPatch, FileNode, FileChange,
   Conversation, RecentConversation, SearchHit, Message, NewMessageInput, ProviderId, CustomAgentId, AgentTools, McpAddInput, McpMutationResult, Note, NewNoteInput, MemoryOverview, MirrorResult, ConnectFolderResult, Schedule, NewScheduleInput, SchedulePatch, FileSearchResult, CollabRecoverAction } from './types'
@@ -136,6 +137,16 @@ export interface WorkbenchApi {
     snapshot(): Promise<TurnState[]>
     onChanged(cb: (state: TurnState) => void): () => void
     onDelta(cb: (delta: TurnDelta) => void): () => void   // D-094
+  }
+  // D-138: sending while a chat is busy queues the message; it runs when the chat is free.
+  queue: {
+    send(input: StartTurnInput): Promise<{ turn?: TurnState; queue: QueueState }>
+    get(conversationId: string): Promise<QueueState>
+    edit(conversationId: string, id: string, text: string): Promise<QueueState>
+    remove(conversationId: string, id: string): Promise<QueueState>
+    resume(conversationId: string): Promise<QueueState>
+    clear(conversationId: string): Promise<QueueState>
+    onChanged(cb: (queue: QueueState) => void): () => void
   }
   context: {
     list(projectId: string): Promise<string[]>
