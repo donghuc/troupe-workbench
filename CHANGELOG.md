@@ -18,6 +18,19 @@ Each version here matches a packaged build — the dmg is named
 > - Bumping rules: PATCH = fixes/small tweaks, MINOR = new features (backward-compatible),
 >   MAJOR = breaking changes or a data format users can't roll back from.
 
+## [2.17.0] - 2026-10-27
+
+### Fixed
+- Bots checking a run (`troupe status --wait`), `troupe show`, chat deletion from the command line and the end of every turn no longer read the whole chat; listing projects and Collab runs takes one query.
+- Collab on large projects: the before/after file list per task is capped at 5,000 files and freed when done.
+- An open chat reloads only for its own Collab run, and only fetches the new messages.
+- Collab started from the command line works when no Troupe window is open.
+- Deleting a chat in a project without a folder also deletes the files you attached in it.
+- Windows: the command line's connection name can't be guessed by another account on the PC.
+- Agents you add yourself no longer show Codex's MCP servers in their Tools list (they don't use them).
+- Stopping the app (or Ctrl+C on the dev build) no longer leaves a black window behind.
+- Smoother while a reply streams: the composer, queue and Collab card no longer redraw on every word.
+
 ## [2.16.1] - 2026-10-26
 
 ### Fixed

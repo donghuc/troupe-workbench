@@ -139,7 +139,7 @@ export function inspectContext(conversationId: string, providerId: ProviderId = 
       name: 'Project Memory',
       text: memory,
       delivery: memoryDelivery(providerId, project?.folderPath ?? null, memory),
-      source: project?.folderPath ? (providerId === 'codex' ? 'AGENTS.md' : 'CLAUDE.md') : 'Workbench database (no project folder)',
+      source: project?.folderPath ? (agentEntry(providerId).memoryFile === 'AGENTS.md' ? 'AGENTS.md' : 'CLAUDE.md') : 'Workbench database (no project folder)',
       always: true,
       warning: memoryWarning('Project memory', memory.length),
       note: staleMemoryNote(memory)

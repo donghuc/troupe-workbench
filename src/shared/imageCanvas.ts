@@ -4,6 +4,7 @@
 // the prompt contract) are unit-tested (imageCanvas.test.ts).
 import type { ProviderId } from './types'
 import { fileBase } from './platform'
+import { agentTraits, BUILTIN_IDS } from './providers'
 
 export const IMAGE_FOLDER_SETTING = 'image_folder'
 export const CANVAS_FILE = 'canvas.json'
@@ -14,14 +15,16 @@ export const HISTORY_DIR = '.history'
 
 /** Agents offered on a Processor. Codex/Grok/Gemini make raster images; Claude has no
  *  image model, so it draws vector illustrations (SVG) instead (Hien, 2026-10-05). */
-export const IMAGE_AGENTS: ProviderId[] = ['codex', 'grok', 'gemini', 'claude-code']
+/** Audit #16: from the agent catalog (`traits.image`), raster makers first, then vector. */
+export const IMAGE_AGENTS: ProviderId[] = [
+  ...BUILTIN_IDS.filter((id) => agentTraits(id).image === 'raster'),
+  ...BUILTIN_IDS.filter((id) => agentTraits(id).image === 'vector')
+]
 /** Agents that draw SVG rather than generate raster images. */
-const VECTOR_AGENTS: ProviderId[] = ['claude-code']
-export const isVectorAgent = (id: string): boolean => (VECTOR_AGENTS as string[]).includes(id)
+export const isVectorAgent = (id: string): boolean => agentTraits(id).image === 'vector'
 /** Agents whose image tool saves into its own folder and that have no way to move files in
  *  an Image run (Grok: session dir). They're told not to save anything; Troupe collects. */
-const SELF_SAVING_AGENTS: ProviderId[] = ['grok']
-export const isSelfSavingAgent = (id: string): boolean => (SELF_SAVING_AGENTS as string[]).includes(id)
+export const isSelfSavingAgent = (id: string): boolean => agentTraits(id).imageSelfSaving
 export const isImageAgent = (id: string): id is ProviderId => (IMAGE_AGENTS as string[]).includes(id)
 
 export type CardKind = 'prompt' | 'media' | 'processor' | 'output'

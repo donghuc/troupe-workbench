@@ -13,6 +13,7 @@ import { agentState } from '../../../shared/welcome'
 import type { ProviderId, BuiltinProviderId } from '../../../shared/types'
 import type { SetupEvent } from '../../../shared/agentSetup'
 import { Button, buttonClass } from './ui/Button'
+import { agentTraits } from '../../../shared/providers'
 
 type Avail = { installed: boolean; authenticated: boolean; detail?: string }
 type Phase = 'idle' | 'confirm' | 'installing' | 'signingIn' | 'terminal' | 'failed'
@@ -125,7 +126,7 @@ export default function AgentSetupCard({ id, status, onStatus }: Props) {
           <div className="setup-card-name">{recipe.label}{recipe.recommended && <Badge appearance="soft">Recommended</Badge>}</div>
           <div className="welcome-agent-state"><span className={`welcome-dot ${st}`} />
             {st === 'checking' && 'Checking…'}
-            {st === 'ready' && (id === 'grok' || id === 'gemini' ? 'Installed · sign-in is checked on first use' : `Ready${status?.detail ? ` · ${status.detail.split(' · ')[0]}` : ''}`)}
+            {st === 'ready' && (agentTraits(id).signInOnFirstUse ? 'Installed · sign-in is checked on first use' : `Ready${status?.detail ? ` · ${status.detail.split(' · ')[0]}` : ''}`)}
             {st === 'signin' && 'Installed · not signed in'}
             {st === 'missing' && `Not installed${recipe.needs ? ` · ${recipe.needs}` : ''}`}
           </div>

@@ -5,7 +5,7 @@ import type { ProviderId, NewMessageInput } from '../../shared/types'
 import {
   listConversations, listRecentConversations, getConversation, createConversation, renameConversation, setConversationPinned, setConversationPermissionMode, branchConversation, searchAll
 } from '../conversations/conversationsRepo'
-import { listMessages, appendMessage, deleteMessagesFrom } from '../conversations/messagesRepo'
+import { listMessages, listMessagesSince, appendMessage, deleteMessagesFrom } from '../conversations/messagesRepo'
 import { setSetting } from '../database/settingsRepo'
 import { deleteChatWithFiles, chatAttachmentCount } from '../attachments/deleteChat'
 import { clearQueue } from '../agent/turnQueue'
@@ -25,6 +25,7 @@ export function registerConversationIpc(): void {
   // choice, so a new chat starts where the user left off.
   handle('conversations.setPermissionMode', (_e, id: string, mode: string) => { setConversationPermissionMode(id, mode); setSetting('last_permission_mode', mode) })
   handle('messages.list', (_e, conversationId: string) => listMessages(conversationId))
+  handle('messages.since', (_e, conversationId: string, since: number) => listMessagesSince(conversationId, Number(since) || 0))
   handle('messages.deleteFrom', (_e, conversationId: string, messageId: string) => deleteMessagesFrom(conversationId, messageId))
   handle('conversations.branch', (_e, convId: string, throughMessageId: string | null) => branchConversation(convId, throughMessageId))
   handle('conversations.search', (_e, query: string) => (query.trim() ? searchAll(query.trim()) : []))

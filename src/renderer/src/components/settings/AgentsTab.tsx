@@ -9,7 +9,7 @@ import AddAgentModal from './AddAgentModal'
 import Icon from '../Icon'
 import Switch from './Switch'
 import { Stack, Field, Section } from '../Form'
-import { agentEntry, agentIds, isBuiltinId } from '../../../../shared/providers'
+import { agentEntry, agentIds, isBuiltinId, agentTraits } from '../../../../shared/providers'
 import { allPresetsFor, modelKey, parseExtraModels, addExtraModel, removeExtraModel, type ModelLists } from '../../../../shared/models'
 import type { ProviderId, BuiltinProviderId } from '../../../../shared/types'
 import type { CustomAgent } from '../../../../shared/customAgents'
@@ -124,21 +124,21 @@ export default function AgentsTab({ offAgents, toggleAgent, offModels, toggleMod
                         ? <p className="agent-body-hint">This agent has no model flag, so it always uses its own default. Set one in Edit to pick models here.</p>
                         : (
                           <form className="agent-add-model" onSubmit={(ev) => { ev.preventDefault(); addModel(id) }}>
-                            <input className="field-input mono" placeholder={id === 'claude-code' ? 'haiku' : custom?.presetId === 'opencode' ? 'provider/model, e.g. opencode/big-pickle' : custom ? 'model id' : 'model-id'} value={newModel} onChange={(ev) => setNewModel(ev.target.value)} aria-label={`Add a ${e.label} model`} />
+                            <input className="field-input mono" placeholder={agentTraits(id).fastModel ? agentTraits(id).fastModel : custom?.presetId === 'opencode' ? 'provider/model, e.g. opencode/big-pickle' : custom ? 'model id' : 'model-id'} value={newModel} onChange={(ev) => setNewModel(ev.target.value)} aria-label={`Add a ${e.label} model`} />
                             <Button size="sm" type="submit" disabled={!newModel.trim()}>Add model</Button>
                           </form>
                         )}
-                      {(id === 'codex' || id === 'gemini') && models.length === 0 && <p className="agent-body-hint">Model list not found — run {e.cli} once, or add models above.</p>}
+                      {agentTraits(id).modelsFromCli && models.length === 0 && <p className="agent-body-hint">Model list not found — run {e.cli} once, or add models above.</p>}
 
                       {/* Grok (and Gemini) can't report sign-in without running, so "Ready" can still mean
                           signed out: offer the interactive sign-in here (D-120, from the Windows test). */}
-                      {(id === 'grok' || id === 'gemini') && BUILTIN_RECIPES[id].signIn && !BUILTIN_RECIPES[id].unsupported && (
+                      {isBuiltinId(id) && agentTraits(id).signInOnFirstUse && BUILTIN_RECIPES[id].signIn && !BUILTIN_RECIPES[id].unsupported && (
                         <div className="agent-custom-actions">
                           <Button size="sm" title={`Opens ${OS_WORDS.terminal} and runs: ${BUILTIN_RECIPES[id].signIn!.cmd}`} onClick={() => api.agents.setupStart(id, 'signIn', true)}>Sign in…</Button>
                         </div>
                       )}
 
-                      {id === 'codex' && (
+                      {agentTraits(id).imageModelSetting && (
                         <Field label="Image model" htmlFor="codex-image-model" hint="Used on the Image canvas.">
                           <input id="codex-image-model" className="field-input mono" placeholder="gpt-5.6-sol (default)" value={codexImageModel} onChange={(ev) => setCodexImageModel(ev.target.value)} />
                         </Field>

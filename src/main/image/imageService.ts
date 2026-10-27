@@ -16,7 +16,7 @@ import { ensureInside } from '../filesystem/fsService'
 import { logInfo, logError } from '../util/logger'
 import { mcpOffFor, MCP_OFF_SETTING } from '../../shared/projectMcp'
 import { codexServerNames, codexDefaultModel } from '../tools/codexConfig'
-import { DISABLED_AGENTS_SETTING, enabledProviderIds, agentEntry } from '../../shared/providers'
+import { DISABLED_AGENTS_SETTING, enabledProviderIds, agentEntry, agentTraits } from '../../shared/providers'
 import { IPC } from '../../shared/ipc'
 import {
   IMAGE_FOLDER_SETTING, CANVAS_FILE, INPUTS_DIR, OUTPUTS_DIR, SAVED_DIR, HISTORY_DIR, savedName, emptyCanvas, parseCanvas, newId,
@@ -292,7 +292,7 @@ const codexServers = (): string[] => codexServerNames(codexConfig())
  * from his config works).
  */
 function runModel(agent: string, model: string): string {
-  if (model || agent !== 'codex') return model
+  if (model || !agentTraits(agent).imageModelSetting) return model
   return codexDefaultModel(codexConfig())
 }
 
@@ -368,7 +368,7 @@ async function collect(root: string, outDir: string, sinceMs: number, reported: 
       if (!isImagePath(abs) || [INPUTS_DIR, OUTPUTS_DIR, SAVED_DIR].some((d) => isUnder(join(root, d), abs))) return
       try { if (statSync(abs).isFile() && statSync(abs).mtimeMs > sinceMs - 2000) cands.add(abs) } catch { /* missing */ }
     }
-    if (agent === 'grok') (await grokSessionImages(root, sinceMs)).forEach(add)
+    if (agentTraits(agent).imageSelfSaving) (await grokSessionImages(root, sinceMs)).forEach(add)
     reported.forEach(add)
     imagePathsInReply(reply).forEach(add)
     ;(await freshImages(root, sinceMs)).forEach(add)
@@ -419,7 +419,7 @@ export function startImageRun(sender: WebContents, input: ImageRunInput): string
     .map((g) => ({ n: g.n, role: isRefRole(g.role) ? g.role : 'any' as const, refs: g.refs.filter((r) => typeof r === 'string').map((r) => { try { return toRel(root, ensureInside(root, r)) } catch { return '' } }).filter((r) => known.has(r)) }))
     .filter((g) => g.refs.length)
   const prompt = buildImagePrompt({ prompt: input.prompt, refs: refAbs.map((a) => toRel(root, a)), groups, count: input.count, outDir: outRel, vector: isVectorAgent(input.agent), selfSaving: isSelfSavingAgent(input.agent) })
-  const mcpOff = [...new Set([...mcpOffFor(getSetting(MCP_OFF_SETTING), input.agent), ...(input.agent === 'codex' ? codexServers() : [])])]
+  const mcpOff = [...new Set([...mcpOffFor(getSetting(MCP_OFF_SETTING), input.agent), ...(agentTraits(input.agent).mcpConfig === 'codex' ? codexServers() : [])])]
   const entry = { provider, cancelled: false }
   live.set(runId, entry)
   const ev = (label: string) => send(sender, IPC.imageEvent, { runId, label } satisfies ImageRunEvent)

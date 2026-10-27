@@ -1,11 +1,10 @@
-import { workFolderRules } from '../../shared/contextBudget'
 import { execFileCli } from '../platform/proc'
+import { buildContextBlock, withPreamble } from './contextBlock'
 import { logInfo, logError } from '../util/logger'
 import type { AgentProvider } from './AgentProvider'
 import type { AgentRequest, AgentEvent, ProviderCapabilities, ProviderAvailability } from '../../shared/agent'
 import { buildEnv } from './env'
 import { CliProcess } from './cliProcess'
-import { memoryDelivery, globalMemoryDelivery } from '../context/projectMemory'
 import { geminiEvents, geminiPermissionArgs, newGeminiState } from './geminiEvents'
 
 // Google's Antigravity CLI (`agy`), the Gemini CLI's successor (D-079). Run headless with
@@ -43,11 +42,7 @@ export class GeminiProvider implements AgentProvider {
 
   async *run(req: AgentRequest, resumeSessionId?: string): AsyncIterable<AgentEvent> {
     if (process.platform === 'win32') { yield { type: 'error', message: 'Gemini is not available on Windows yet.', fatal: true }; return }
-    const ctx = req.context
     // No system-prompt flag → context goes in a delimited preamble, like Codex/Grok (D-003).
-    const memory = memoryDelivery('gemini', req.cwd ?? null, ctx?.memory ?? '') === 'injected' ? ctx?.memory : undefined
-    const globalMemory = globalMemoryDelivery('gemini', ctx?.globalMemory ?? '') === 'injected' ? ctx?.globalMemory : undefined
-    const block = [ctx?.instructions, globalMemory, memory, ctx?.persistentContext, workFolderRules(req.cwd, req.addDirs), ctx?.skillText, ctx?.snapshot, ctx?.attachmentsText].filter(Boolean).join('\n\n')
     const mode = req.permissionMode ?? 'auto'
     // Read-only: agy refuses every tool that needs approval and a refused step can end the
     // run with no answer at all (seen with a web-research prompt that reached for a shell
@@ -55,8 +50,7 @@ export class GeminiProvider implements AgentProvider {
     const readNote = mode === 'read'
       ? 'You are in read-only mode: you cannot run terminal commands or create or edit files — those tools will be refused. You can read files, search the web and read web pages. Answer directly in your reply.'
       : ''
-    const block2 = [readNote, block].filter(Boolean).join('\n\n')
-    const prompt = block2.trim() ? `<workbench_context>\n${block2}\n</workbench_context>\n\n${req.prompt}` : req.prompt
+    const prompt = withPreamble(buildContextBlock('gemini', req, { lead: readNote }), req.prompt)
 
     const args = ['--input-format', 'stream-json', '--output-format', 'stream-json', ...geminiPermissionArgs(mode)]
     // Troupe offers one entry per model (effort variants collapsed, D-079), but agy then

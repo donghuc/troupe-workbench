@@ -5,6 +5,7 @@
 // the run's mode and the Tools settings, and a failure caused by something no agent in the run
 // has is the run's problem (the user changes the mode or a setting), not the agent's.
 import type { PermissionMode } from './agent'
+import { agentTraits } from './providers'
 
 export interface AgentCaps { fileWrite: boolean; shell: boolean; web: boolean }
 export interface RunSettings {
@@ -31,7 +32,7 @@ export function abilityIn(id: string, caps: AgentCaps | null, s: RunSettings): A
     // Grok's shell always stops at a prompt outside Full access: it can't be pre-approved and
     // `--disallowed-tools` doesn't remove it (its session logs, 2026-10-20). Claude Code has no
     // sandbox on Windows, so "Sandbox in Auto" means no shell there.
-    shell: c.shell && s.shellOn && !ro && !(id === 'grok' && s.mode !== 'full') && !(s.windows && id === 'claude-code' && s.mode === 'auto' && s.sandboxOn),
+    shell: c.shell && s.shellOn && !ro && !(agentTraits(id).shellOnlyInFull && s.mode !== 'full') && !(s.windows && agentTraits(id).autoShellSandbox && s.mode === 'auto' && s.sandboxOn),
     web: c.web && s.webOn && !ro
   }
 }

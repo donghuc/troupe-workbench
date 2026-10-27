@@ -2,7 +2,7 @@ import { failed } from '../notices'
 import { Badge } from './ui/Badge'
 import { OS_WORDS } from '../../../shared/platform'
 import { confirmDialog } from './ui/ConfirmDialog'
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import type { CollabRun, CollabTask, CollabTaskKind, CollabTaskStatus, ProviderId, ProviderInfo, CollabRecoverAction } from '../../../shared/types'
 import { presetsFor, modelLists, disabledModelSet } from '../models'
 import { rowsFromTasks, draftsFromRows, type PlanRow } from '../../../shared/collabPlan'
@@ -156,7 +156,7 @@ const RUN_LABEL: Record<string, string> = {
   failed: 'Failed'
 }
 
-export default function CollabCard({ run, providers, onOpenFile }: { run: CollabRun; providers: ProviderInfo[]; onOpenFile?: (rel: string) => void }): JSX.Element {
+function CollabCard({ run, providers, onOpenFile }: { run: CollabRun; providers: ProviderInfo[]; onOpenFile?: (rel: string) => void }): JSX.Element {
   const tasks = run.tasks ?? []
   const [draft, setDraft] = useState<PlanRow[] | null>(null)
   const [busy, setBusy] = useState(false)
@@ -393,3 +393,6 @@ export default function CollabCard({ run, providers, onOpenFile }: { run: Collab
     </div>
   )
 }
+
+// Audit #17: re-render only when its own props change, not on every streamed word.
+export default memo(CollabCard)

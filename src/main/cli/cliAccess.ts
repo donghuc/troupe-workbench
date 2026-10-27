@@ -16,8 +16,20 @@ import { logError } from '../util/logger'
 // opening/closing the socket when the setting changes.
 
 const isWin = process.platform === 'win32'
-// D-120: on Windows a named pipe, one per user name; the token file sits in the app's folder.
-const winPipe = (): string => `\\\\.\\pipe\\troupe-${(userInfo().username || 'user').replace(/[^A-Za-z0-9_.-]/g, '_')}`
+// D-120: on Windows a named pipe; the token file sits in the app's folder.
+// Audit 2026-10-26: the name was `troupe-<user name>` — guessable, so another account on the PC
+// could create it first and receive the token. It now ends in a random id kept next to the token
+// (%APPDATA% is readable only by this user); troupe.cmd is rewritten with it when access opens.
+let pipeIdCache: string | null = null
+function pipeId(): string {
+  if (pipeIdCache) return pipeIdCache
+  const f = join(app.getPath('userData'), 'cli-pipe-id')
+  try { const v = readFileSync(f, 'utf8').trim(); if (/^[a-f0-9]{16}$/.test(v)) return (pipeIdCache = v) } catch { /* first use */ }
+  const v = randomBytes(8).toString('hex')
+  writeFileSync(f, v, { mode: 0o600 })
+  return (pipeIdCache = v)
+}
+const winPipe = (): string => `\\\\.\\pipe\\troupe-${(userInfo().username || 'user').replace(/[^A-Za-z0-9_.-]/g, '_')}-${pipeId()}`
 const tokenFile = (): string => join(app.getPath('userData'), 'cli-token')
 const cliSocketPath = (): string => isWin ? winPipe() : join(app.getPath('userData'), CLI_SOCKET_NAME)
 const resourcePath = (name: string): string => app.isPackaged ? join(process.resourcesPath, name) : join(app.getAppPath(), 'resources', name)

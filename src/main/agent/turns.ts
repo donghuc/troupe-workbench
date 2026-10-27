@@ -8,7 +8,7 @@ import { EMPTY_TURN, turnDelta } from '../../shared/turns'
 import type { TurnOutcome } from '../../shared/turnQueue'
 import { startRun, cancelRun } from './runner'
 import { planTurn } from './turnPlan'
-import { appendMessage, deleteMessagesFrom, listMessages } from '../conversations/messagesRepo'
+import { appendMessage, deleteMessagesFrom, listMessagesSince } from '../conversations/messagesRepo'
 import { setConversationPermissionMode, getConversation } from '../conversations/conversationsRepo'
 import { getProject } from '../projects/projectsRepo'
 import { appendRunLog } from './runLog'
@@ -144,7 +144,7 @@ function logFinishedTurn(conversationId: string, t: Turn, err: string | null): v
   try {
     const conv = getConversation(conversationId); if (!conv || !t.log) return
     const project = getProject(conv.projectId)
-    const replies = listMessages(conversationId).filter((m) => m.role === 'assistant' && m.createdAt >= t.log!.at)
+    const replies = listMessagesSince(conversationId, t.log.at).filter((m) => m.role === 'assistant')   // audit #8: not the whole chat
     const replied = [...new Set(replies.map((m) => m.provider).filter((p): p is ProviderId => !!p))]
     appendRunLog({
       run: encodeRunId(conversationId, t.log.at), kind: 'chat', chat: conversationId, project: project?.name ?? '', title: conv.title,

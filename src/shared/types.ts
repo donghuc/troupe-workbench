@@ -356,6 +356,9 @@ export interface CollabRepairOption {
 }
 export interface CollabRepair { taskId: string; summary: string; options: CollabRepairOption[]; recommended: number }
 
+/** Pushed on `collab:changed` (audit #10): which run changed, and in which chat. */
+export interface CollabChanged { runId: string; conversationId: string | null }
+
 export interface CollabRun {
   id: string
   conversationId: string

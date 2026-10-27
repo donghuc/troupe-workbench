@@ -43,3 +43,26 @@ describe('windowed message reads (D-091)', () => {
     expect(repo.lastUserTurn('c1').after).toEqual([])
   })
 })
+
+describe('bounded reads for the CLI and the run log (audit #8)', () => {
+  beforeEach(() => { resetTestDb(); seedConversation('c1') })
+  const meta = (id: string, m: unknown) => testDb().prepare('UPDATE messages SET metadata = ? WHERE id = ?').run(JSON.stringify(m), id)
+
+  it('reads from a time on, and the last n chat messages, in order', () => {
+    seed([['user', 'a', 1], ['assistant', 'b', 2], ['user', 'c', 5], ['assistant', 'd', 6], ['assistant', 'e', 6]])
+    testDb().prepare("INSERT INTO messages (id, conversation_id, role, content, created_at) VALUES ('s1', 'c1', 'system', 'note', 7)").run()
+    expect(repo.listMessagesSince('c1', 5).map((m) => m.content)).toEqual(['c', 'd', 'e', 'note'])
+    expect(repo.lastChatMessages('c1', 3).map((m) => m.content)).toEqual(['c', 'd', 'e'])   // system rows left out
+  })
+  it('counts command-line user messages and finds a Collab wrap-up', () => {
+    seed([['user', 'a', 1], ['assistant', 'plan', 2], ['user', 'b', 3], ['assistant', 'wrap', 4]])
+    meta('m0', { via: 'cli' })
+    expect(repo.userMessageSources('c1')).toEqual({ total: 2, cli: 1 })
+    meta('m2', { via: 'cli' })
+    expect(repo.userMessageSources('c1')).toEqual({ total: 2, cli: 2 })
+    meta('m1', { collab: { runId: 'r1', role: 'planner' } })
+    meta('m3', { collab: { runId: 'r1', role: 'wrapup' } })
+    expect(repo.collabWrapUpMessage('c1', 'r1')?.content).toBe('wrap')
+    expect(repo.collabWrapUpMessage('c1', 'r2')).toBeNull()
+  })
+})

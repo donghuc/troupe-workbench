@@ -31,6 +31,40 @@ export function listMessagesFrom(conversationId: string, offset: number, limit =
     .all(conversationId, limit, Math.max(0, offset)) as Row[]).map(toMsg)
 }
 
+// Audit #8 (2026-10-26): bounded reads for the CLI and the run log, which had gone back to
+// loading whole transcripts (one of them once a second under `troupe status --wait`).
+
+/** Messages from `since` on (created_at ≥ since), in order — uses idx_messages_conversation. */
+export function listMessagesSince(conversationId: string, since: number): Message[] {
+  return (getDb()
+    .prepare('SELECT * FROM messages WHERE conversation_id = ? AND created_at >= ? ORDER BY created_at ASC, rowid ASC')
+    .all(conversationId, since) as Row[]).map(toMsg)
+}
+
+/** The last `n` user/assistant messages, in order. */
+export function lastChatMessages(conversationId: string, n: number): Message[] {
+  return (getDb()
+    .prepare("SELECT * FROM messages WHERE conversation_id = ? AND role IN ('user', 'assistant') ORDER BY created_at DESC, rowid DESC LIMIT ?")
+    .all(conversationId, Math.max(0, n)) as Row[]).map(toMsg).reverse()
+}
+
+/** How many user messages a chat has, and how many of them came from the command line. */
+export function userMessageSources(conversationId: string): { total: number; cli: number } {
+  const r = getDb().prepare(
+    "SELECT COUNT(*) AS total, COALESCE(SUM(json_extract(metadata, '$.via') = 'cli'), 0) AS cli FROM messages WHERE conversation_id = ? AND role = 'user'"
+  ).get(conversationId) as { total: number; cli: number }
+  return { total: r.total, cli: r.cli }
+}
+
+/** The newest message tagged as a Collab run's wrap-up (D-121), or null. */
+export function collabWrapUpMessage(conversationId: string, runId: string): Message | null {
+  const r = getDb().prepare(
+    `SELECT * FROM messages WHERE conversation_id = ? AND json_extract(metadata, '$.collab.runId') = ? AND json_extract(metadata, '$.collab.role') = 'wrapup'
+     ORDER BY created_at DESC, rowid DESC LIMIT 1`
+  ).get(conversationId, runId) as Row | undefined
+  return r ? toMsg(r) : null
+}
+
 /** The latest user message and everything after it. With no user message: null + the whole transcript. */
 export function lastUserTurn(conversationId: string): { user: Message | null; after: Message[] } {
   const db = getDb()

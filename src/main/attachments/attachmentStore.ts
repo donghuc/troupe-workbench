@@ -5,7 +5,7 @@ import { extractPdfText } from '../filesystem/fsService'
 
 // App-managed attachment store, independent of any project folder — so folderless
 // projects can still attach binaries (images, PDFs, …) for the agent to read.
-function attachmentsDir(): string {
+export function attachmentsDir(): string {
   return join(app.getPath('userData'), 'attachments')
 }
 

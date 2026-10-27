@@ -88,6 +88,7 @@ export const INVOKE_PATHS = [
   'conversations.compressNow',
 
   'messages.list',
+  'messages.since',
   'messages.deleteFrom',
   'messages.append',
 

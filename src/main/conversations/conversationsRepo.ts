@@ -17,6 +17,12 @@ export function listConversations(projectId: string): Conversation[] {
     .all(projectId) as Row[]).map(toConv)
 }
 
+/** Chats per project in one query (audit #8: was one full list per project). */
+export function conversationCounts(): Map<string, number> {
+  const rows = getDb().prepare('SELECT project_id, COUNT(*) AS n FROM conversations GROUP BY project_id').all() as { project_id: string; n: number }[]
+  return new Map(rows.map((r) => [r.project_id, r.n]))
+}
+
 export function listRecentConversations(limit = 12): RecentConversation[] {
   const rows = getDb().prepare(
     `SELECT c.*, p.name AS project_name FROM conversations c

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useStableCallback } from '../hooks/useStableCallback'
 import Composer from './Composer'
 import CollabCard from './CollabCard'
 import { useConversationRun, sendMessage, cancelRun, regenerate, reloadConversation, compareReplies } from '../turnsStore'
@@ -25,7 +26,7 @@ import ResizeHandle from './ResizeHandle'
 import QueueList from './QueueList'
 import { type PendingAttachment, type RunAttachment, resolveAttachment } from '../attachments'
 import { api } from '../api'
-import type { ProviderInfo, ProviderId, Conversation, Message, CollabRun } from '../../../shared/types'
+import type { ProviderInfo, ProviderId, Conversation, Message, CollabRun, CollabChanged } from '../../../shared/types'
 import type { ModeId } from '../../../shared/modes'
 import { stampLine } from '../../../shared/contextBudget'
 import { Button } from './ui/Button'
@@ -69,6 +70,7 @@ export default function ConversationView({ conversation, providers, pendingSend,
   const { error } = run
   const isStreaming = run.busy
   const [messages, setMessages] = useState<Message[]>([])
+  const messagesRef = useRef(messages); messagesRef.current = messages
   useEffect(() => {
     let alive = true
     api.messages.list(conversation.id).then((m: Message[]) => { if (alive) setMessages(m) })
@@ -118,18 +120,25 @@ export default function ConversationView({ conversation, providers, pendingSend,
   const [collabRun, setCollabRun] = useState<CollabRun | null>(null)
   useEffect(() => {
     let alive = true
-    const reload = async () => {
+    const reload = async (change?: CollabChanged) => {
+      // Audit #10: a change in another chat's run is none of this chat's business.
+      if (change?.conversationId && change.conversationId !== conversation.id) return
       const list = await api.collab.list(conversation.id).catch(() => [] as CollabRun[])
       if (!alive) return
       if (!list.length) { setCollabRun(null); return }
       const full = await api.collab.get(list[0].id).catch(() => null)
       if (!alive) return
       setCollabRun(full)
-      // Collab sub-runs bypass the run store, so pull in any new messages they wrote.
-      api.messages.list(conversation.id).then((m: Message[]) => { if (alive) setMessages(m) })
+      // Collab sub-runs bypass the run store, so pull in the messages they wrote — only the new ones.
+      if (!change) return
+      const last = messagesRef.current[messagesRef.current.length - 1]
+      api.messages.since(conversation.id, last ? last.createdAt : 0).then((fresh: Message[]) => {
+        if (!alive || !fresh.length) return
+        setMessages((cur) => { const have = new Set(cur.map((m) => m.id)); const add = fresh.filter((m) => !have.has(m.id)); return add.length ? [...cur, ...add] : cur })
+      })
     }
-    reload()
-    const off = api.collab.onChanged(reload)
+    void reload()
+    const off = api.collab.onChanged((c?: CollabChanged) => { void reload(c) })
     return () => { alive = false; off() }
   }, [conversation.id])
 
@@ -203,7 +212,9 @@ export default function ConversationView({ conversation, providers, pendingSend,
   const artifacts = linkedRaw.filter(keep)
   const workingFiles = touchedRaw.filter((r) => keep(r) && !artifacts.includes(r))
 
-  const openArtifactFn = cwd ? (rel: string) => setOpenArtifact(toRel(rel)) : undefined
+  const openArtifactStable = useStableCallback((rel: string) => setOpenArtifact(toRel(rel)))
+  const openCollabFile = useStableCallback((rel: string) => setOpenArtifact(rel))
+  const openArtifactFn = cwd ? openArtifactStable : undefined
   // Media thumbnails open a lightbox; a link below opens the artifact viewer.
   const openMedia = cwd ? (rel: string) => setMedia({ src: wbfileSrc(cwd, toRel(rel)), alt: toRel(rel).split('/').pop() || rel, rel: toRel(rel) }) : undefined
 
@@ -297,9 +308,24 @@ export default function ConversationView({ conversation, providers, pendingSend,
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingSend, onConsumePending, conversation.id, cwd])
 
+  // Audit #17: at most one scroll per frame — reading scrollHeight forces a layout, and streamed
+  // text changes shownLanes many times a second.
+  const scrollFrame = useRef(0)
   useEffect(() => {
-    if (atBottom) scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
+    if (!atBottom || scrollFrame.current) return
+    scrollFrame.current = requestAnimationFrame(() => {
+      scrollFrame.current = 0
+      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
+    })
   }, [messages, shownLanes, atBottom])
+  useEffect(() => () => { if (scrollFrame.current) cancelAnimationFrame(scrollFrame.current) }, [])
+
+  // Audit #17: stable handlers for the memo()'d composer, queue and Collab card.
+  const onSendStable = useStableCallback((...a: Parameters<typeof sendWithAttachments>) => sendWithAttachments(...a))
+  const onStartCollabStable = useStableCallback((...a: Parameters<typeof startCollab>) => startCollab(...a))
+  const onQuickMemoryStable = useStableCallback((line: string) => quickMemory(line))
+  const onStopStable = useStableCallback(() => cancelRun(conversation.id))
+  const onPermModeStable = useStableCallback((m: PermissionMode) => { api.conversations.setPermissionMode(conversation.id, m).catch(failed('Remember permission mode')) })
 
   const idxOf = useMemo(() => { const map = new Map<string, number>(); messages.forEach((mm, i) => map.set(mm.id, i)); return map }, [messages])
   // Group consecutive assistant messages that share a parallelGroup so blind-parallel
@@ -437,7 +463,7 @@ export default function ConversationView({ conversation, providers, pendingSend,
                 const rowTime = (r: Message | Message[]) => (Array.isArray(r) ? r[0].createdAt : r.createdAt)
                 const i = last >= 0 ? last + 1 : rows.findIndex((r) => rowTime(r) > collabRun.createdAt)
                 const cut = i === -1 ? rows.length : i
-                return <>{rows.slice(0, cut).map(renderRow)}<CollabCard key="collab-card" run={collabRun} providers={providers} onOpenFile={cwd ? (rel) => setOpenArtifact(rel) : undefined} />{rows.slice(cut).map(renderRow)}</>
+                return <>{rows.slice(0, cut).map(renderRow)}<CollabCard key="collab-card" run={collabRun} providers={providers} onOpenFile={cwd ? openCollabFile : undefined} />{rows.slice(cut).map(renderRow)}</>
               }
               return <>{rows.map(renderRow)}{canCompare && <div className="compare-row"><Button size="sm" onClick={() => compareReplies(conversation.id).catch(failed('Compare replies'))}><Icon name="flash" size="xs" /> Compare replies</Button></div>}</>
             })()}
@@ -452,7 +478,7 @@ export default function ConversationView({ conversation, providers, pendingSend,
                 : renderLane(shownLanes[0])
             )}
             {run.phase === 'compare' && shownLanes.length === 0 && <div className="compare-row compare-busy"><span className="activity-spinner spinner-xs" /> Comparing the replies…</div>}
-            {collabRun && collabActive && <CollabCard run={collabRun} providers={providers} onOpenFile={cwd ? (rel) => setOpenArtifact(rel) : undefined} />}
+            {collabRun && collabActive && <CollabCard run={collabRun} providers={providers} onOpenFile={cwd ? openCollabFile : undefined} />}
             {error && <div className="msg-error">⚠ {error}</div>}
           </div>
         </div>
@@ -464,14 +490,14 @@ export default function ConversationView({ conversation, providers, pendingSend,
             <QueueList conversationId={conversation.id} />
             <Composer
               providers={providers}
-              onSend={sendWithAttachments}
-              onStartCollab={startCollab}
+              onSend={onSendStable}
+              onStartCollab={onStartCollabStable}
               collabAvailable={!!cwd}
               collabBusy={collabActive}
-              onQuickMemory={quickMemory}
+              onQuickMemory={onQuickMemoryStable}
               onProviderChange={setComposerProvider}
               busy={isStreaming}
-              onStop={() => cancelRun(conversation.id)}
+              onStop={onStopStable}
               inject={inject}
               placeholder="Ask anything…"
               defaultProvider={conversation.provider}
@@ -479,7 +505,7 @@ export default function ConversationView({ conversation, providers, pendingSend,
               enableSkills
               defaultModel={conversation.model}
               defaultPermissionMode={permDefault}
-              onPermissionModeChange={(m) => { api.conversations.setPermissionMode(conversation.id, m).catch(failed('Remember permission mode')) }}
+              onPermissionModeChange={onPermModeStable}
               draftKey={conversation.id}
               chatId={conversation.id}
             />

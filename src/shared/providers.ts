@@ -15,29 +15,70 @@ export interface ProviderCatalogEntry {
   memoryFile: 'CLAUDE.md' | 'AGENTS.md' | null   // native project memory file, if the CLI loads one (D-055)
   globalMemoryPath: string | null                // native global memory, for display
   builtinTools: string[]        // shown in the Tools panel
+  traits?: Partial<AgentTraits>  // what sets this agent apart (audit #16); missing = the defaults below
+}
+
+/** What sets an agent apart (audit #16, 2026-10-27): asked through `agentTraits(id)` instead of
+ *  `if (id === 'grok')` checks spread across the app. Adding an agent = one catalog entry. */
+export interface AgentTraits {
+  /** Whose MCP configuration it reads (Settings ▸ Tools lists and edits that one); null = none known. */
+  mcpConfig: 'claude' | 'codex' | 'grok' | null
+  /** Runs MCP tools only in Full access (Codex `exec`). */
+  mcpNeedsFull: boolean
+  /** Can drive the Claude in Chrome extension (Settings ▸ Tools ▸ Chrome). */
+  chrome: boolean
+  /** Its shell stops at a prompt outside Full access, so it has no shell in Auto (Grok). */
+  shellOnlyInFull: boolean
+  /** In Auto its shell runs in its own sandbox — unavailable on Windows (Claude). */
+  autoShellSandbox: boolean
+  /** Opens files through its shell rather than file tools (Codex), so a read-only review says so. */
+  readsFilesByShell: boolean
+  /** On the Image canvas: makes raster images, or draws SVG; null = not offered there. */
+  image: 'raster' | 'vector' | null
+  /** Its image tool saves into its own folder; Troupe collects the files (Grok). */
+  imageSelfSaving: boolean
+  /** Has its own image-model setting (Settings ▸ Agents), else its config's default (Codex). */
+  imageModelSetting: boolean
+  /** A cheap model for background work like compacting a chat ('' = the CLI's default). */
+  fastModel: string
+  /** Its sign-in can only be seen by running it, so "installed" may still be signed out. */
+  signInOnFirstUse: boolean
+  /** Its model list is read from the CLI's own cache, which may be missing until it has run. */
+  modelsFromCli: boolean
+}
+
+const TRAIT_DEFAULTS: AgentTraits = {
+  mcpConfig: null, mcpNeedsFull: false, chrome: false, shellOnlyInFull: false, autoShellSandbox: false,
+  readsFilesByShell: false, image: null, imageSelfSaving: false, imageModelSetting: false, fastModel: '',
+  signInOnFirstUse: false, modelsFromCli: false
 }
 
 export const BUILTIN_PROVIDERS: Record<BuiltinProviderId, ProviderCatalogEntry> = {
   'claude-code': {
     id: 'claude-code', label: 'Claude', handle: 'claude', cli: 'claude', strongModel: 'opus',
     memoryFile: 'CLAUDE.md', globalMemoryPath: '~/.claude/CLAUDE.md',
-    builtinTools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep', 'WebFetch', 'WebSearch', 'Task', 'TodoWrite', 'NotebookEdit']
+    builtinTools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep', 'WebFetch', 'WebSearch', 'Task', 'TodoWrite', 'NotebookEdit'],
+    traits: { mcpConfig: 'claude', chrome: true, autoShellSandbox: true, image: 'vector', fastModel: 'haiku' }
   },
   codex: {
     id: 'codex', label: 'Codex', handle: 'codex', cli: 'codex', strongModel: '',
     memoryFile: 'AGENTS.md', globalMemoryPath: '~/.codex/AGENTS.md',
-    builtinTools: ['Shell', 'Apply patch', 'File read/write']
+    builtinTools: ['Shell', 'Apply patch', 'File read/write'],
+    traits: { mcpConfig: 'codex', mcpNeedsFull: true, readsFilesByShell: true, image: 'raster', imageModelSetting: true, modelsFromCli: true }
   },
   grok: {
     id: 'grok', label: 'Grok', handle: 'grok', cli: 'grok', strongModel: '',
     memoryFile: null, globalMemoryPath: null,
-    builtinTools: ['Shell', 'File read/write', 'Web']
+    builtinTools: ['Shell', 'File read/write', 'Web'],
+    traits: { mcpConfig: 'grok', shellOnlyInFull: true, image: 'raster', imageSelfSaving: true, signInOnFirstUse: true }
   },
   // Google's Antigravity CLI (`agy`), which replaced the Gemini CLI in June 2026 (D-079).
   gemini: {
     id: 'gemini', label: 'Gemini', handle: 'gemini', cli: 'agy', strongModel: '',
     memoryFile: null, globalMemoryPath: null,
-    builtinTools: ['File read/write', 'Shell', 'Web search', 'Browser']
+    builtinTools: ['File read/write', 'Shell', 'Web search', 'Browser'],
+    // Its MCP list isn't read yet (D-079).
+    traits: { image: 'raster', signInOnFirstUse: true, modelsFromCli: true }
   }
 }
 
@@ -71,6 +112,11 @@ export function agentEntry(id: ProviderId): ProviderCatalogEntry {
   if (c) return c
   const name = String(id).replace(/^x-/, '')
   return { id, label: name, handle: name, cli: '', strongModel: '', memoryFile: null, globalMemoryPath: null, builtinTools: [] }
+}
+
+/** What sets this agent apart (audit #16). Unknown and user-added agents get the defaults. */
+export function agentTraits(id: string | null | undefined): AgentTraits {
+  return { ...TRAIT_DEFAULTS, ...(isProviderId(id) ? agentEntry(id).traits : undefined) }
 }
 
 /** Label for an agent id; `fallback` for null/unknown (e.g. an assistant message with no provider). */

@@ -2,7 +2,7 @@ import { Badge } from './ui/Badge'
 import { memo, useEffect, useState } from 'react'
 import type { AgentTools, ProviderId } from '../../../shared/types'
 import { MCP_OFF_SETTING, mcpOffKey, parseMcpOff, mcpDisplay } from '../../../shared/projectMcp'
-import { CHROME_ACCESS_SETTING } from '../../../shared/providers'
+import { CHROME_ACCESS_SETTING, agentTraits, providerLabel } from '../../../shared/providers'
 import { openSettings, SETTINGS_SAVED_EVENT } from '../notices'
 import { artifactIcon } from '../chatFiles'
 import { api } from '../api'
@@ -56,7 +56,7 @@ function ChatSidePanel({ conversationId, cwd, composerProvider, agentName, artif
   const offMcpCount = (tools?.mcp.length ?? 0) - activeMcp.length
   const activeBuiltin = [
     ...(tools?.builtin ?? []).filter((t) => (builtinAccess.web || !/^web/i.test(t)) && (builtinAccess.shell || !/^(bash|shell)$/i.test(t))),
-    ...(builtinAccess.chrome && composerProvider === 'claude-code' ? ['Chrome'] : [])
+    ...(builtinAccess.chrome && agentTraits(composerProvider).chrome ? ['Chrome'] : [])
   ]
 
   if (hidden) return null
@@ -131,7 +131,7 @@ function ChatSidePanel({ conversationId, cwd, composerProvider, agentName, artif
                     <span className="tool-status">{m.status}</span>
                   </div>
                 ) })}
-                {composerProvider === 'codex' && <div className="tool-note">On Codex, MCP tools run only in Full access.</div>}
+                {agentTraits(composerProvider).mcpNeedsFull && <div className="tool-note">On {providerLabel(composerProvider)}, MCP tools run only in Full access.</div>}
               </div>
             )}
             <button className={`settings-row tools-panel-row${showAllTools ? ' open' : ''}`} aria-expanded={showAllTools} onClick={() => setShowAllTools((v) => !v)}>

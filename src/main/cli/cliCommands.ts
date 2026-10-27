@@ -1,7 +1,7 @@
 import { listProjects, getProject } from '../projects/projectsRepo'
-import { listConversations, getConversation, createConversation, listRecentConversations, renameConversation, searchAll } from '../conversations/conversationsRepo'
+import { listConversations, conversationCounts, getConversation, createConversation, listRecentConversations, renameConversation, searchAll } from '../conversations/conversationsRepo'
 import { deleteChatWithFiles } from '../attachments/deleteChat'
-import { listMessages, lastUserTurn } from '../conversations/messagesRepo'
+import { listMessagesSince, lastChatMessages, userMessageSources, lastUserTurn } from '../conversations/messagesRepo'
 import { startTurn, cancelTurn, isBusy, getTurnState } from '../agent/turns'
 import { senderForRun, broadcastConversationsChanged } from '../agent/headless'
 import { readRunLog } from '../agent/runLog'
@@ -55,7 +55,8 @@ const busyError = () => new CliError('This chat is already running. Wait for it 
 
 // ── projects & chats ────────────────────────────────────────────────────────────
 function projects(): CliResult {
-  const ps: CliProject[] = listProjects().map((p) => ({ id: p.id, name: p.name, folder: p.folderPath, chats: listConversations(p.id).length }))
+  const counts = conversationCounts()
+  const ps: CliProject[] = listProjects().map((p) => ({ id: p.id, name: p.name, folder: p.folderPath, chats: counts.get(p.id) ?? 0 }))
   return ok(ps, projectsText(ps))
 }
 function chats(q: Params): CliResult {
@@ -65,7 +66,7 @@ function chats(q: Params): CliResult {
 }
 function show(q: Params): CliResult {
   const c = findChat(q.get('chat') ?? '')
-  const ms = listMessages(c.id).filter(visible).slice(-clampLast(q.get('last'))).map(toCliMessage)
+  const ms = lastChatMessages(c.id, clampLast(q.get('last'))).map(toCliMessage)
   return ok({ chat: { id: c.id, title: c.title }, busy: isBusy(c.id), messages: ms }, `${c.title}${isBusy(c.id) ? '  [running]' : ''}\n\n${messagesText(ms)}`)
 }
 function agents(): CliResult {
@@ -83,8 +84,8 @@ function rename(q: Params): CliResult {
 }
 /** Only chats the command line started: every message you sent in it came from the CLI. */
 function startedFromCli(c: Conversation): boolean {
-  const users = listMessages(c.id).filter((m) => m.role === 'user')
-  if (users.length) return users.every((m) => m.metadata?.via === 'cli')
+  const u = userMessageSources(c.id)
+  if (u.total) return u.cli === u.total
   return readRunLog(0).some((e) => e.chat === c.id && e.source === 'cli')
 }
 async function remove(q: Params): Promise<CliResult> {
@@ -160,7 +161,8 @@ function runStatus(run: string): CliStatus {
   const { chatId, sentAt } = decodeRunId(run)
   const conv = getConversation(chatId)
   if (!conv) throw new CliError('That chat no longer exists.', 404)
-  const msgs = listMessages(chatId).filter(visible)
+  // Audit #8: only the messages from this run on (was the whole chat, every second under --wait).
+  const msgs = listMessagesSince(chatId, sentAt).filter(visible)
   const start = msgs.findIndex((m) => m.role === 'user' && m.createdAt >= sentAt)
   const busy = isBusy(chatId)
   if (start < 0) {

@@ -6,9 +6,10 @@ import { resetTestDb, testDb } from '../testing/memoryDb'
 
 // D-121: the Collab orchestrator end to end, with the agent runs faked: each startRun is
 // recorded and the test plays the agent by writing its reply and calling onDone.
+let windows: unknown[] = [{ webContents: { isDestroyed: () => false, send: () => {} } }]
 vi.mock('electron', () => ({
   app: { getPath: () => tmpdir(), isPackaged: false },
-  BrowserWindow: { getAllWindows: () => [{ webContents: { isDestroyed: () => false, send: () => {} } }] },
+  BrowserWindow: { getAllWindows: () => windows },
   Notification: class { static isSupported() { return false } },
   powerSaveBlocker: { start: () => 1, stop: () => {} }
 }))
@@ -19,9 +20,10 @@ vi.mock('../providers/registry', () => ({ createProvider: () => ({ getCapabiliti
 vi.mock('../schedules/scheduler', () => ({ runScheduleNow: () => {} }))
 interface Started { id: string; params: { conversationId: string; prompt: string; timeoutMs: number; extraMetadata?: Record<string, unknown>; parallelGroup?: string; onDone?: (mid: string | null, err?: string) => void } }
 const runs: Started[] = []
+let failNextStart = false
 const cancelled: string[] = []
 vi.mock('../agent/runner', () => ({
-  startRun: (_s: unknown, params: Started['params']) => { const id = `r${runs.length + 1}`; runs.push({ id, params }); return id },
+  startRun: (_s: unknown, params: Started['params']) => { if (failNextStart) { failNextStart = false; throw new Error('spawn EACCES') } const id = `r${runs.length + 1}`; runs.push({ id, params }); return id },
   cancelRun: async (id: string) => { cancelled.push(id) },
   runTimeoutMs: () => 60_000
 }))
@@ -426,5 +428,29 @@ describe('Collab and the chat lock (audit 2026-10-26, P0-1 / P0-3)', () => {
       expect(locks.size).toBe(0)
       expect(released.at(-1)).toBe('stopped')
     } finally { vi.useRealTimers() }
+  })
+})
+
+describe('Collab with no window open (audit #15)', () => {
+  it('a run started by a bot plans headless instead of failing "No app window"', () => {
+    const was = windows; windows = []
+    try {
+      const gone = { isDestroyed: () => true, send: () => {} } as never
+      const r = orch.startCollab(gone, { conversationId: chat, cwd: proj, providerId: 'claude-code', goal: 'Write a quiz' })
+      expect(r.status).toBe('planning')
+      expect(role(runs[runs.length - 1])).toBe('planner')
+    } finally { windows = was }
+  })
+})
+
+describe('one way to start a role (audit #12)', () => {
+  it('a Maker that cannot start leaves the run paused, the chat unlocked, and the reason shown', () => {
+    const id = start(); finish(plan(TWO))
+    failNextStart = true
+    orch.confirmPlan(sender, id)
+    const r = repo.getCollabRunBare(id)
+    expect(r?.status).toBe('needs_attention')
+    expect(r?.reason).toMatch(/Couldn't start the Maker \(spawn EACCES\)/)
+    expect(locks.size).toBe(0)
   })
 })

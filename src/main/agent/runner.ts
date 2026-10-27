@@ -14,7 +14,7 @@ import { logInfo, logError } from '../util/logger'
 import { getSkillById } from '../skills/skillsFs'
 import { getNumberSetting } from '../database/settingsRepo'
 
-interface RunParams {
+export interface RunParams {
   conversationId: string
   providerId: ProviderId
   prompt: string

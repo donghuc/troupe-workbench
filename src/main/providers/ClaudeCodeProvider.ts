@@ -1,6 +1,6 @@
 import { CHROME_ACCESS_SETTING } from '../../shared/providers'
+import { buildContextBlock } from './contextBlock'
 import { execFileCli, whichWin } from '../platform/proc'
-import { workFolderRules } from '../../shared/contextBudget'
 import { writeFileSync, mkdtempSync, existsSync } from 'fs'
 import { tmpdir } from 'os'
 import { claudeMcpToolPrefixes } from '../../shared/projectMcp'
@@ -10,7 +10,6 @@ import { buildEnv } from './env'
 import { CliProcess } from './cliProcess'
 import { claudeEvents, newClaudeState } from './claudeEvents'
 import { getSetting } from '../database/settingsRepo'
-import { memoryDelivery, globalMemoryDelivery } from '../context/projectMemory'
 import { logInfo } from '../util/logger'
 import { configuredClaudeMcpNames, liveClaudeMcpNames } from '../tools/toolsService'
 import type { AgentProvider } from './AgentProvider'
@@ -126,15 +125,12 @@ export class ClaudeCodeProvider implements AgentProvider {
     // prompt append, without writing into the project folder (D-003).
     // CLAUDE.md is the canonical memory file and Claude Code auto-loads it from the
     // cwd, so injection is skipped exactly when delivery is native (D-055).
-    const memory = memoryDelivery('claude-code', req.cwd ?? null, ctx?.memory ?? '') === 'injected' ? ctx?.memory : undefined
-    // Global memory lives in ~/.claude/CLAUDE.md, Claude's own canonical file, which it
-    // auto-loads in every session — always native, so this is never injected (D-055).
-    const globalMemory = globalMemoryDelivery('claude-code', ctx?.globalMemory ?? '') === 'injected' ? ctx?.globalMemory : undefined
     // With Chrome on, say which web route is which so the model doesn't guess (D-085).
     const webRouting = chromeAccess
       ? 'Web routing: use WebSearch to find things and WebFetch for public pages. For any page that needs a login, or clicking and typing, use the Claude in Chrome tools (mcp__claude-in-chrome), which run in the user\'s own signed-in browser. Use Playwright only when the user asks for it.'
       : undefined
-    const sys = [ctx?.instructions, globalMemory, memory, ctx?.persistentContext, workFolderRules(req.cwd, req.addDirs), webRouting].filter(Boolean).join('\n\n')
+    // Global memory lives in ~/.claude/CLAUDE.md, which Claude auto-loads, so it's never injected (D-055).
+    const sys = buildContextBlock('claude-code', req, { withTurnContext: false, tail: webRouting })
     // The system-prompt file lives in a temp folder that is removed when the run ends (audit #10).
     let tempDir: string | null = null
     if (sys.trim()) {

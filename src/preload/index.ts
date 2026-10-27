@@ -28,7 +28,7 @@ const subscriptions: Record<string, Record<string, unknown>> = {
   queue: { onChanged: on(IPC.queueChanged) },
   skills: { onChanged: on(IPC.skillsChanged, false) },
   image: { onEvent: on(IPC.imageEvent), onDone: on(IPC.imageDone) },
-  collab: { onChanged: on(IPC.collabChanged, false) },
+  collab: { onChanged: on(IPC.collabChanged) },
   agents: { onEvent: on(IPC.agentSetup) },
   customAgents: { onChanged: on(IPC.customAgentsChanged) },
   voice: { onEvent: on(IPC.voiceDownload) }

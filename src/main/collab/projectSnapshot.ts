@@ -7,7 +7,9 @@ import { join } from 'path'
 // that are build output, dependencies or Troupe's own bookkeeping are left out.
 
 const SKIP = new Set(['.git', 'node_modules', '.workbench', 'dist', 'build', 'out', '.next', '.cache', 'DerivedData', 'Pods', '.venv', 'venv', '__pycache__', 'target', '.gradle', '.idea', '.DS_Store'])
-const SNAPSHOT_LIMIT = 20_000
+// Audit #9 (2026-10-26): the walk runs on the main process twice per Maker attempt; 20,000 files
+// could hold it for a noticeable moment. Past 5,000 files the record says the change list is unknown.
+const SNAPSHOT_LIMIT = 5_000
 
 export type Snapshot = Map<string, string>
 

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import Icon from './Icon'
 import { Menu, MenuItem } from './ui/Menu'
 import { api } from '../api'
@@ -11,7 +11,7 @@ import type { QueuePause, QueuedMessage, QueueState } from '../../../shared/turn
 // failed reply pauses the queue until you Resume.
 const PAUSE_WORD: Record<QueuePause, string> = { stopped: 'Paused after Stop', error: 'Paused — the last reply failed', restart: 'Paused — Troupe restarted', collab: 'Waiting — Collab needs you first' }
 
-export default function QueueList({ conversationId }: { conversationId: string }) {
+function QueueList({ conversationId }: { conversationId: string }) {
   const q = useQueue(conversationId)
   const [editing, setEditing] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
@@ -60,3 +60,6 @@ export default function QueueList({ conversationId }: { conversationId: string }
     </div>
   )
 }
+
+// Audit #17: re-render only when its own props change, not on every streamed word.
+export default memo(QueueList)

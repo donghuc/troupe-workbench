@@ -6,7 +6,7 @@ import McpAddModal from './McpAddModal'
 import { Stack, Field, Section } from './Form'
 import { api } from '../api'
 import { failed, notify, reportError } from '../notices'
-import { agentEntry } from '../../../shared/providers'
+import { agentEntry, agentTraits, providerLabel } from '../../../shared/providers'
 import { mcpOffKey, mcpDisplay, groupMcpServers } from '../../../shared/projectMcp'
 import type { AgentTools, McpServer, ProviderId } from '../../../shared/types'
 import Switch from './settings/Switch'
@@ -86,7 +86,8 @@ export default function ToolsSettings({ agents, mcpOff, setMcpOff, webAccess, se
   }
 
   const g = tools ? groupMcpServers(tools.mcp) : null
-  const canAdd = agent === 'claude-code' || agent === 'codex'   // Add writes Claude's and Codex's configs
+  const cfg = agentTraits(agent).mcpConfig
+  const canAdd = cfg === 'claude' || cfg === 'codex'   // Add writes Claude's and Codex's configs
 
   return (
     <Stack>
@@ -99,12 +100,12 @@ export default function ToolsSettings({ agents, mcpOff, setMcpOff, webAccess, se
           {canAdd && <Button variant="link" onClick={() => setShowAdd(true)}>+ Add server</Button>}
           <IconButton title="Refresh" onClick={load} disabled={loading}>{loading ? <span className="activity-spinner spinner-xs" /> : <Icon name="refresh" size="sm" />}</IconButton>
         </>}>
-      <Field hint={<>Off servers are left out of every run, in every project.{agent === 'codex' && ' On Codex, MCP tools run only in Full access.'}</>}>
+      <Field hint={<>Off servers are left out of every run, in every project.{agentTraits(agent).mcpNeedsFull && ` On ${providerLabel(agent)}, MCP tools run only in Full access.`}</>}>
       <Stack tight>
       {loading && !tools && <div className="skeleton-stack"><div className="skeleton skeleton-row" /><div className="skeleton skeleton-row short" /></div>}
       {g && tools!.mcp.length === 0 && <p className="field-hint">No MCP servers set up for {agentEntry(agent).label}.</p>}
 
-      {agent === 'grok' && tools && tools.mcp.length > 0 && (() => {
+      {cfg === 'grok' && tools && tools.mcp.length > 0 && (() => {
         // D-133: Grok can't leave out one server for a run, so its servers switch on and off together.
         const names = tools.mcp.map((m) => m.name)
         const on = names.some(isOn)
@@ -123,19 +124,19 @@ export default function ToolsSettings({ agents, mcpOff, setMcpOff, webAccess, se
           </div>
         )
       })()}
-      {agent !== 'grok' && g && g.own.length > 0 && (
+      {cfg !== 'grok' && g && g.own.length > 0 && (
         <div>
           <div className="tools-group-label">Your servers</div>
           <div className="settings-group">{g.own.map((m) => row(m, { removable: true }))}</div>
         </div>
       )}
-      {agent !== 'grok' && g && g.connectors.length > 0 && (
+      {cfg !== 'grok' && g && g.connectors.length > 0 && (
         <div>
           <div className="tools-group-label">claude.ai connectors <span className="tools-group-hint">· connect or remove them on claude.ai</span></div>
           <div className="settings-group">{g.connectors.map((m) => row(m))}</div>
         </div>
       )}
-      {agent !== 'grok' && g && g.plugins.length > 0 && (
+      {cfg !== 'grok' && g && g.plugins.length > 0 && (
         <div>
           <div className="tools-group-label">Plugins <span className="tools-group-hint">· install or remove with /plugin in Claude Code</span></div>
           <div className="settings-group">

@@ -7,7 +7,7 @@ import type { ProviderDescriptor, ProviderAvailability, ContextInspection, Permi
 import type { SetupEvent } from './agentSetup'
 import type { CustomAgent, CustomAgentDraft, TestResult } from './customAgents'
 import type { Skill, SkillInput, SkillScope } from './types'
-import type { CollabRun, CollabStartInput, CollabTaskDraft } from './types'
+import type { CollabRun, CollabChanged, CollabStartInput, CollabTaskDraft } from './types'
 import type { ModelLists } from './models'
 import type { Outcome } from './decisions'
 import type { CheckResult } from './contextCheck'
@@ -106,6 +106,7 @@ export interface WorkbenchApi {
   }
   messages: {
     list(conversationId: string): Promise<Message[]>
+    since(conversationId: string, since: number): Promise<Message[]>   // audit #10: messages from a time on
     deleteFrom(conversationId: string, messageId: string): Promise<void>
     append(input: NewMessageInput): Promise<Message>
   }
@@ -241,6 +242,6 @@ export interface WorkbenchApi {
     applyRepair(runId: string, index: number): Promise<CollabRun | null>
     get(runId: string): Promise<CollabRun | null>
     list(conversationId: string): Promise<CollabRun[]>
-    onChanged(cb: () => void): () => void
+    onChanged(cb: (change: CollabChanged | undefined) => void): () => void   // audit #10: which run, which chat
   }
 }

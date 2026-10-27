@@ -4,6 +4,7 @@ import { join } from 'path'
 import { ensureInside } from '../filesystem/fsService'
 import type { ProviderId } from '../../shared/types'
 import type { Delivery } from '../../shared/agent'
+import { agentEntry } from '../../shared/providers'
 
 // The pure half of project/global memory (D-055): reading the canonical file and
 // deciding how a provider receives it. No Electron, no database — so it can be
@@ -60,8 +61,10 @@ export function memoryDelivery(provider: ProviderId, dir: string | null, resolve
   if (!dir) return 'injected'
   const canonical = readMemoryFile(dir)?.trim() ?? ''
   if (!canonical) return 'injected'                       // DB blob only
-  if (provider === 'claude-code') return 'native'         // CLAUDE.md is the canonical file
-  if (provider !== 'codex') return 'injected'   // Grok, Gemini, user-added agents: no known native memory file
+  // Audit #16: by the agent's own memory file, not its name.
+  const own = agentEntry(provider).memoryFile
+  if (own === 'CLAUDE.md') return 'native'         // CLAUDE.md is the canonical file
+  if (own !== 'AGENTS.md') return 'injected'       // Grok, Gemini, user-added agents: no known native memory file
   return isMirrorOf(ensureInside(dir, 'AGENTS.md'), canonical) ? 'native' : 'injected'
 }
 
@@ -71,7 +74,8 @@ export function memoryDelivery(provider: ProviderId, dir: string | null, resolve
 export function globalMemoryDelivery(provider: ProviderId, resolved: string, agentsPath: string = globalAgentsPath()): Delivery {
   const canonical = resolved.trim()
   if (!canonical) return 'none'
-  if (provider === 'claude-code') return 'native'
-  if (provider !== 'codex') return 'injected'
+  const own = agentEntry(provider).memoryFile
+  if (own === 'CLAUDE.md') return 'native'
+  if (own !== 'AGENTS.md') return 'injected'
   return isMirrorOf(agentsPath, canonical) ? 'native' : 'injected'
 }

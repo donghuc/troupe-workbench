@@ -94,6 +94,23 @@ export function listCollabRuns(conversationId: string): CollabRun[] {
     .all(conversationId) as RunRow[]).map(toRun)
 }
 
+/** The newest Collab runs, in one project or all (audit #8: was one query per chat). Without tasks. */
+export function listRecentCollabRuns(projectId: string | null, limit = 20): CollabRun[] {
+  const sql = projectId
+    ? 'SELECT r.* FROM collab_runs r JOIN conversations c ON c.id = r.conversation_id WHERE c.project_id = ? ORDER BY r.created_at DESC LIMIT ?'
+    : 'SELECT * FROM collab_runs ORDER BY created_at DESC LIMIT ?'
+  const args = projectId ? [projectId, limit] : [limit]
+  return (getDb().prepare(sql).all(...args) as RunRow[]).map(toRun)
+}
+
+/** Audit #12: these two wrote to the database from the orchestrator. */
+export function setBudget(runId: string, budget: CollabRun['budget']): void {
+  getDb().prepare('UPDATE collab_runs SET budget_json = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(budget), Date.now(), runId)
+}
+export function setRunPermission(runId: string, mode: PermissionMode): void {
+  getDb().prepare('UPDATE collab_runs SET permission_mode = ?, updated_at = ? WHERE id = ?').run(mode, Date.now(), runId)
+}
+
 export interface CollabRunPatch {
   status?: CollabStatus
   reason?: string

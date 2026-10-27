@@ -1,4 +1,5 @@
 import { workFolderRules } from '../../shared/contextBudget'
+import { buildContextBlock, withPreamble } from './contextBlock'
 import { fileBase } from '../../shared/platform'
 import { execFileCli } from '../platform/proc'
 import { writtenByOthers } from '../agent/recentWrites'
@@ -15,7 +16,6 @@ import type {
 import { buildEnv } from './env'
 import { getSetting } from '../database/settingsRepo'
 import { CliProcess, mediaFilesSince } from './cliProcess'
-import { memoryDelivery, globalMemoryDelivery } from '../context/projectMemory'
 
 // xAI's `grok` CLI (grok-build), run headless: `grok --prompt-file <file> --output-format json`
 // (`-p "<prompt>"` on a Grok without --prompt-file).
@@ -56,22 +56,16 @@ export class GrokProvider implements AgentProvider {
 
   async *run(req: AgentRequest, resumeSessionId?: string): AsyncIterable<AgentEvent> {
     this.cancelled = false
-    const ctx = req.context
     // Context goes in a delimited preamble before the prompt (D-003); since D-133 the fixed rules
     // go in the system prompt (--rules) and the whole prompt is passed as a file.
     // Memory is always injected for Grok (no known native memory file); D-055 rule.
-    const memory = memoryDelivery('grok', req.cwd ?? null, ctx?.memory ?? '') === 'injected' ? ctx?.memory : undefined
-    const globalMemory = globalMemoryDelivery('grok', ctx?.globalMemory ?? '') === 'injected' ? ctx?.globalMemory : undefined
     const mode0 = req.permissionMode ?? 'auto'
     // D-133: the short, fixed rules (work folder, what this mode allows) go in Grok's system
     // prompt with --rules; memory, snapshot and attachments stay in the prompt (they can be long,
     // and a command line can't — Windows caps it near 32,000 characters).
     const rules = [workFolderRules(req.cwd, req.addDirs), grokModeRule(mode0, req.toolProfile)].filter(Boolean).join('\n\n')
     const rulesInPrompt = unsupportedFlags.has('--rules')
-    const block = [ctx?.instructions, globalMemory, memory, ctx?.persistentContext, rulesInPrompt ? rules : '', ctx?.skillText, ctx?.snapshot, ctx?.attachmentsText].filter(Boolean).join('\n\n')
-    const prompt = block.trim()
-      ? `<workbench_context>\n${block}\n</workbench_context>\n\n${req.prompt}`
-      : req.prompt
+    const prompt = withPreamble(buildContextBlock('grok', req, { rules: rulesInPrompt ? rules : '' }), req.prompt)
     // D-133: the prompt goes in a file (--prompt-file): no command-line length cap, and not
     // visible in the process list. Deleted once Grok has answered.
     const promptFile = join(tmpdir(), `troupe-grok-${randomUUID()}.md`)

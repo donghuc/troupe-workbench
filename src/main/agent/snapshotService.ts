@@ -6,6 +6,7 @@ import { getLatestSnapshot, insertSnapshot } from '../conversations/snapshotRepo
 import { getNumberSetting } from '../database/settingsRepo'
 import { createProvider } from '../providers/registry'
 import { formatTranscript, COMPRESS_TRANSCRIPT } from './handoff'
+import { agentTraits } from '../../shared/providers'
 
 const SUMMARY_INSTRUCTIONS =
   'You are compressing a conversation into a compact, provider-independent session state. ' +
@@ -40,7 +41,7 @@ export async function maybeCompress(conversationId: string, sender: WebContents,
 
     const provider = createProvider(conv.provider)
     if (!provider) { running.delete(conversationId); notify('end'); return }
-    const model = conv.provider === 'claude-code' ? 'haiku' : undefined
+    const model = agentTraits(conv.provider).fastModel || undefined   // audit #16: was 'haiku' for Claude by name
     const prompt = [
       SUMMARY_INSTRUCTIONS,
       prev ? `\nPrevious summary:\n${prev.content}` : '',

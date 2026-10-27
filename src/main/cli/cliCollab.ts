@@ -1,8 +1,8 @@
 import { startCollab, confirmPlan, stopCollab, resumeCollab, recoverTask, applyRepair, setCollabMode } from '../collab/orchestrator'
-import { getCollabRun, listCollabRuns } from '../collab/collabRepo'
+import { getCollabRun, listCollabRuns, listRecentCollabRuns } from '../collab/collabRepo'
 import { getConversation, createConversation, listConversations } from '../conversations/conversationsRepo'
 import { getProject, listProjects } from '../projects/projectsRepo'
-import { listMessages } from '../conversations/messagesRepo'
+import { collabWrapUpMessage } from '../conversations/messagesRepo'
 import { senderForRun, broadcastConversationsChanged } from '../agent/headless'
 import { appendRunLog } from '../agent/runLog'
 import { logInfo } from '../util/logger'
@@ -57,12 +57,7 @@ function describeCollab(run: CollabRun): CliCollab {
 }
 /** D-121: the Planner's wrap-up message for this run, if one was written. */
 function wrapUpOf(run: CollabRun): string {
-  const ms = listMessages(run.conversationId)
-  for (let i = ms.length - 1; i >= 0; i--) {
-    const c = ms[i].metadata?.collab as { runId?: string; role?: string } | undefined
-    if (c?.runId === run.id && c.role === 'wrapup') return ms[i].content
-  }
-  return ''
+  return collabWrapUpMessage(run.conversationId, run.id)?.content ?? ''
 }
 const result = (run: CollabRun | null) => {
   if (!run) throw new CliError('That Collab run no longer exists.', 404)
@@ -96,8 +91,7 @@ export async function runCollabCommand(q: Params, deps: Deps, closed: () => bool
     case 'list': {
       // D-121: no project = every project's runs (`collab list --json` read "--json" as the project).
       const name = (q.get('project') ?? '').trim()
-      const projects = name ? [deps.findProject(name)] : listProjects()
-      const runs = projects.flatMap((p) => listConversations(p.id)).flatMap((c) => listCollabRuns(c.id)).sort((a, b) => b.createdAt - a.createdAt).slice(0, 20)
+      const runs = listRecentCollabRuns(name ? deps.findProject(name).id : null, 20)
       const json = runs.map((r) => ({ run: r.id, chat: r.conversationId, status: r.status, goal: r.goal, updatedAt: r.updatedAt }))
       return { status: 200, json, text: json.length ? json.map((r) => `${r.run}  ${r.status.replace('_', ' ')}  ${r.goal.split('\n')[0].slice(0, 80)}`).join('\n') : name ? 'No Collab runs in this project.' : 'No Collab runs yet.' }
     }

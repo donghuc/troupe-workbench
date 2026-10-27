@@ -1,14 +1,13 @@
 import { accessSync, constants, realpathSync } from 'fs'
+import { buildContextBlock, withPreamble } from './contextBlock'
 import { whichWin } from '../platform/proc'
 import { join, isAbsolute } from 'path'
-import { workFolderRules } from '../../shared/contextBudget'
 import { buildRun, type CustomAgent } from '../../shared/customAgents'
 import { logInfo, logError } from '../util/logger'
 import type { AgentProvider } from './AgentProvider'
 import type { AgentRequest, AgentEvent, ProviderCapabilities, ProviderAvailability } from '../../shared/agent'
 import { buildEnv } from './env'
 import { CliProcess, stderrLine } from './cliProcess'
-import { memoryDelivery, globalMemoryDelivery } from '../context/projectMemory'
 import { claudeEvents, newClaudeState } from './claudeEvents'
 
 // A user-added agent (Troupe 2.4): any CLI that takes one prompt, prints a reply and exits.
@@ -71,14 +70,10 @@ export class CustomCliProvider implements AgentProvider {
   }
 
   async *run(req: AgentRequest): AsyncIterable<AgentEvent> {
-    const ctx = req.context
-    const memory = memoryDelivery(this.id, req.cwd ?? null, ctx?.memory ?? '') === 'injected' ? ctx?.memory : undefined
-    const globalMemory = globalMemoryDelivery(this.id, ctx?.globalMemory ?? '') === 'injected' ? ctx?.globalMemory : undefined
     const readOnly = (req.permissionMode ?? 'auto') === 'read'
     // Without read-only flags the mode can only be asked for, not enforced (the picker says so).
     const readNote = readOnly && !this.agent.readOnlyArgs?.length ? READ_ONLY_NOTE : ''
-    const block = [readNote, ctx?.instructions, globalMemory, memory, ctx?.persistentContext, workFolderRules(req.cwd, req.addDirs), ctx?.skillText, ctx?.snapshot, ctx?.attachmentsText].filter(Boolean).join('\n\n')
-    const prompt = block.trim() ? `<workbench_context>\n${block}\n</workbench_context>\n\n${req.prompt}` : req.prompt
+    const prompt = withPreamble(buildContextBlock(this.id, req, { lead: readNote }), req.prompt)
 
     let run: { args: string[]; stdin: string }
     try { run = buildRun(this.agent, { prompt, model: req.model, readOnly }) } catch (err) {

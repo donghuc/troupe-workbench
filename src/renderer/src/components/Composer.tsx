@@ -1,6 +1,6 @@
 import { Badge } from './ui/Badge'
 import { OS_WORDS } from '../../../shared/platform'
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import type { ProviderInfo, ProviderId, FileNode, Skill } from '../../../shared/types'
 import type { PermissionMode } from '../../../shared/agent'
 import { matchSkill } from '../skillMatch'
@@ -57,7 +57,7 @@ const PERM_OPTS: { v: PermissionMode; l: string; d: string }[] = [
   { v: 'full', l: 'Full access', d: 'No restrictions' }
 ]
 
-export default function Composer({ providers, onSend, disabled, placeholder = 'How can I help you today?', autoFocus, defaultProvider, folderPath, enableSkills, defaultModel, defaultPermissionMode, onPermissionModeChange, draftKey, chatId, busy, onStop, inject, onQuickMemory, onProviderChange, onStartCollab, collabAvailable, collabBusy }: Props) {
+function Composer({ providers, onSend, disabled, placeholder = 'How can I help you today?', autoFocus, defaultProvider, folderPath, enableSkills, defaultModel, defaultPermissionMode, onPermissionModeChange, draftKey, chatId, busy, onStop, inject, onQuickMemory, onProviderChange, onStartCollab, collabAvailable, collabBusy }: Props) {
   const [text, setText] = useState(() => (draftKey ? getDraft(draftKey) : ''))
   const [providerId, setProviderId] = useState<ProviderId>(defaultProvider ?? providers[0]?.id ?? 'claude-code')
   // If the chosen agent is turned off (Settings ▸ Agents, D-071), fall back to the first one that is on.
@@ -487,3 +487,6 @@ export default function Composer({ providers, onSend, disabled, placeholder = 'H
     </div>
   )
 }
+
+// Audit #17: re-render only when its own props change, not on every streamed word.
+export default memo(Composer)

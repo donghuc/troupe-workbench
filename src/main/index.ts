@@ -71,6 +71,9 @@ const appIcon = existsSync(iconPath) ? nativeImage.createFromPath(iconPath) : nu
 
 let mainWindow: BrowserWindow | null = null
 
+// Set when the app starts quitting (see will-quit below).
+let quitReady = false
+
 function createWindow(): void {
   const win = new BrowserWindow({
     width: 1440,
@@ -200,6 +203,9 @@ app.whenReady().then(() => {
   initRunLog(join(app.getPath('userData'), 'run-log.jsonl'))   // D-118: `troupe runs`
   void refreshCliAccess()   // D-117: open the CLI socket if Command line access is on
   app.on('activate', () => {
+    // Not while quitting: the quit waits for agents to save (D-140), and a window opened then
+    // loaded a dev server that was already gone — the black window after Ctrl+C (2026-10-27).
+    if (quitReady) return
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })
@@ -210,17 +216,27 @@ app.on('window-all-closed', () => {
 
 // Audit #18: wait (briefly) for running agents to stop and save what they wrote before the
 // database closes; it used to close first, and late replies were lost without a trace.
-let quitReady = false
+// Ctrl+C on `npm run dev` (and a plain kill) ends the app the normal way, through will-quit.
+for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, () => { if (!quitReady) app.quit() })
+
 app.on('will-quit', (e) => {
   if (quitReady) return
   e.preventDefault()
   quitReady = true
-  stopScheduler(); stopCliServer()
+  // Whatever happens below, the app ends: a failing cleanup step once left it running with no
+  // window (2026-10-27). The hard exit is the last resort.
+  setTimeout(() => app.exit(0), 6000).unref?.()
+  const step = (name: string, fn: () => unknown): void => { try { fn() } catch (err) { logWarn(`quit: ${name} failed`, { err: String(err) }) } }
+  step('scheduler', stopScheduler); step('command line', stopCliServer)
   void (async () => {
-    void cancelAllImageRuns()
-    const left = await stopAllRunsForQuit(3000).catch(() => 0)
-    if (left) logWarn('quit: some runs did not stop in time', { left })
-    stopWatch(); stopSkillsWatch(); releaseVoice(); closeDb(); logInfo('app quit')
-    app.quit()
+    try {
+      void cancelAllImageRuns().catch(() => {})
+      const left = await stopAllRunsForQuit(3000).catch(() => 0)
+      if (left) logWarn('quit: some runs did not stop in time', { left })
+    } finally {
+      step('file watch', stopWatch); step('skills watch', stopSkillsWatch); step('voice', releaseVoice)
+      step('database', closeDb); logInfo('app quit')
+      app.quit()
+    }
   })()
 })

@@ -1,5 +1,5 @@
-import { workFolderRules } from '../../shared/contextBudget'
 import { execFileCli } from '../platform/proc'
+import { buildContextBlock, withPreamble } from './contextBlock'
 import { logInfo, logError } from '../util/logger'
 import { getSetting } from '../database/settingsRepo'
 import { promises as fsp } from 'fs'
@@ -28,7 +28,6 @@ import type {
 } from '../../shared/agent'
 import { buildEnv } from './env'
 import { CliProcess, mediaFilesSince } from './cliProcess'
-import { memoryDelivery, globalMemoryDelivery } from '../context/projectMemory'
 import { codexLoggedIn } from './authProbe'
 
 // codex exec --json. No token-level streaming (Phase 0): agent text arrives as a
@@ -69,18 +68,12 @@ export class CodexProvider implements AgentProvider {
 
   async *run(req: AgentRequest, resumeSessionId?: string): AsyncIterable<AgentEvent> {
     // Codex exec has no system-prompt flag → prepend context as a delimited preamble (D-003).
-    const ctx = req.context
     // Codex auto-loads AGENTS.md from the cwd, but only a true mirror of the
     // canonical CLAUDE.md counts as delivery — a hand-written or stale AGENTS.md
     // means Codex would otherwise run on different memory than Claude (D-055).
-    const memory = memoryDelivery('codex', req.cwd ?? null, ctx?.memory ?? '') === 'injected' ? ctx?.memory : undefined
     // Global memory reaches Codex natively only when ~/.codex/AGENTS.md is a true
-    // mirror of ~/.claude/CLAUDE.md; otherwise inject it ahead of project memory (D-055).
-    const globalMemory = globalMemoryDelivery('codex', ctx?.globalMemory ?? '') === 'injected' ? ctx?.globalMemory : undefined
-    const block = [ctx?.instructions, globalMemory, memory, ctx?.persistentContext, workFolderRules(req.cwd, req.addDirs), ctx?.skillText, ctx?.snapshot, ctx?.attachmentsText].filter(Boolean).join('\n\n')
-    const prompt = block.trim()
-      ? `<workbench_context>\n${block}\n</workbench_context>\n\n${req.prompt}`
-      : req.prompt
+    // mirror of ~/.claude/CLAUDE.md; otherwise it's injected ahead of project memory (D-055).
+    const prompt = withPreamble(buildContextBlock('codex', req), req.prompt)
 
     // --sandbox is an exec-level flag (not global) so it must precede the `resume`
     // subcommand; --json and --skip-git-repo-check are global and may go anywhere.
