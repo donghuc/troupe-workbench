@@ -1,0 +1,47 @@
+# Keeps Actions storage under the free 0.5 GB cap: one npm cache per OS, drop the rest
+# (old lockfile hashes and tag-scoped duplicates). Runs weekly and on demand.
+name: cache-cleanup
+on:
+  schedule:
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+permissions:
+  actions: write
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const caches = await github.paginate(
+              github.rest.actions.getActionsCacheList,
+              { owner, repo, per_page: 100 }
+            );
+            const groups = new Map();
+            for (const cache of caches) {
+              const match = cache.key.match(/^node-cache-([^\/]+?)-npm-/);
+              const group = match ? match[1] : cache.key;
+              if (!groups.has(group)) groups.set(group, []);
+              groups.get(group).push(cache);
+            }
+            let deleted = 0;
+            for (const [group, list] of groups) {
+              list.sort(
+                (a, b) =>
+                  new Date(b.last_accessed_at || b.created_at) -
+                  new Date(a.last_accessed_at || a.created_at)
+              );
+              for (const stale of list.slice(1)) {
+                await github.rest.actions.deleteActionsCacheById({
+                  owner,
+                  repo,
+                  cache_id: stale.id,
+                });
+                deleted += 1;
+                core.info(`deleted ${group}: ${stale.id} ${stale.ref} ${stale.key}`);
+              }
+            }
+            core.info(`kept newest cache per OS; deleted ${deleted} of ${caches.length}`);

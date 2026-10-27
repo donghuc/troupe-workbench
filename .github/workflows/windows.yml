@@ -72,10 +72,14 @@ jobs:
           $g = (& 'dist\win-unpacked\Troupe.exe' -e $js $gpu 2>&1 | Out-String)
           "Vulkan build load on this runner -> exit $LASTEXITCODE (a failure here is expected without a GPU driver)"; $g
           $global:LASTEXITCODE = 0
+      # The installer (~150 MB) is kept only for releases and manual runs, for 5 days: one per push
+      # for 14 days filled the account's artifact storage and turned every run red from 2.16.1
+      # on, though the build and smoke tests passed (2026-10-27). A full store never fails the build.
       # Keep the installer even when the smoke test fails, so it can be tried on the PC.
-      - if: success() || failure()
+      - if: (success() || failure()) && (github.event_name == 'workflow_dispatch' || startsWith(github.event.head_commit.message, 'Release '))
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: troupe-windows-${{ github.sha }}
           path: dist/*.exe
-          retention-days: 14
+          retention-days: 5
