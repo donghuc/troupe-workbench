@@ -3,7 +3,7 @@ name: Bug
 about: Something behaves wrongly
 ---
 
-**Troupe version** (About, or the dmg name):
+**Troupe version** (About, `troupe version`, or the dmg name):
 **macOS version**:
 **Agent and CLI version** (`claude --version`, `codex --version`, …):
 

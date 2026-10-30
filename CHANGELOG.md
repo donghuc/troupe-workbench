@@ -1,11 +1,11 @@
 # Changelog
 
-All notable, user-facing changes to AI Workbench are recorded here. The format
+All notable, user-facing changes to Troupe are recorded here. The format
 follows [Keep a Changelog](https://keepachangelog.com/) and the project uses
 [Semantic Versioning](https://semver.org/): **MAJOR.MINOR.PATCH**.
 
 Each version here matches a packaged build — the dmg is named
-`AI Workbench-<version>-<arch>.dmg`, so the version in this file, in
+`Troupe-<version>-<arch>.dmg`, so the version in this file, in
 `package.json`, and on the dmg must always agree.
 
 > How to write an entry (keep it user-facing):

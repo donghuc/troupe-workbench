@@ -107,6 +107,7 @@ data, settings or database directly. Run `troupe --help` for every command.
 - Pass a file: `--attach <absolute path>` (up to 5).
 - Scheduled tasks: `troupe schedules`, `troupe schedules run "<task>"`. Ask me before you add, edit or delete a task;
   a task you add stays paused until I approve it in Troupe, and edits to Full-access tasks wait for me too.
+- Which Troupe is running: `troupe version`.
 - Clean up your test chats: `troupe delete <chat>` (only chats you started).
 - Token use and cost of a reply: `usage` in `troupe status <run> --json` or `troupe show <chat> --json` — never read the database for it.
 

@@ -18,7 +18,8 @@ Troupe is a local-first Mac app for thinking with AI agents — Claude Code, Cod
 
 **Work on real files**
 - **Projects are folders.** Agents read and edit the files in a project's folder (plus any additional folders you add). Memory is the folder's `CLAUDE.md`, mirrored to `AGENTS.md` and delivered to each agent the way it can load it.
-- **One conversation, several agents.** `@claude` / `@codex` / `@grok` / `@gemini` route a turn; Troupe owns continuity, so agents can be switched or combined in one thread.
+- **One conversation, several agents.** `@claude` / `@codex` / `@grok` / `@gemini` route a turn; Troupe owns continuity, so agents can be switched or combined in one thread. When Claude answers twice in a row and nothing else changed, it continues its own session, so follow-ups cost far less.
+- **Keep typing while an agent works.** Messages sent to a busy chat wait in a queue and run one by one, each as its own turn; Stop or a failed reply pauses the queue.
 - **Bring any CLI agent.** Add OpenCode, Cursor CLI or any command-line agent in Settings ▸ Agents, test it, and use it alongside the others.
 - **Collab mode.** A lead agent drafts a task plan; agents carry out each task with a read-only reviewer gate, budgets and retries.
 - **Artifacts in place.** Markdown, HTML, images, video, audio, CSV, JSON and PDF open in the app; files outside the project offer *Copy into project*.
@@ -73,15 +74,18 @@ The app resolves your login-shell PATH, so version-manager installs of the CLIs 
 ```
 src/
   main/       Electron main process
-    agent/      run loop (runner), transcript handoff, compression
-    providers/  one adapter per CLI (ClaudeCode, Codex, Grok, Gemini) over a shared runner (cliProcess.ts)
+    agent/      run loop (runner), turns and the message queue, transcript handoff, compression
+    providers/  one adapter per CLI (ClaudeCode, Codex, Grok, Gemini, user-added) over a shared runner (cliProcess.ts)
+    agents/     agent setup (install, sign in) and user-added agents
     context/    context assembly, memory delivery (pure) and memory I/O
     collab/     multi-agent orchestration + pure parsers
     schedules/  scheduler + next-run maths (pure)
     tools/      MCP registration, Codex config editing (pure)
+    cli/        the `troupe` command's server (private socket) and commands
+    voice/      voice input (whisper.cpp)
     image/      Image Creation: canvas files, runs, saved images
     filesystem/ folder tree, watcher, wbfile:// byte ranges
-    database/   better-sqlite3 + migrations (schema v23)
+    database/   better-sqlite3 + migrations (schema v25)
     ipc/        one file per IPC domain, registered with handle('ns.method', fn)
   preload/    contextBridge API, generated from the typed contract
   renderer/   React UI
