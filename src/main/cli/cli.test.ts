@@ -9,7 +9,7 @@ import { resetTestDb, testDb } from '../testing/memoryDb'
 // D-117: the command line end to end — real socket server, real `troupe` script over curl,
 // in-memory database. The agent run itself is a stand-in: startTurn stores the user message
 // (as the real one does) and the test decides when the reply lands.
-vi.mock('electron', () => ({ app: { getPath: () => tmpdir(), isPackaged: false }, BrowserWindow: { getAllWindows: () => [] } }))
+vi.mock('electron', () => ({ app: { getPath: () => tmpdir(), isPackaged: false, getVersion: () => '9.9.9' }, BrowserWindow: { getAllWindows: () => [] } }))
 vi.mock('../database/db', () => ({ getDb: () => testDb() }))
 vi.mock('../util/logger', () => ({ logInfo: () => {}, logError: () => {}, logWarn: () => {} }))
 vi.mock('../tools/codexModels', () => ({ modelLists: () => ({}) }))
@@ -48,6 +48,20 @@ function reply(chatId: string, text: string): void {
 
 describe('cli commands (D-117)', () => {
   beforeEach(() => { resetTestDb(); seed(); busy.clear(); started.length = 0 })
+
+  it('version, and token use per reply in show / status (2.18.1)', async () => {
+    expect((await runCliCommand('version', P({}))).text).toBe('Troupe 9.9.9')
+    expect((await runCliCommand('version', P({}))).json).toEqual({ version: '9.9.9' })
+    const { run, chat } = (await runCliCommand('send', P({ to: 'sandbox', message: 'hi' }))).json as { run: string; chat: string }
+    busy.delete(chat)
+    appendMessage({ conversationId: chat, role: 'assistant', provider: 'claude-code', content: 'hello', metadata: { contextMode: 'resume', modelUsed: 'claude-opus-5-5', usage: { inputTokens: 2, cacheReadTokens: 87900, cacheCreationTokens: 3398, outputTokens: 381, costUsd: 0.0524 } } })
+    const usage = { input: 91300, cacheRead: 87900, cacheWrite: 3398, output: 381, costUsd: 0.0524, mode: 'resume', model: 'claude-opus-5-5' }
+    expect((await runCliCommand('status', P({ run }))).json).toMatchObject({ replies: [{ text: 'hello', usage }] })
+    const shown = await runCliCommand('show', P({ chat }))
+    expect(shown.json).toMatchObject({ messages: [{ role: 'user' }, { role: 'assistant', usage }] })
+    expect((shown.json as { messages: { usage?: unknown }[] }).messages[0].usage).toBeUndefined()
+    expect(shown.text).toContain('91.3k in · 87.9k cached · 381 out · $0.0524 · resumed')
+  })
 
   it('lists projects and chats by name', async () => {
     const r = await runCliCommand('projects', P({}))

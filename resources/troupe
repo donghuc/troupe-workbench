@@ -19,6 +19,7 @@ Projects and chats
   rename <chat> "<new name>"            Rename a chat
   delete <chat>                         Delete a chat started from the command line
   agents                                Agents you can use, with their models
+  version                               Troupe's version (also --version)
 
 Sending
   send <project> <message>              Start a new chat; prints a run id
@@ -72,6 +73,7 @@ need() { [ "$1" -ge "$2" ] || die "usage: $3"; }
 
 case "$cmd" in
   -h|--help|help) usage; exit 0 ;;
+  -V|--version|version) cmd=version ;;
   projects|agents) ;;
   runs) ;;
   chats|context) need $# 1 "troupe $cmd <project>"; add project "$1"; shift ;;

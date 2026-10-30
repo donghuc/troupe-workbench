@@ -64,7 +64,10 @@ export function clampWait(v: string | null | undefined): number {
 // ── plain-text output ───────────────────────────────────────────────────────────
 export interface CliProject { id: string; name: string; folder: string | null; chats: number }
 export interface CliChat { id: string; title: string; agent: string; updatedAt: number; busy: boolean }
-export interface CliMessage { role: 'user' | 'assistant'; agent: string | null; text: string; at: number }
+/** A reply's token use (2.18.1): `input` is everything the agent read (cached or not). `mode`: 'resume' =
+ *  continued its own session (D-146), 'shared' = sent the conversation, 'fresh' = nothing to send. */
+export interface CliUsage { input?: number; cacheRead?: number; cacheWrite?: number; output?: number; costUsd?: number; mode?: string; model?: string }
+export interface CliMessage { role: 'user' | 'assistant'; agent: string | null; text: string; at: number; usage?: CliUsage }
 export interface CliStatus { run: string; chat: string; state: 'running' | 'done' | 'error' | 'stopped'; replies: CliMessage[]; partial: { agent: string; text: string }[]; error: string | null; files?: string[] }
 
 // Local time, like the app shows it: "2026-10-19 15:32".
@@ -79,9 +82,21 @@ export function chatsText(cs: CliChat[]): string {
   if (!cs.length) return 'No chats in this project.'
   return cs.map((c) => `${c.id}  ${when(c.updatedAt)}  ${c.agent}${c.busy ? '  [running]' : ''}  ${c.title}`).join('\n')
 }
+const kTok = (n: number): string => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n))
+/** "91.3k in · 87.9k cached · 381 out · $0.0524 · resumed" — like the reply footer in the app. */
+function usageText(u: CliUsage | undefined): string {
+  if (!u) return ''
+  const parts: string[] = []
+  if (typeof u.input === 'number') parts.push(`${kTok(u.input)} in`)
+  if (u.cacheRead) parts.push(`${kTok(u.cacheRead)} cached`)
+  if (typeof u.output === 'number') parts.push(`${kTok(u.output)} out`)
+  if (typeof u.costUsd === 'number') parts.push(`$${u.costUsd.toFixed(4)}`)
+  if (u.mode === 'resume') parts.push('resumed')
+  return parts.join(' · ')
+}
 export function messagesText(ms: CliMessage[]): string {
   if (!ms.length) return 'No messages yet.'
-  return ms.map((m) => `── ${m.role === 'user' ? 'You' : m.agent ?? 'Assistant'} · ${when(m.at)}\n${m.text.trim()}`).join('\n\n')
+  return ms.map((m) => { const u = usageText(m.usage); return `── ${m.role === 'user' ? 'You' : m.agent ?? 'Assistant'} · ${when(m.at)}${u ? ` · ${u}` : ''}\n${m.text.trim()}` }).join('\n\n')
 }
 export function statusText(s: CliStatus): string {
   const head = `run ${s.run}: ${s.state}`

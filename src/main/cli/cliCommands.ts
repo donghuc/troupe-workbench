@@ -1,3 +1,4 @@
+import { app } from 'electron'
 import { listProjects, getProject } from '../projects/projectsRepo'
 import { listConversations, conversationCounts, getConversation, createConversation, listRecentConversations, renameConversation, searchAll } from '../conversations/conversationsRepo'
 import { deleteChatWithFiles } from '../attachments/deleteChat'
@@ -21,7 +22,7 @@ import {
   CliError, pickOne, parseMode, parseThink, parseSince, titleFrom, clampLast, clampWait, encodeRunId, decodeRunId,
   projectsText, chatsText, messagesText, statusText, runsText, collabLogState, searchText,
   filesChanged, isSecretPath, CLI_MAX_MESSAGE,
-  type CliProject, type CliChat, type CliMessage, type CliStatus, type CliSearchHit
+  type CliProject, type CliChat, type CliMessage, type CliStatus, type CliSearchHit, type CliUsage
 } from '../../shared/cliProtocol'
 
 // Command-line access (D-117, D-118): what the `troupe` command can do. Projects, chats,
@@ -49,7 +50,24 @@ function findAgent(q: string | null, fallback: ProviderId): ProviderId {
   if (!q?.trim()) return on.includes(fallback) ? fallback : on[0]
   return pickOne(on.map((id) => ({ id, name: agentName(id) })), q, (a) => a.name, 'agent').id as ProviderId
 }
-const toCliMessage = (m: Message): CliMessage => ({ role: m.role === 'user' ? 'user' : 'assistant', agent: m.role === 'user' ? null : agentName(m.provider), text: m.content, at: m.createdAt })
+const num = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined)
+/** A reply's token use from its saved metadata (2.18.1) — so a bot needn't read the database. */
+function cliUsage(meta: Record<string, unknown> | null | undefined): CliUsage | undefined {
+  const u = meta?.usage as Record<string, unknown> | undefined
+  if (!u || typeof u !== 'object') return undefined
+  const fresh = num(u.inputTokens), read = num(u.cacheReadTokens), write = num(u.cacheCreationTokens)
+  const out: CliUsage = {
+    input: fresh === undefined && read === undefined && write === undefined ? undefined : (fresh ?? 0) + (read ?? 0) + (write ?? 0),
+    cacheRead: read, cacheWrite: write, output: num(u.outputTokens), costUsd: num(u.costUsd),
+    mode: typeof meta?.contextMode === 'string' ? meta.contextMode : undefined,
+    model: typeof meta?.modelUsed === 'string' ? meta.modelUsed : undefined
+  }
+  return Object.values(out).some((v) => v !== undefined) ? out : undefined
+}
+const toCliMessage = (m: Message): CliMessage => {
+  const usage = m.role === 'assistant' ? cliUsage(m.metadata as Record<string, unknown> | null) : undefined
+  return { role: m.role === 'user' ? 'user' : 'assistant', agent: m.role === 'user' ? null : agentName(m.provider), text: m.content, at: m.createdAt, ...(usage ? { usage } : {}) }
+}
 const visible = (m: Message): boolean => m.role === 'user' || m.role === 'assistant'
 const busyError = () => new CliError('This chat is already running. Wait for it (troupe status, or send with --wait-free 300) or stop it (troupe stop).', 409)
 
@@ -260,6 +278,7 @@ async function cat(q: Params): Promise<CliResult> {
 export async function runCliCommand(cmd: string, q: Params, closed: () => boolean = () => false): Promise<CliResult> {
   try {
     switch (cmd) {
+      case 'version': return ok({ version: app.getVersion() }, `Troupe ${app.getVersion()}`)
       case 'projects': return projects()
       case 'chats': return chats(q)
       case 'show': return show(q)

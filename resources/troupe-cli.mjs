@@ -17,6 +17,7 @@ Projects and chats
   rename <chat> "<new name>"            Rename a chat
   delete <chat>                         Delete a chat started from the command line
   agents                                Agents you can use, with their models
+  version                               Troupe's version (also --version)
 
 Sending
   send <project> <message>              Start a new chat; prints a run id
@@ -63,7 +64,7 @@ const TOKEN_FILE = process.env.TROUPE_TOKEN_FILE || ''
 const die = (msg) => { process.stderr.write(`troupe: ${msg}\n`); process.exit(2) }
 const argv = process.argv.slice(2)
 if (!argv.length) { process.stderr.write(USAGE + '\n'); process.exit(2) }
-const cmd = argv.shift()
+let cmd = argv.shift()
 const body = new URLSearchParams()
 const add = (k, v) => body.append(k, v)
 const need = (n, usage) => { if (argv.length < n) die(`usage: ${usage}`) }
@@ -71,6 +72,7 @@ let stdinMsg = false
 
 switch (cmd) {
   case '-h': case '--help': case 'help': process.stdout.write(USAGE + '\n'); process.exit(0)
+  case '-V': case '--version': case 'version': cmd = 'version'; break
   case 'projects': case 'agents': case 'runs': break
   case 'chats': case 'context': need(1, `troupe ${cmd} <project>`); add('project', argv.shift()); break
   case 'show': case 'delete': need(1, `troupe ${cmd} <chat>`); add('chat', argv.shift()); break

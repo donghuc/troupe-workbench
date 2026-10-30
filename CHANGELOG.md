@@ -18,6 +18,12 @@ Each version here matches a packaged build — the dmg is named
 > - Bumping rules: PATCH = fixes/small tweaks, MINOR = new features (backward-compatible),
 >   MAJOR = breaking changes or a data format users can't roll back from.
 
+## [2.18.1] - 2026-10-30
+
+### Added
+- `troupe version` (also `--version`) shows Troupe's version.
+- `troupe show` and `troupe status` show each reply's token use and cost, like the footer in the app; with `--json`, each reply has a `usage` block (tokens read, cached, written, output, cost, whether it continued its session, model).
+
 ## [2.18.0] - 2026-10-30
 
 ### Changed

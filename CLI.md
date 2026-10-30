@@ -22,7 +22,10 @@ troupe search "release notes"            # search every chat
 troupe rename <chat> "CLI test"          # rename a chat
 troupe delete <chat>                     # delete a chat started from the command line
 troupe agents                            # agents you can use, and their models
+troupe version                           # Troupe's version (also --version)
 ```
+
+`show` and `status` print each reply's token use after its time — `91.3k in · 87.9k cached · 381 out · $0.0524 · resumed` — and with `--json` each reply has `usage`: `input` (everything the agent read, cached or not), `cacheRead`, `cacheWrite`, `output`, `costUsd`, `mode` (`resume` = continued its own session, `shared` = sent the conversation, `fresh`) and `model`.
 
 **Sending and runs**
 ```
@@ -105,6 +108,7 @@ data, settings or database directly. Run `troupe --help` for every command.
 - Scheduled tasks: `troupe schedules`, `troupe schedules run "<task>"`. Ask me before you add, edit or delete a task;
   a task you add stays paused until I approve it in Troupe, and edits to Full-access tasks wait for me too.
 - Clean up your test chats: `troupe delete <chat>` (only chats you started).
+- Token use and cost of a reply: `usage` in `troupe status <run> --json` or `troupe show <chat> --json` — never read the database for it.
 
 ## Modes
 - `--mode read` when the agent only needs to look; `--mode auto` when it should change files.
