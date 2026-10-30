@@ -5,14 +5,16 @@ import { app, type WebContents } from 'electron'
 import type { ProviderId } from '../../shared/types'
 import type { AgentEvent, ProviderContext, AgentAction, TokenUsage } from '../../shared/agent'
 import { createProvider } from '../providers/registry'
-import { appendMessage } from '../conversations/messagesRepo'
+import { appendMessage, countMessages, listMessagesFrom } from '../conversations/messagesRepo'
 import { buildProjectContext, buildConversationContext, resolveAddDirs, resolveMcpOff } from '../context/contextBuilder'
 import { maybeCompress } from './snapshotService'
 import { setConversationModel } from '../conversations/conversationsRepo'
 import type { AgentProvider } from '../providers/AgentProvider'
 import { logInfo, logError } from '../util/logger'
 import { getSkillById } from '../skills/skillsFs'
-import { getNumberSetting } from '../database/settingsRepo'
+import { getNumberSetting, getSetting } from '../database/settingsRepo'
+import { createHash } from 'crypto'
+import { resumeSession, turnCost, RESUME_SETTING, type ResumeMark } from '../../shared/resumeGuard'
 
 export interface RunParams {
   conversationId: string
@@ -90,27 +92,36 @@ export function startRun(sender: WebContents, params: RunParams): string {
   // Additional folders come from the DB, not the caller (D-054): chat, the scheduler
   // and collab all reach this line, so none of them need a new argument.
   const addDirs = params.addDirs ?? resolveAddDirs(params.conversationId)
-  // V0.1: Workbench owns conversation memory. Instead of resuming each provider's
-  // native session (which gives it a PRIVATE history that fragments/contradicts the
-  // shared conversation), we inject the full recent transcript every turn and run
-  // the provider without resume (D-009); long chats are compressed into a snapshot.
-  // The provider's session id is still recorded in message metadata for debugging.
-  const resume: string | undefined = undefined
+  // V0.1: Workbench owns conversation memory (D-009): the recent transcript (or a snapshot) goes
+  // with every turn. D-146: a guarded resume — when the same agent answered the message right
+  // before this one and nothing else changed (see shared/resumeGuard.ts), its own session is
+  // resumed instead, so the history comes from its prompt cache. A failed resume runs fresh.
   let context: ProviderContext = { ...(params.context ?? {}), ...buildProjectContext(params.conversationId) }
-  let handoffUsed = false
-  if (!params.noConversationContext) {
-    const convBlock = buildConversationContext(params.conversationId, params.chained ? 0 : 1)
-    if (convBlock) {
-      context = { ...context, snapshot: convBlock }
-      handoffUsed = true
-    }
+  const skillIds = [...(params.skillIds ?? []), ...(params.skillId ? [params.skillId] : [])]
+    .filter((id, i, arr) => arr.indexOf(id) === i)
+  const plainTurn = !params.chained && !params.noConversationContext && !params.parallelGroup && !params.extraMetadata && !params.resumeSessionId
+  const canMark = plainTurn && params.providerId === 'claude-code' && getSetting(RESUME_SETTING) !== '0'
+  const ctxKey = canMark ? createHash('sha1').update(JSON.stringify([context.instructions, context.globalMemory, context.memory, context.persistentContext, skillIds, addDirs])).digest('hex') : ''
+  const countAtStart = canMark ? countMessages(params.conversationId) : 0
+  let resume: string | undefined
+  let costBefore: number | undefined   // the resumed session's running cost when that reply ended
+  if (canMark && countAtStart >= 2) {
+    const [prev, cur] = listMessagesFrom(params.conversationId, countAtStart - 2, 2)
+    if (cur?.role === 'user') resume = resumeSession(prev, { providerId: params.providerId, count: countAtStart, cwd, model: params.model || null, ctxKey, at: Date.now() }) ?? undefined
+    if (resume) costBefore = (prev.metadata?.resume as ResumeMark | undefined)?.sessionCostUsd
   }
+  // The transcript, for a fresh run (and for the fallback when a resume fails).
+  const withConversation = (ctx: ProviderContext): { ctx: ProviderContext; used: boolean } => {
+    if (params.noConversationContext) return { ctx, used: false }
+    const convBlock = buildConversationContext(params.conversationId, params.chained ? 0 : 1)
+    return convBlock ? { ctx: { ...ctx, snapshot: convBlock }, used: true } : { ctx, used: false }
+  }
+  let handoffUsed = false
+  if (!resume) { const w = withConversation(context); context = w.ctx; handoffUsed = w.used }
   // Skills reach every provider the same way: their body text is injected into the
   // prompt context (see each provider's context assembly). skillIds are applied in
   // order, then any legacy single skillId — deduped. This is what lets a Codex or
   // Claude orchestrator both receive the collab protocol + role skills identically.
-  const skillIds = [...(params.skillIds ?? []), ...(params.skillId ? [params.skillId] : [])]
-    .filter((id, i, arr) => arr.indexOf(id) === i)
   if (skillIds.length) {
     const blocks = skillIds
       .map((id) => getSkillById(id, params.cwd))
@@ -132,7 +143,10 @@ export function startRun(sender: WebContents, params: RunParams): string {
   // Secondary agents in a multi-agent turn (chained) must not clobber the
   // conversation's remembered model set by the primary agent.
   if (params.model !== undefined && !params.chained) setConversationModel(params.conversationId, params.model || null)
-  const contextMode: 'shared' | 'fresh' = handoffUsed ? 'shared' : 'fresh'
+  let contextMode: 'shared' | 'fresh' | 'resume' = resume ? 'resume' : handoffUsed ? 'shared' : 'fresh'
+  // What the next turn needs to resume this reply's session (D-146); only for plain chat turns.
+  const resumeMark = (sessionId: string | undefined, sessionCostUsd: number | undefined): { resume: ResumeMark } | null =>
+    canMark && sessionId ? { resume: { sessionId, count: countAtStart + 1, cwd, model: params.model || null, ctxKey, at: Date.now(), ...(typeof sessionCostUsd === 'number' ? { sessionCostUsd } : {}) } } : null
   ;(async () => {
     const avail = await provider.isAvailable()
     if (!avail.installed) {
@@ -141,7 +155,7 @@ export function startRun(sender: WebContents, params: RunParams): string {
       return done(null, `${provider.name} CLI not found`)
     }
     const startedAt = Date.now()
-    logInfo('run start', { provider: params.providerId, contextMode, conv: params.conversationId })
+    logInfo('run start', { provider: params.providerId, contextMode, conv: params.conversationId, ...(resume ? { resume } : {}) })
     // Watchdog (D-060 item 4): a CLI that hangs must not hold the conversation busy
     // forever. Hard deadline → cancel the provider and report a timeout error; idle
     // warning → a status line in the lane after N minutes with no event at all.
@@ -168,7 +182,28 @@ export function startRun(sender: WebContents, params: RunParams): string {
     let usage: TokenUsage | undefined
     const actions: AgentAction[] = []
     try {
-      for await (const ev of provider.run({ prompt: params.prompt, context, cwd, addDirs, model: params.model || undefined, permissionMode: params.permissionMode, allowWeb: params.allowWeb, mcpOff: resolveMcpOff(params.conversationId, params.providerId) }, resume)) {
+      const request = (ctx: ProviderContext) => ({ prompt: params.prompt, context: ctx, cwd, addDirs, model: params.model || undefined, permissionMode: params.permissionMode, allowWeb: params.allowWeb, mcpOff: resolveMcpOff(params.conversationId, params.providerId) })
+      // A resume that fails before any output (session gone, CLI refused it) runs fresh with
+      // the conversation, as if no resume had been tried.
+      const events = async function* (): AsyncGenerator<AgentEvent> {
+        if (resume) {
+          let output = false, failed: string | null = null
+          for await (const ev of provider.run(request(context), resume)) {
+            if (ev.type === 'error' && ev.fatal && !output) { failed = ev.message; break }
+            if (ev.type === 'text_delta' || ev.type === 'tool_start') output = true
+            yield ev
+          }
+          if (failed === null) return
+          logInfo('resume failed, running fresh', { provider: params.providerId, conv: params.conversationId, err: failed.slice(0, 200) })
+          const w = withConversation(context)
+          contextMode = w.used ? 'shared' : 'fresh'
+          if (w.used) emit({ type: 'status', message: 'Reading the conversation…' })
+          yield* provider.run(request(w.ctx), undefined)
+          return
+        }
+        yield* provider.run(request(context), undefined)
+      }
+      for await (const ev of events()) {
         armIdle()
         emit(ev)
         if (ev.type === 'text_delta') full += ev.text
@@ -199,9 +234,12 @@ export function startRun(sender: WebContents, params: RunParams): string {
           : null
         return done(saved?.id ?? null, msg)
       }
+      // A resumed session reports its running cost; save this reply's own (D-146).
+      const sessionCost = usage?.costUsd
+      if (usage && contextMode === 'resume') usage = { ...usage, costUsd: turnCost(sessionCost, costBefore) }
       const saved = appendMessage({
         conversationId: params.conversationId, role: 'assistant', provider: params.providerId,
-        content: full, metadata: { providerSessionId, modelUsed, contextMode, usage, actions, ...(params.parallelGroup ? { parallelGroup: params.parallelGroup } : {}), ...(params.extraMetadata ?? {}) }
+        content: full, metadata: { providerSessionId, modelUsed, contextMode, usage, actions, ...(resumeMark(providerSessionId, sessionCost) ?? {}), ...(params.parallelGroup ? { parallelGroup: params.parallelGroup } : {}), ...(params.extraMetadata ?? {}) }
       })
       logInfo('run complete', { provider: params.providerId, chars: full.length, ms: Date.now() - startedAt, conv: params.conversationId })
       done(saved.id)

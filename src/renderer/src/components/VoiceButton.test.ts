@@ -3,6 +3,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { createElement, createRef } from 'react'
 import { createRoot } from 'react-dom/client'
 import { act } from 'react'
+import { IS_WINDOWS } from '../../../shared/platform'
 
 // Voice input (D-124): click → recording pill → stop → the words go to the composer; Esc
 // and ✕ discard; the shortcut reaches the button; no model → Settings. The recorder and
@@ -68,10 +69,11 @@ describe('VoiceButton (D-124)', () => {
     await m.unmount()
   })
 
+  // ⌘⇧Space, or Ctrl+Shift+Space on Windows.
   it('the shortcut starts and stops the focused composer’s recording', async () => {
     const m = await mount()
     await act(async () => { m.scope.current!.dispatchEvent(new FocusEvent('focusin', { bubbles: true })) })
-    const key = () => act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space', key: ' ', shiftKey: true, metaKey: true, ctrlKey: false })) })
+    const key = () => act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space', key: ' ', shiftKey: true, metaKey: !IS_WINDOWS, ctrlKey: IS_WINDOWS })) })
     await key()
     expect(m.q('.voice-pill.recording')).not.toBeNull()
     await key(); await flush()

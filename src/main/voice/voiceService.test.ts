@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createHash } from 'crypto'
 import { mkdtempSync, readdirSync, readFileSync, existsSync } from 'fs'
 import { tmpdir } from 'os'
-import { join } from 'path'
+import { join, basename } from 'path'
 import { createVoiceService, type WhisperCtx } from './voiceService'
 import type { VoiceDownloadEvent, VoiceModel } from '../../shared/voice'
 
@@ -22,17 +22,17 @@ function setup(over: { fetchBody?: Buffer; settings?: Record<string, string>; lo
   const log: string[] = []
   const fakeCtx = (path: string): WhisperCtx => ({
     transcribeData: (pcm, opts) => {
-      log.push(`transcribe ${path.split('/').pop()} ${pcm.byteLength} ${opts.language}`)
+      log.push(`transcribe ${basename(path)} ${pcm.byteLength} ${opts.language}`)
       return { stop: async () => { log.push('stop') }, promise: (over.gate ?? Promise.resolve()).then(() => { log.push('done'); return { result: ' hello there ', language: 'en', isAborted: false } }) }
     },
-    release: async () => { log.push(`release ${path.split('/').pop()}`) },
+    release: async () => { log.push(`release ${basename(path)}`) },
     backend: 'gpu'
   })
   const settings: Record<string, string> = { ...over.settings }
   const svc = createVoiceService({
     dir, models: MODELS, idleMs: 10_000,
     fetch: async () => stream(over.fetchBody ?? body),
-    initWhisper: async (p) => { log.push(`load ${p.split('/').pop()}`); return fakeCtx(p) },
+    initWhisper: async (p) => { log.push(`load ${basename(p)}`); return fakeCtx(p) },
     getSetting: (k) => settings[k] ?? null,
     setSetting: (k, v) => { settings[k] = v },
     systemLocale: () => over.locale ?? 'en-US',

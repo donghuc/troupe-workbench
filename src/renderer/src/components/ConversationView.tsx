@@ -503,7 +503,9 @@ export default function ConversationView({ conversation, providers, pendingSend,
               defaultProvider={conversation.provider}
               folderPath={cwd}
               enableSkills
-              defaultModel={conversation.model}
+              // A new chat's first message carries the picked model before the chat has one
+              // saved; without this the next message went out with no model (D-146 probe).
+              defaultModel={conversation.model ?? (pendingSend?.model || null)}
               defaultPermissionMode={permDefault}
               onPermissionModeChange={onPermModeStable}
               draftKey={conversation.id}

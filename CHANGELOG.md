@@ -18,6 +18,17 @@ Each version here matches a packaged build — the dmg is named
 > - Bumping rules: PATCH = fixes/small tweaks, MINOR = new features (backward-compatible),
 >   MAJOR = breaking changes or a data format users can't roll back from.
 
+## [2.18.0] - 2026-10-30
+
+### Changed
+- Follow-up messages to Claude cost much less: when Claude answered your previous message and nothing else changed (same model, folder and project context, within the hour), it continues its own session instead of re-reading the whole conversation. Measured on a 6-message chat: about half the cost. Anything else (another agent, an edit or delete, a model switch, a long break) works as before.
+- Claude gets your claude.ai connectors that are switched on (Figma, Crowdin, …) from the first step of every message, not only once they happen to connect; their tools are looked up by name when needed, so large connectors no longer add their full tool list to every step.
+- Claude's tool list stays the same throughout a message, so more of each step comes from the prompt cache.
+
+### Fixed
+- In a new chat, messages after the first used Claude's default model instead of the one you picked.
+- A resumed reply shows its own cost, not the running total of the session.
+
 ## [2.17.0] - 2026-10-27
 
 ### Fixed

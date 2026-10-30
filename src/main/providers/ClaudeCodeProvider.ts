@@ -1,12 +1,13 @@
 import { CHROME_ACCESS_SETTING } from '../../shared/providers'
 import { buildContextBlock } from './contextBlock'
 import { execFileCli, whichWin } from '../platform/proc'
-import { writeFileSync, mkdtempSync, existsSync } from 'fs'
+import { writeFileSync, mkdtempSync, existsSync, mkdirSync } from 'fs'
 import { tmpdir } from 'os'
 import { claudeMcpToolPrefixes } from '../../shared/projectMcp'
 import { removeTempDir } from '../util/tempFiles'
 import { join } from 'path'
 import { buildEnv } from './env'
+import { claudeRunEnv, isClaudeConnector } from '../../shared/claudeConnectors'
 import { CliProcess } from './cliProcess'
 import { claudeEvents, newClaudeState } from './claudeEvents'
 import { getSetting } from '../database/settingsRepo'
@@ -25,6 +26,18 @@ function gitBashFound(): boolean {
   const pf = [env.ProgramFiles, env['ProgramFiles(x86)'], env.LOCALAPPDATA && join(env.LOCALAPPDATA, 'Programs')].filter(Boolean) as string[]
   if (pf.some((d) => existsSync(join(d, 'Git', 'bin', 'bash.exe')))) return true
   return !!whichWin('git', env)
+}
+
+/** D-146 debug: write one run's flags, appended system prompt and prompt to $TROUPE_DEBUG_PROMPT. */
+function dumpForCacheProbe(args: string[], sys: string, prompt: string, cwd?: string, env?: Record<string, string>): void {
+  const dir = process.env.TROUPE_DEBUG_PROMPT
+  if (!dir) return
+  try {
+    mkdirSync(dir, { recursive: true })
+    const file = join(dir, `claude-${Date.now()}.json`)
+    writeFileSync(file, JSON.stringify({ at: new Date().toISOString(), cwd, env, args, sys, prompt }, null, 2), 'utf8')
+    logInfo('[claude] prompt saved for cache probe', file)
+  } catch (e) { logInfo('[claude] prompt dump failed', String(e)) }
 }
 
 export class ClaudeCodeProvider implements AgentProvider {
@@ -62,8 +75,9 @@ export class ClaudeCodeProvider implements AgentProvider {
 
   async *run(req: AgentRequest, resumeSessionId?: string): AsyncIterable<AgentEvent> {
     const ctx = req.context
-    // Conversation transcript goes in the PROMPT (append-system-prompt is ignored
-    // on resume and can conflict with session memory — see runner notes).
+    // Conversation transcript goes in the PROMPT, not the system prompt: on a resumed turn
+    // (D-146) there is none, and the project context still arrives through
+    // --append-system-prompt-file (checked on Claude Code, 2026-10-30).
     const preamble = [ctx?.skillText, ctx?.snapshot, ctx?.attachmentsText].filter(Boolean).join('\n\n')
     const prompt = preamble ? `${preamble}\n\n---\n\nUser: ${req.prompt}` : req.prompt
     // Permission mode (D-029). Headless -p can't prompt, so tools are pre-approved via
@@ -119,7 +133,9 @@ export class ClaudeCodeProvider implements AgentProvider {
       args.push('--settings', claudeSandboxSettings(parseDomains(getSetting(SHELL_DOMAINS_SETTING))))
     }
     if (req.model) args.push('--model', req.model)
-    if (resumeSessionId) args.push('--resume', resumeSessionId)
+    // D-146: a resumed turn forks — a new session id each turn, so a message you later delete or
+    // edit in Troupe can never come back from the agent's own copy of the chat.
+    if (resumeSessionId) args.push('--resume', resumeSessionId, '--fork-session')
 
     // Project-level context (Instructions/Memory/Persistent Context) via system
     // prompt append, without writing into the project folder (D-003).
@@ -141,10 +157,18 @@ export class ClaudeCodeProvider implements AgentProvider {
       args.push('--append-system-prompt-file', file)
     }
 
+    // D-146: TROUPE_DEBUG_PROMPT=<folder> saves what this run sends (flags, appended context,
+    // prompt) for scripts/cache-probe.mjs. Off unless the variable is set; stays on this Mac.
+    // D-146: the same MCP tools on every call of every turn — wait for servers, tool search,
+    // and no claude.ai connectors at all when you've switched every one off.
+    const baseEnv = buildEnv()
+    const runEnv = claudeRunEnv(baseEnv, liveClaudeMcpNames().filter(isClaudeConnector), new Set(req.mcpOff ?? []))
+    dumpForCacheProbe(args, sys, prompt, req.cwd, runEnv)
+
     const st = newClaudeState()
     try {
       yield* this.proc.jsonl({
-        bin: 'claude', args, cwd: req.cwd, stdin: prompt,
+        bin: 'claude', args, cwd: req.cwd, stdin: prompt, env: { ...baseEnv, ...runEnv },
         onMapError: (err) => logInfo('[claude] frame mapping failed', String(err)),
         onJson: (e, push) => {
           for (const ev of claudeEvents(e, st)) {
