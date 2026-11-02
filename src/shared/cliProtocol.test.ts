@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { encodeRunId, decodeRunId, pickOne, parseMode, titleFrom, clampLast, clampWait, statusText, CliError } from './cliProtocol'
+import { parseSendMode, encodeRunId, decodeRunId, pickOne, parseMode, titleFrom, clampLast, clampWait, statusText, CliError } from './cliProtocol'
 
 const items = [
   { id: 'aaaaaaaa-1111', name: 'Workbench sandbox' },
@@ -45,6 +45,13 @@ describe('parseMode', () => {
   it('never allows Full access', () => {
     expect(() => parseMode('full')).toThrow(/Full access is not available/)
     expect(() => parseMode('yolo')).toThrow(/Unknown mode/)
+  })
+  it('send: Full access only when switched on', () => {
+    expect(() => parseSendMode('full', false)).toThrow(/Full access from the command line is off/)
+    expect(parseSendMode('full', true)).toBe('full')
+    expect(parseSendMode('FULL-ACCESS', true)).toBe('full')
+    expect(parseSendMode(undefined, true)).toBe('auto')
+    expect(parseSendMode('read', true)).toBe('read')
   })
 })
 

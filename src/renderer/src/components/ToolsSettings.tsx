@@ -23,6 +23,7 @@ interface Props {
   shellSandbox: boolean; setShellSandbox: (v: boolean) => void   // D-115
   shellDomains: string; setShellDomains: (v: string) => void
   cliAccess: boolean; setCliAccess: (v: boolean) => void   // D-117
+  cliFull: boolean; setCliFull: (v: boolean) => void
   chromeAccess: boolean; setChromeAccess: (v: boolean) => void
 }
 
@@ -30,7 +31,7 @@ const listWords = (xs: string[]): string => (xs.length < 2 ? xs.join('') : `${xs
 
 // Settings ▸ Tools (D-077): the one place MCP servers and built-in tool access are
 // switched on or off — for every project. The chat side panel only shows what's active.
-export default function ToolsSettings({ agents, mcpOff, setMcpOff, webAccess, setWebAccess, shellAccess, setShellAccess, shellSandbox, setShellSandbox, shellDomains, setShellDomains, cliAccess, setCliAccess, chromeAccess, setChromeAccess }: Props) {
+export default function ToolsSettings({ agents, mcpOff, setMcpOff, webAccess, setWebAccess, shellAccess, setShellAccess, shellSandbox, setShellSandbox, shellDomains, setShellDomains, cliAccess, setCliAccess, cliFull, setCliFull, chromeAccess, setChromeAccess }: Props) {
   const [agent, setAgent] = useState<ProviderId>(agents[0] ?? 'claude-code')
   const [tools, setTools] = useState<AgentTools | null>(null)
   const [loading, setLoading] = useState(false)
@@ -216,7 +217,7 @@ export default function ToolsSettings({ agents, mcpOff, setMcpOff, webAccess, se
       </Section>
 
       <Section title="Command line">
-      <Field hint={`Lets tools on this ${OS_WORDS.computer}, like Grok Bot, list projects and chat through the troupe command. Runs use Read-only or Auto, never Full access.`}>
+      <Field hint={`Lets tools on this ${OS_WORDS.computer}, like Grok Bot, list projects and chat through the troupe command. Runs use Read-only or Auto unless you allow Full access below.`}>
       <div className="settings-group" role="group" aria-label="Command line">
         <div className="settings-row">
           <div className="settings-row-text">
@@ -224,6 +225,13 @@ export default function ToolsSettings({ agents, mcpOff, setMcpOff, webAccess, se
             <div className="settings-row-sub">Only while Troupe is open, and only for your user on this {OS_WORDS.computer}.</div>
           </div>
           <Switch on={cliAccess} label="Allow command-line access" onChange={setCliAccess} />
+        </div>
+        <div className="settings-row">
+          <div className="settings-row-text">
+            <div className="settings-row-title">Allow Full access</div>
+            <div className="settings-row-sub">{cliAccess ? 'Chats started with --mode full run with no sandbox and no limits, without asking you. Collab and scheduled tasks stay Read-only or Auto.' : 'Turn on command-line access first.'}</div>
+          </div>
+          <Switch on={cliAccess && cliFull} disabled={!cliAccess} label="Allow Full access from the command line" onChange={setCliFull} />
         </div>
         <CliInstallRow />
       </div>

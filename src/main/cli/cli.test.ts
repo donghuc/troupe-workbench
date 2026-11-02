@@ -34,6 +34,7 @@ const { runCliCommand } = await import('./cliCommands')
 const { startCliServer, stopCliServer } = await import('./cliServer')
 const { appendMessage } = await import('../conversations/messagesRepo')
 const { installCommand, wrapperFor, WRAPPER_MARK } = await import('./cliInstall')
+const { setSetting } = await import('../database/settingsRepo')
 
 const P = (o: Record<string, string>) => new URLSearchParams(o)
 function seed(): void {
@@ -48,6 +49,18 @@ function reply(chatId: string, text: string): void {
 
 describe('cli commands (D-117)', () => {
   beforeEach(() => { resetTestDb(); seed(); busy.clear(); started.length = 0 })
+
+  it('starts a Full-access chat only when Full access from the command line is on (2026-11-02)', async () => {
+    expect((await runCliCommand('send', P({ to: 'sandbox', message: 'x', mode: 'full' }))).status).toBe(400)
+    expect(started).toHaveLength(0)
+    setSetting('cli_full_access', '1')
+    const r = await runCliCommand('send', P({ to: 'sandbox', message: 'deploy it', mode: 'full' }))
+    expect(r.status).toBe(200)
+    expect(r.text).toContain('Full access')
+    expect(started[0]).toMatchObject({ permissionMode: 'full', messageMetadata: { via: 'cli' } })
+    // Collab still refuses it
+    expect((await runCliCommand('collab', P({ do: 'start', project: 'sandbox', goal: 'g', mode: 'full' }))).text).toMatch(/Full access is not available/)
+  })
 
   it('version, and token use per reply in show / status (2.18.1)', async () => {
     expect((await runCliCommand('version', P({}))).text).toBe('Troupe 9.9.9')
@@ -100,7 +113,7 @@ describe('cli commands (D-117)', () => {
   })
 
   it('refuses Full access, empty messages, unknown agents and a busy chat', async () => {
-    expect((await runCliCommand('send', P({ to: 'sandbox', message: 'x', mode: 'full' }))).text).toMatch(/Full access is not available/)
+    expect((await runCliCommand('send', P({ to: 'sandbox', message: 'x', mode: 'full' }))).text).toMatch(/Full access from the command line is off/)
     expect((await runCliCommand('send', P({ to: 'sandbox', message: '   ' }))).status).toBe(400)
     expect((await runCliCommand('send', P({ to: 'sandbox', message: 'x', agent: 'nobody' }))).status).toBe(404)
     const { chat } = (await runCliCommand('send', P({ to: 'sandbox', message: 'x' }))).json as { chat: string }
@@ -159,7 +172,7 @@ describe.skipIf(process.platform === 'win32')('troupe script over the socket (D-
     const r = await troupe(['send', 'sandbox', 'x', '--mode', 'full'])
     expect(r.code).toBe(1)
     expect(r.out).toBe('')
-    expect(r.err).toBe('error: Full access is not available from the command line. Use --mode read or auto.\n')   // no curl noise
+    expect(r.err).toMatch(/^error: Full access from the command line is off\. .*\n$/)   // no curl noise
     const j = await troupe(['send', 'nowhere', 'x', '--json'])
     expect(j.code).toBe(1)
     expect(JSON.parse(j.err)).toEqual({ error: 'No project called "nowhere".' })

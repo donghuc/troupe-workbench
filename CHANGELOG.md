@@ -18,6 +18,11 @@ Each version here matches a packaged build — the dmg is named
 > - Bumping rules: PATCH = fixes/small tweaks, MINOR = new features (backward-compatible),
 >   MAJOR = breaking changes or a data format users can't roll back from.
 
+## [2.19.0] - 2026-11-02
+
+### Added
+- The `troupe` command can start chats with Full access (`troupe send … --mode full`) when you switch on **Allow Full access** in Settings ▸ Tools ▸ Command line. It's off by default; Collab and scheduled tasks still never get Full access from the command line.
+
 ## [2.18.2] - 2026-11-02
 
 ### Fixed

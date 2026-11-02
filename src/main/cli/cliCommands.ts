@@ -19,7 +19,7 @@ import { runCollabCommand } from './cliCollab'
 import { runScheduleCommand } from './cliSchedules'
 import type { Conversation, Message, ProviderId, FileNode } from '../../shared/types'
 import {
-  CliError, pickOne, parseMode, parseThink, parseSince, titleFrom, clampLast, clampWait, encodeRunId, decodeRunId,
+  CliError, pickOne, parseSendMode, CLI_FULL_SETTING, parseThink, parseSince, titleFrom, clampLast, clampWait, encodeRunId, decodeRunId,
   projectsText, chatsText, messagesText, statusText, runsText, collabLogState, searchText,
   filesChanged, isSecretPath, CLI_MAX_MESSAGE,
   type CliProject, type CliChat, type CliMessage, type CliStatus, type CliSearchHit, type CliUsage
@@ -134,7 +134,7 @@ async function send(q: Params, closed: () => boolean): Promise<CliResult> {
   const message = (q.get('message') ?? '').trim()
   if (!message) throw new CliError('The message is empty.')
   if (message.length > CLI_MAX_MESSAGE) throw new CliError(`The message is longer than ${CLI_MAX_MESSAGE} characters.`)
-  const mode = parseMode(q.get('mode'))
+  const mode = parseSendMode(q.get('mode'), getSetting(CLI_FULL_SETTING) === '1')
   const think = parseThink(q.get('think'))
   const target = (q.get('to') ?? '').trim()
   // A chat id continues that chat; a project name (or id) starts a new chat in it.
@@ -171,7 +171,7 @@ async function send(q: Params, closed: () => boolean): Promise<CliResult> {
   const run = encodeRunId(chat.id, sentAt)
   logInfo('[cli] send', { chat: chat.id, agent, mode, think, attachments: attachments.length, chars: message.length })
   return ok({ run, chat: chat.id, project: project.name, agent: agentName(agent), mode, attachments: attachments.length },
-    `run ${run}\nchat ${chat.id} in ${project.name} · ${agentName(agent)} · ${mode === 'read' ? 'Read-only' : 'Auto'}${think ? ` · ${think}` : ''}${attachments.length ? ` · ${attachments.length} attachment${attachments.length > 1 ? 's' : ''}` : ''}\nCheck with: troupe status ${run} --wait 600`)
+    `run ${run}\nchat ${chat.id} in ${project.name} · ${agentName(agent)} · ${mode === 'read' ? 'Read-only' : mode === 'full' ? 'Full access' : 'Auto'}${think ? ` · ${think}` : ''}${attachments.length ? ` · ${attachments.length} attachment${attachments.length > 1 ? 's' : ''}` : ''}\nCheck with: troupe status ${run} --wait 600`)
 }
 
 /** Where a run stands: its replies so far (and the files they edited), or the live text while it streams. */

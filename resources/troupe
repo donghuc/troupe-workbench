@@ -24,7 +24,7 @@ Projects and chats
 Sending
   send <project> <message>              Start a new chat; prints a run id
   send <chat> <message>                 Continue a chat
-       --agent NAME   --model M   --mode read|auto   --think debate|critique|research
+       --agent NAME   --model M   --mode read|auto|full   --think debate|critique|research
        --attach FILE (up to 5)   --wait-free SECONDS (wait if the chat is busy)   --new
        Use - as the message to read it from stdin. @codex @claude in a message chains agents.
   status <run> [--wait SECONDS]         Running, done, error or stopped — reply and files changed
@@ -57,7 +57,8 @@ Collab
 
   --json   machine-readable output
 
-Runs use Read-only or Auto (sandboxed); Full access isn't available here.
+Runs use Read-only or Auto (sandboxed). send --mode full works only if Full access
+is allowed in Troupe ▸ Settings ▸ Tools ▸ Command line; Collab and tasks never use it.
 Exit codes: 0 ok · 1 refused · 2 bad usage · 3 Troupe not reachable · 4 chat busy
 U
 }

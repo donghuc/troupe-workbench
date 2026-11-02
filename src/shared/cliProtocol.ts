@@ -5,6 +5,10 @@ import { formatDuration } from './collabChecks'
 // (main/cli) and its tests use these; nothing here touches Electron or the database.
 
 export const CLI_ACCESS_SETTING = 'cli_access'          // '1' = the socket is open
+/** '1' = `troupe send --mode full` may start Full-access turns (Hien, 2026-11-02 — he works with bots
+ *  from his phone and can't approve on the Mac). Off by default; Collab and scheduled tasks stay
+ *  Read-only / Auto from the command line whatever this says. */
+export const CLI_FULL_SETTING = 'cli_full_access'
 export const CLI_SOCKET_NAME = 'troupe.sock'            // in the app's userData folder
 export const CLI_MAX_MESSAGE = 100_000                  // characters per message
 const CLI_MAX_WAIT_S = 900                       // `status --wait` cap
@@ -46,6 +50,16 @@ export function parseMode(v: string | null | undefined): 'read' | 'auto' {
   if (m === 'read' || m === 'read-only' || m === 'readonly') return 'read'
   if (m === 'full') throw new CliError('Full access is not available from the command line. Use --mode read or auto.')
   throw new CliError(`Unknown mode "${v}". Use read or auto.`)
+}
+
+/** `troupe send --mode`: Full access only when it's switched on in Settings ▸ Tools ▸ Command line. */
+export function parseSendMode(v: string | null | undefined, allowFull: boolean): 'read' | 'auto' | 'full' {
+  const m = (v ?? '').trim().toLowerCase()
+  if (m === 'full' || m === 'full-access') {
+    if (allowFull) return 'full'
+    throw new CliError('Full access from the command line is off. Turn on "Allow Full access" in Troupe ▸ Settings ▸ Tools ▸ Command line, or use --mode read or auto.')
+  }
+  return parseMode(v)
 }
 
 /** A new chat's title: the message's first line, trimmed to a sidebar-friendly length. */

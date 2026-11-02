@@ -19,7 +19,7 @@ import ThinkingTab from './settings/ThinkingTab'
 import { CommandsTab, AboutTab } from './settings/InfoTabs'
 import { api } from '../api'
 import { SHELL_SANDBOX_SETTING, SHELL_DOMAINS_SETTING, sandboxOn, parseDomains } from '../../../shared/shellSandbox'
-import { CLI_ACCESS_SETTING } from '../../../shared/cliProtocol'
+import { CLI_ACCESS_SETTING, CLI_FULL_SETTING } from '../../../shared/cliProtocol'
 import { Segmented } from './ui/Segmented'
 import {
   applyAppearance, DEFAULT_CHAT_FONT, MIN_CHAT_FONT, MAX_CHAT_FONT, DEFAULT_ARTIFACT_FONT, MIN_ARTIFACT_FONT, MAX_ARTIFACT_FONT, clampArtifactFont, type ThemeChoice
@@ -57,6 +57,7 @@ export default function SettingsModal({ onClose, initialTab = 'general' }: { onC
   const [shellSandbox, setShellSandbox] = useState(true)   // D-115
   const [shellDomains, setShellDomains] = useState('')
   const [cliAccess, setCliAccess] = useState(false)   // D-117
+  const [cliFull, setCliFull] = useState(false)
   const [chromeAccess, setChromeAccess] = useState(false)
   const [extraModels, setExtraModelsText] = useState('')   // global "More models" (D-078)
   const [autoLists, setAutoLists] = useState<ModelLists>({})   // each agent's own list (D-076, D-079)
@@ -92,6 +93,7 @@ export default function SettingsModal({ onClose, initialTab = 'general' }: { onC
     api.settings.get(SHELL_SANDBOX_SETTING).then((v: string | null) => setShellSandbox(sandboxOn(v)))
     api.settings.get(SHELL_DOMAINS_SETTING).then((v: string | null) => setShellDomains(v ?? ''))
     api.settings.get(CLI_ACCESS_SETTING).then((v: string | null) => setCliAccess(v === '1'))
+    api.settings.get(CLI_FULL_SETTING).then((v: string | null) => setCliFull(v === '1'))
     api.settings.get(CHROME_ACCESS_SETTING).then((v: string | null) => setChromeAccess(v === '1'))
     api.settings.get(EXTRA_MODELS_SETTING).then((v: string | null) => setExtraModelsText(v ?? ''))
     api.system.autoModels().then((l: ModelLists) => { setAutoLists(l); setAutoModels(l) }).catch(() => {})
@@ -137,6 +139,7 @@ export default function SettingsModal({ onClose, initialTab = 'general' }: { onC
     await api.settings.set(SHELL_SANDBOX_SETTING, shellSandbox ? '1' : '0')
     await api.settings.set(SHELL_DOMAINS_SETTING, parseDomains(shellDomains).join('\n'))
     await api.settings.set(CLI_ACCESS_SETTING, cliAccess ? '1' : '0')
+    await api.settings.set(CLI_FULL_SETTING, cliAccess && cliFull ? '1' : '0')
     await api.settings.set(CHROME_ACCESS_SETTING, chromeAccess ? '1' : '0')
     await api.settings.set(EXTRA_MODELS_SETTING, extraModels)
     await api.settings.set('codex_image_model', codexImageModel.trim())
@@ -218,7 +221,7 @@ export default function SettingsModal({ onClose, initialTab = 'general' }: { onC
 
           {tab === 'tools' && (
             <ToolsSettings agents={BUILTIN_IDS.filter((id) => !offAgents.includes(id))} mcpOff={mcpOff} setMcpOff={setMcpOff}
-              webAccess={webAccess} setWebAccess={setWebAccess} shellAccess={shellAccess} setShellAccess={setShellAccess} shellSandbox={shellSandbox} setShellSandbox={setShellSandbox} shellDomains={shellDomains} setShellDomains={setShellDomains} cliAccess={cliAccess} setCliAccess={setCliAccess} chromeAccess={chromeAccess} setChromeAccess={setChromeAccess} />
+              webAccess={webAccess} setWebAccess={setWebAccess} shellAccess={shellAccess} setShellAccess={setShellAccess} shellSandbox={shellSandbox} setShellSandbox={setShellSandbox} shellDomains={shellDomains} setShellDomains={setShellDomains} cliAccess={cliAccess} setCliAccess={setCliAccess} cliFull={cliFull} setCliFull={setCliFull} chromeAccess={chromeAccess} setChromeAccess={setChromeAccess} />
           )}
 
           {tab === 'thinking' && (
