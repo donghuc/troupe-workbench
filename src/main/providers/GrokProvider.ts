@@ -8,7 +8,7 @@ import { promises as fsp } from 'fs'
 import { homedir, tmpdir } from 'os'
 import { randomUUID } from 'crypto'
 import { grokServers } from '../tools/toolsService'
-import { join, resolve } from 'path'
+import { join, resolve, isAbsolute, sep } from 'path'
 import type { AgentProvider } from './AgentProvider'
 import type {
   AgentRequest, AgentEvent, ProviderCapabilities, ProviderAvailability
@@ -164,7 +164,7 @@ export class GrokProvider implements AgentProvider {
         // D-087: leave out images another agent wrote in this project meanwhile (a
         // parallel Codex/Claude chat) — they are not grok's output.
         const others = writtenByOthers('grok', imgSince)
-        cwdImages = (await newImagesInCwd(req.cwd, imgSince)).filter((f) => !others.has(resolve(f)))
+        cwdImages = (await newImagesInCwd(req.cwd, imgSince, parsed?.text ?? '')).filter((f) => !others.has(resolve(f)))
       } catch (e) { logError('[grok] image scan failed', String(e)) }
       // B-049: keep generated/ tidy. Copies go to generated/grok/; a session image grok
       // already saved into the project itself (same byte size) is not copied again, and
@@ -390,9 +390,18 @@ const GROK_MEDIA_EXT = /\.(png|jpe?g|webp|gif|avif|svg|mp4|webm|mov|m4v)$/i
 // image into the project. Scan the cwd (top level + common output dirs) for images
 // created/modified during the run so a real asset renders inline instead of a dangling
 // link. (B-042 — Grok has no native image tool; this surfaces whatever it does write.)
-function newImagesInCwd(cwd: string, sinceMs: number): Promise<string[]> {
-  const dirs = [cwd, join(cwd, 'generated'), join(cwd, 'images'), join(cwd, 'videos'), join(cwd, 'assets'), join(cwd, 'output'), join(cwd, 'out')]
-  return mediaFilesSince(dirs, sinceMs, GROK_MEDIA_EXT)
+// B-076: also one level inside generated/ (grok saves its own output in generated/grok/, where
+// Troupe puts its copies too), and any project media file the reply links — otherwise grok's
+// finished video was missed and its raw clips were copied in and attached as well.
+export async function newImagesInCwd(cwd: string, sinceMs: number, replyText = ''): Promise<string[]> {
+  const top = [cwd, join(cwd, 'images'), join(cwd, 'videos'), join(cwd, 'assets'), join(cwd, 'output'), join(cwd, 'out')]
+  const found = [...await mediaFilesSince(top, sinceMs, GROK_MEDIA_EXT), ...await mediaFilesSince([join(cwd, 'generated')], sinceMs, GROK_MEDIA_EXT, true)]
+  for (const m of replyText.matchAll(/(?:\]\(|`|^|\s)((?:\/|\.{0,2}\/)?[^\s()`'"<>]+\.(?:png|jpe?g|webp|gif|avif|svg|mp4|webm|mov|m4v))/gim)) {
+    const f = isAbsolute(m[1]) ? m[1] : resolve(cwd, m[1])
+    if (!f.startsWith(resolve(cwd) + sep)) continue
+    try { const st = await fsp.stat(f); if (st.isFile() && st.mtimeMs > sinceMs) found.push(f) } catch { /* not a file */ }
+  }
+  return [...new Set(found)]
 }
 
 // Grok's `imagine` tool saves images inside grok's OWN session dir, not the project:
@@ -409,8 +418,8 @@ interface RecoveredImage { orig: string; dest: string; destRel: string }
 // run", not a specific id. Copies land in <cwd>/generated/grok/grok-<sid8>-<n> (unique per
 // session; B-043, subfolder B-049). Returns count via out.length for the caller to log. (B-044)
 interface RecoverOpts { text: string; skipSizes: Set<number>; onlyReferenced: boolean }
-async function recoverGrokSessionImages(cwd: string, sinceMs: number, opts: RecoverOpts = { text: '', skipSizes: new Set(), onlyReferenced: false }): Promise<{ images: RecoveredImage[]; baseExists: boolean; sessionDirs: number }> {
-  const base = join(homedir(), '.grok', 'sessions', encodeURIComponent(cwd))
+export async function recoverGrokSessionImages(cwd: string, sinceMs: number, opts: RecoverOpts = { text: '', skipSizes: new Set(), onlyReferenced: false }, home = homedir()): Promise<{ images: RecoveredImage[]; baseExists: boolean; sessionDirs: number }> {
+  const base = join(home, '.grok', 'sessions', encodeURIComponent(cwd))
   let dirs: string[]
   try { dirs = await fsp.readdir(base) } catch { return { images: [], baseExists: false, sessionDirs: 0 } }
   // grok saves images under <sid>/images/ and videos under <sid>/videos/, and links them

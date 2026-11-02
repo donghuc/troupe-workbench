@@ -18,6 +18,11 @@ Each version here matches a packaged build — the dmg is named
 > - Bumping rules: PATCH = fixes/small tweaks, MINOR = new features (backward-compatible),
 >   MAJOR = breaking changes or a data format users can't roll back from.
 
+## [2.18.2] - 2026-11-02
+
+### Fixed
+- When Grok makes a video or image and saves the finished file itself, the chat shows just that file — no longer also copies of the raw clips and stills it made along the way.
+
 ## [2.18.1] - 2026-10-30
 
 ### Added
