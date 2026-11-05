@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   emptyCanvas, makeCard, canConnect, connect, gatherInputs, removeCard, removeSlot, outputImages,
   inputsHash, buildImagePrompt, savedName, withoutRun, findFreeSpot,
-  withRole, REF_ROLES, nextCanvasName, parseCanvasIndex, addTab, renameTab, removeTab, copyName, applyRunResult, parseCanvas, imagePathsInReply, processorOf, outputsOf, OUTPUT_SLOT, type Canvas, type Card
+  withRole, REF_ROLES, nextCanvasName, parseCanvasIndex, addTab, renameTab, removeTab, copyName, applyRunResult, parseCanvas, imagePathsInReply, processorOf, outputsOf, OUTPUT_SLOT, tidyPlayer, type Canvas, type Card
 } from './imageCanvas'
 
 function setup() {
@@ -220,5 +220,20 @@ describe('which reference is which (D-131)', () => {
     expect(reset.roles).toBeUndefined()
     const junk = parseCanvas(JSON.stringify({ cards: [{ id: 'p', kind: 'processor', data: { slots: ['a'], roles: { a: 'nonsense', zz: 'color' } } }] })).cards[0]
     expect(junk.kind === 'processor' && junk.data.roles).toBeUndefined()
+  })
+})
+
+describe('Motion player state on an Output card', () => {
+  it('keeps only what differs from the defaults', () => {
+    expect(tidyPlayer({ paused: true, frame: 41.6, loop: false, speed: 0.5, device: 'desktop' })).toEqual({ paused: true, frame: 42, loop: false, speed: 0.5, device: 'desktop' })
+    expect(tidyPlayer({ paused: false, frame: 12, loop: true, speed: 1, device: 'mobile' })).toBeUndefined()
+    expect(tidyPlayer({ frame: 12 })).toBeUndefined()   // a frame only matters while paused
+    expect(tidyPlayer({ speed: 7, device: 'watch' })).toBeUndefined()
+    expect(tidyPlayer(null)).toBeUndefined()
+  })
+  it('survives a save and reload of the canvas', () => {
+    const c = { version: 1, cards: [{ id: 'o1', kind: 'output', x: 0, y: 0, data: { runs: [], selected: [], saved: {}, player: { paused: true, frame: 30, speed: 2 } } }], edges: [], view: { x: 0, y: 0, zoom: 1 } }
+    const back = parseCanvas(JSON.stringify(c)).cards[0]
+    expect(back.kind === 'output' && back.data.player).toEqual({ paused: true, frame: 30, speed: 2 })
   })
 })

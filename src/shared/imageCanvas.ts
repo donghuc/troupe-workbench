@@ -2,6 +2,7 @@
 // that runs one image-capable agent, and Output cards show what it made.
 // Pure — no electron, no fs — so the rules (what may connect, what a run receives,
 // the prompt contract) are unit-tested (imageCanvas.test.ts).
+import { DEVICES, type DeviceId } from './motion'
 import type { ProviderId } from './types'
 import { fileBase } from './platform'
 import { agentTraits, BUILTIN_IDS } from './providers'
@@ -67,6 +68,25 @@ export interface OutputData {
   saved: Record<string, string>      // generated path → its copy in saved/
   w?: number                         // Motion Result (D-148): card width, set by its resize grip
   h?: number                         //   and the preview's height
+  player?: PlayerState               //   and its player's last state, so it isn't reset when the card remounts
+}
+
+/** The Motion player's state on one Output card. Only what differs from the defaults is kept
+ *  (playing, looping, 1×, Mobile); `frame` is where a paused animation stopped. */
+export interface PlayerState { paused?: true; frame?: number; loop?: false; speed?: number; device?: DeviceId }
+const PLAYER_SPEEDS = [0.25, 0.5, 0.75, 1, 1.5, 2]
+export function tidyPlayer(p: unknown): PlayerState | undefined {
+  if (!p || typeof p !== 'object') return undefined
+  const v = p as Record<string, unknown>
+  const out: PlayerState = {}
+  if (v.paused === true) {
+    out.paused = true
+    if (typeof v.frame === 'number' && Number.isFinite(v.frame) && v.frame > 0) out.frame = Math.round(v.frame)
+  }
+  if (v.loop === false) out.loop = false
+  if (typeof v.speed === 'number' && v.speed !== 1 && PLAYER_SPEEDS.includes(v.speed)) out.speed = v.speed
+  if (typeof v.device === 'string' && v.device !== 'mobile' && DEVICES.some((d) => d.id === v.device)) out.device = v.device as DeviceId
+  return Object.keys(out).length ? out : undefined
 }
 export const OUTPUT_W = { min: 300, max: 1400 }
 export const OUTPUT_H = { min: 200, max: 1200 }
@@ -435,8 +455,8 @@ export function parseCanvas(raw: string | null | undefined): Canvas {
       }))
       const saved: Record<string, string> = {}
       if (d.saved && typeof d.saved === 'object') for (const [k, v] of Object.entries(d.saved)) if (typeof v === 'string') saved[k] = v
-      const w = clampTo(d.w, OUTPUT_W), h = clampTo(d.h, OUTPUT_H)
-      cards.push({ ...base, kind: 'output', data: { runs, selected: strs(d.selected), saved, ...(w ? { w } : {}), ...(h ? { h } : {}) } })
+      const w = clampTo(d.w, OUTPUT_W), h = clampTo(d.h, OUTPUT_H), player = tidyPlayer(d.player)
+      cards.push({ ...base, kind: 'output', data: { runs, selected: strs(d.selected), saved, ...(w ? { w } : {}), ...(h ? { h } : {}), ...(player ? { player } : {}) } })
     }
   }
   const ids = new Set(cards.map((k) => k.id))

@@ -4,12 +4,12 @@ import { Button, IconButton } from '../ui/Button'
 import { Menu, MenuItem } from '../ui/Menu'
 import { api } from '../../api'
 import { DEVICES, validateLottie, type DeviceId, type LottieInfo } from '../../../../shared/motion'
-import { OUTPUT_W, OUTPUT_H, type Card } from '../../../../shared/imageCanvas'
+import { OUTPUT_W, OUTPUT_H, tidyPlayer, type Card, type PlayerState } from '../../../../shared/imageCanvas'
 import { CARD_W } from './geometry'
 import type { CardCtx, CardData } from './ImageCards'
 
 type OutputCard = Extract<Card, { kind: 'output' }>
-type Anim = { play(): void; pause(): void; setSpeed(s: number): void; destroy(): void; loop: boolean | number; goToAndPlay(v: number, f?: boolean): void; isPaused: boolean; addEventListener(n: string, cb: () => void): void }
+type Anim = { play(): void; pause(): void; setSpeed(s: number): void; destroy(): void; loop: boolean | number; goToAndPlay(v: number, f?: boolean): void; goToAndStop(v: number, f?: boolean): void; isPaused: boolean; currentFrame: number; totalFrames: number; addEventListener(n: string, cb: () => void): void }
 const SPEEDS = [0.25, 0.5, 0.75, 1, 1.5, 2]
 // Preview background: a checkerboard shows transparency (a white character on white vanished).
 const BACKGROUNDS = [{ id: 'checker', label: 'Transparent (checkerboard)' }, { id: 'light', label: 'Light' }, { id: 'dark', label: 'Dark' }] as const
@@ -31,10 +31,19 @@ export default function MotionResult({ card, ctx, d }: { card: OutputCard; ctx: 
   const anim = useRef<Anim | null>(null)
   const [info, setInfo] = useState<{ info: LottieInfo; kb: number } | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [device, setDevice] = useState<DeviceId>('mobile')
-  const [playing, setPlaying] = useState(true)
-  const [loop, setLoop] = useState(true)
-  const [speed, setSpeed] = useState(1)
+  // The player's state lives on the card (D-148), so zooming out, switching tabs or reopening
+  // the canvas brings each animation back as it was left — paused where it stopped, or playing.
+  const kept = card.data.player
+  const [device, setDevice] = useState<DeviceId>(kept?.device ?? 'mobile')
+  const [playing, setPlaying] = useState(!kept?.paused)
+  const [loop, setLoop] = useState(kept?.loop !== false)
+  const [speed, setSpeed] = useState(kept?.speed ?? 1)
+  const remember = (p: Partial<Record<keyof PlayerState, unknown>>) => ctx.patch(card.id, (k) => {
+    if (k.kind !== 'output') return k
+    const player = tidyPlayer({ ...k.data.player, ...p })
+    const { player: _old, ...rest } = k.data
+    return { ...k, data: player ? { ...rest, player } : rest }
+  })
   const [menu, setMenu] = useState(false)
   const [change, setChange] = useState('')
   const [loaded, setLoaded] = useState(false)
@@ -56,7 +65,9 @@ export default function MotionResult({ card, ctx, d }: { card: OutputCard; ctx: 
         host.current.innerHTML = ''
         const a = lottie.loadAnimation({ container: host.current, renderer: 'svg', loop, autoplay: playing, animationData: JSON.parse(text), rendererSettings: { preserveAspectRatio: 'xMidYMid meet' } }) as unknown as Anim
         a.setSpeed(speed)
-        a.addEventListener('complete', () => setPlaying(false))
+        const at = card.data.player?.paused ? card.data.player.frame : undefined
+        if (!playing && at) a.goToAndStop(Math.min(at, Math.max(0, a.totalFrames - 1)), true)
+        a.addEventListener('complete', () => { setPlaying(false); remember({ paused: true, frame: Math.max(0, a.totalFrames - 1) }) })
         anim.current = a
         setLoaded(true)
         setInfo({ info: check.info, kb: Math.max(1, Math.round(text.length / 1024)) })
@@ -68,10 +79,19 @@ export default function MotionResult({ card, ctx, d }: { card: OutputCard; ctx: 
 
   const togglePlay = () => {
     const a = anim.current; if (!a) return
-    if (playing) { a.pause(); setPlaying(false) } else { if (!loop && a.isPaused) a.goToAndPlay(0, true); else a.play(); setPlaying(true) }
+    if (playing) { a.pause(); setPlaying(false); remember({ paused: true, frame: a.currentFrame }); return }
+    // A one-shot that reached its end starts over; one paused part-way carries on from there.
+    if (!loop && a.currentFrame >= a.totalFrames - 1) a.goToAndPlay(0, true); else a.play()
+    setPlaying(true); remember({ paused: undefined, frame: undefined })
   }
-  const toggleLoop = () => { const v = !loop; setLoop(v); if (anim.current) { anim.current.loop = v; if (v && !playing) { anim.current.play(); setPlaying(true) } } }
-  const pickSpeed = (s: number) => { setSpeed(s); anim.current?.setSpeed(s) }
+  const toggleLoop = () => {
+    const v = !loop; setLoop(v)
+    const resume = v && !playing && !!anim.current
+    if (anim.current) { anim.current.loop = v; if (resume) { anim.current.play(); setPlaying(true) } }
+    remember({ loop: v ? undefined : false, ...(resume ? { paused: undefined, frame: undefined } : {}) })
+  }
+  const pickSpeed = (s: number) => { setSpeed(s); anim.current?.setSpeed(s); remember({ speed: s }) }
+  const pickDevice = (id: DeviceId) => { setDevice(id); remember({ device: id }) }
 
   // Resize grip (bottom-right of the preview): drags the card's width and the preview's height.
   // Canvas zoom is read from the element's on-screen size vs. its layout size.
@@ -105,7 +125,7 @@ export default function MotionResult({ card, ctx, d }: { card: OutputCard; ctx: 
     <div className="img-card-body mot-result img-nowheel">
       <div className="mot-top">
       <div className="mot-devices" role="group" aria-label="Preview size">
-        {DEVICES.map((x) => <button key={x.id} className={device === x.id ? 'on' : ''} aria-pressed={device === x.id} onClick={() => setDevice(x.id)}
+        {DEVICES.map((x) => <button key={x.id} className={device === x.id ? 'on' : ''} aria-pressed={device === x.id} onClick={() => pickDevice(x.id)}
           title={x.w ? `${x.w} × ${x.h}` : info ? `The animation's own size: ${info.info.w} × ${info.info.h}` : 'The animation\'s own size'}>{x.label}</button>)}
       </div>
       <div className="mot-bgs" role="group" aria-label="Preview background">

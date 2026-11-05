@@ -18,6 +18,12 @@ Each version here matches a packaged build — the dmg is named
 > - Bumping rules: PATCH = fixes/small tweaks, MINOR = new features (backward-compatible),
 >   MAJOR = breaking changes or a data format users can't roll back from.
 
+## [2.20.2] - 2026-11-05
+
+### Fixed
+- An animation's player on the Image canvas now remembers how you left it: paused on the frame where you stopped, or playing, plus its Loop, Speed and frame size. Zooming out, switching tabs or reopening the canvas no longer starts every animation playing again.
+- With Loop off, pressing Play after pausing part-way carries on from there instead of starting over.
+
 ## [2.20.1] - 2026-11-05
 
 ### Changed
