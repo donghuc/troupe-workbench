@@ -15,6 +15,7 @@ import type { ProviderId as PId } from './types'
 import type { ProjectAttachment } from './attachmentPaths'
 import type { VoiceStatus, VoiceModelId, VoiceResult, VoiceDownloadEvent } from './voice'
 import type { Canvas, CanvasIndex, ImageRunInput, ImageRunDone, ImageRunEvent, RunRecord } from './imageCanvas'
+import type { MotionRunInput } from './motion'
 export interface ContextCheckReport { agent: PId; results: CheckResult[]; passed: number; total: number }
 
 export interface AppInfo { version: string; electron: string; chrome: string; node: string; platform: string }
@@ -166,7 +167,7 @@ export interface WorkbenchApi {
     mcpRemove(name: string, scope?: string, cwd?: string): Promise<McpMutationResult>
     lookup(): Promise<void>
     openArtifactWindow(root: string, relPath: string): Promise<void>
-    revealItem(root: string, relPath: string): Promise<void>
+    revealItem(root: string, relPath: string): Promise<boolean>   // false: not found or not allowed
     revealOutside(absPath: string): Promise<boolean>
     importOutside(root: string, absPath: string): Promise<string | null>
     openItem(root: string, relPath: string): Promise<boolean>
@@ -224,11 +225,15 @@ export interface WorkbenchApi {
     importMedia(base64: string, name: string): Promise<string>   // → path relative to the Image folder
     run(input: ImageRunInput): Promise<string>                    // → runId
     cancel(runId: string): Promise<void>
-    saveImage(rel: string, hint: string): Promise<string>   // copy into saved/ → saved path
+    saveImage(rel: string, hint: string, canvasId?: string): Promise<string>   // copy into saved/<tab>/ → saved path
     unsaveImage(savedRel: string): Promise<void>            // remove the copy from saved/
     deleteRun(runId: string, fromCanvas?: string): Promise<boolean>   // delete outputs/<runId>/ unless another canvas still uses it
     onEvent(cb: (e: ImageRunEvent) => void): () => void
     onDone(cb: (d: ImageRunDone) => void): () => void
+  }
+  motion: {   // Animate card (D-148) on the Image canvas. Progress and results arrive on image.onEvent / onDone.
+    run(input: MotionRunInput): Promise<string>
+    exportLottie(rel: string, name: string): Promise<string | null>   // save dialog → where it went
   }
   collab: {
     start(input: CollabStartInput): Promise<CollabRun>

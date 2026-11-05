@@ -17,9 +17,11 @@ interface Props {
   dismissOnBackdrop?: boolean
   /** Stack above every other modal (confirmations opened from inside one). */
   top?: boolean
+  /** Extra class on the card (e.g. a fixed size). */
+  className?: string
 }
 
-export default function Modal({ title, onClose, children, footer, wide, narrow, dismissOnBackdrop, top }: Props) {
+export default function Modal({ title, onClose, children, footer, wide, narrow, dismissOnBackdrop, top, className }: Props) {
   // Only a click that both starts and ends on the backdrop counts — selecting text in a
   // field and releasing outside the card is not a dismiss.
   const downOnBackdrop = useRef(false)
@@ -41,7 +43,7 @@ export default function Modal({ title, onClose, children, footer, wide, narrow, 
       onMouseDown={(e) => { downOnBackdrop.current = e.target === e.currentTarget }}
       onClick={(e) => { if (dismissOnBackdrop && downOnBackdrop.current && e.target === e.currentTarget) onClose() }}
     >
-      <div className={`modal-card${wide ? ' wide' : ''}${narrow ? ' narrow' : ''}`} onClick={(e) => e.stopPropagation()}>
+      <div className={`modal-card${wide ? ' wide' : ''}${narrow ? ' narrow' : ''}${className ? ' ' + className : ''}`} onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2>{title}</h2>
           <button className="modal-close" onClick={onClose} aria-label="Close">✕</button>

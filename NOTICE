@@ -13,3 +13,11 @@ that are installed, licensed and signed in separately by the user. It does not b
 Bundled fonts: Google Sans and Google Sans Code (Copyright 2025 The Google Sans Project
 Authors; The Google Sans Code Project Authors), licensed under the SIL Open Font License 1.1.
 License texts: src/renderer/src/assets/fonts/OFL-*.txt.
+
+Bundled library: lottie-web 5.12.2 (Copyright (c) 2015 Bodymovin), MIT License —
+plays animations on the Image canvas and renders their key frames.
+
+Motion guide: the easing anchors, timing defaults, loop/render rules, loader, logo, text and SVG
+recipes and review checks in src/shared/motionGuide.ts are adapted from diffusionstudio/lottie
+(https://github.com/diffusionstudio/lottie), Copyright (c) 2026 Diffusion Studio Inc.,
+MIT License. The full licence text is included in that file.

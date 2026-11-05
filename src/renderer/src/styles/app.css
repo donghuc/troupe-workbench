@@ -1663,6 +1663,39 @@ select.field-input {
 .img-stale { font-size: var(--fs-xs); color: var(--text-primary); background: var(--warning-wash); padding: var(--sp-1) var(--sp-2); border-radius: var(--r-sm); }
 .img-generating, .img-output-empty { display: flex; align-items: center; justify-content: center; gap: var(--sp-2); padding: var(--sp-8) var(--sp-3); border: 1px dashed var(--border-default); border-radius: var(--r-md); font-size: var(--fs-sm); color: var(--text-tertiary); text-align: center; }
 .img-generating { color: var(--text-secondary); }
+/* Motion (D-148): the Result card plays the Lottie in a device-shaped frame; the grip resizes the card. */
+.img-thumb-video { display: block; width: 100%; height: 100%; object-fit: cover; background: var(--bg-sunken); }
+.mot-result { display: flex; flex-direction: column; gap: var(--sp-2); }
+.mot-devices { display: flex; gap: 2px; padding: 2px; border-radius: var(--r-md); background: var(--bg-sunken); }
+.mot-devices button { border: 0; background: none; padding: 2px var(--sp-2); border-radius: var(--r-sm); font-size: var(--fs-xs); color: var(--text-secondary); cursor: pointer; }
+.mot-devices button.on { background: var(--bg-panel); color: var(--text-primary); box-shadow: 0 0 0 1px var(--border-subtle); }
+.mot-stage { position: relative; container-type: size; display: flex; align-items: center; justify-content: center; border-radius: var(--r-md); background: var(--bg-sunken); }
+.mot-frame { position: relative; width: min(100cqw - 24px, (100cqh - 24px) * var(--ar)); aspect-ratio: var(--ar); border-radius: var(--r-sm); box-shadow: 0 0 0 1px var(--border-default); overflow: hidden; }
+.mot-frame.mot-mobile { border-radius: 14px; }
+.mot-top { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
+.mot-bgs { display: flex; gap: var(--sp-1); }
+.mot-bg-swatch { width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--border-default); padding: 0; cursor: pointer; }
+.mot-bg-swatch.on { box-shadow: 0 0 0 2px var(--bg-panel), 0 0 0 3px var(--ink-solid); }
+.mot-bg-checker { background-color: #fff; background-image: linear-gradient(45deg, #d9d9d9 25%, transparent 25%, transparent 75%, #d9d9d9 75%), linear-gradient(45deg, #d9d9d9 25%, transparent 25%, transparent 75%, #d9d9d9 75%); background-size: 12px 12px; background-position: 0 0, 6px 6px; }
+.mot-bg-light { background: #ffffff; }
+.mot-bg-dark { background: #1f1f1f; }
+.mot-player, .mot-player svg { width: 100%; height: 100%; display: block; }
+.mot-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: var(--sp-3); text-align: center; font-size: var(--fs-sm); color: var(--text-tertiary); }
+/* Run status: a label at the top of the preview, never a control. */
+.mot-status { position: absolute; top: var(--sp-2); left: 50%; transform: translateX(-50%); max-width: calc(100% - 2 * var(--sp-3)); display: flex; align-items: center; gap: var(--sp-2); padding: 2px var(--sp-3); border-radius: 999px; background: var(--bg-elevated); box-shadow: 0 0 0 1px var(--border-subtle); font-size: var(--fs-xs); color: var(--text-secondary); pointer-events: none; }
+.mot-status .truncate { min-width: 0; }
+.mot-grip { position: absolute; right: 2px; bottom: 2px; width: 16px; height: 16px; cursor: nwse-resize; touch-action: none; background: linear-gradient(135deg, transparent 0 55%, var(--border-strong) 55% 62%, transparent 62% 72%, var(--border-strong) 72% 79%, transparent 79%); border-bottom-right-radius: var(--r-md); }
+.mot-controls, .mot-actions { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-xs); color: var(--text-secondary); }
+.mot-spacer { flex: 1; }
+.mot-meta { min-width: 0; color: var(--text-tertiary); }
+.mot-changed { font-size: var(--fs-xs); color: var(--text-tertiary); }
+.mot-play { width: 28px; height: 28px; flex: none; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; border: 1px solid var(--border-default); background: var(--bg-panel); color: var(--text-primary); cursor: pointer; }
+.mot-play:disabled { color: var(--text-disabled); cursor: default; }
+.mot-loop { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; flex: none; }
+.mot-speed { display: inline-flex; align-items: center; gap: var(--sp-1); flex: none; }
+.mot-speed select { width: auto; min-width: 64px; padding-top: 2px; padding-bottom: 2px; font-size: var(--fs-xs); }
+.mot-export { position: relative; }
+.mot-change { width: 100%; resize: vertical; min-height: 130px; }   /* half the usual field height (Hien, 2026-11-05) */
 .img-gallery { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-1); max-height: 520px; overflow-y: auto; }
 .img-gallery.single { grid-template-columns: 1fr; }
 .img-shot { position: relative; margin: 0; border-radius: var(--r-md); overflow: hidden; background: var(--bg-hover); outline: 2px solid transparent; outline-offset: -2px; }
@@ -2035,3 +2068,38 @@ select.field-input {
 .queue-more { position: relative; }
 .queue-btn { width: 26px; height: 26px; display: grid; place-items: center; border-radius: var(--r-sm); color: var(--text-tertiary); }
 .queue-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+/* Settings: one size for every tab, roomy enough for Skills (Hien, 2026-11-05). */
+.modal-card.settings-modal { width: min(1080px, calc(100vw - 48px)); height: min(760px, calc(100vh - 96px)); }
+.settings-modal .modal-body { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0; }
+.settings-modal .settings-tabs { flex: 1; min-height: 0; height: auto; }
+.settings-modal .settings-nav { width: 208px; padding: var(--sp-3); }   /* a little wider than 180 (Hien, 2026-11-05) */
+.settings-modal .settings-pane { padding: var(--sp-5) var(--sp-6); }
+.settings-pane.settings-pane-full { padding: 0; overflow: hidden; display: flex; }
+.settings-skills { flex: 1; min-width: 0; min-height: 0; display: flex; }
+
+/* Settings ▸ Skills: a list page, and a skill's own page (read / edit). */
+.skill-page { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; padding: var(--sp-5) var(--sp-6); gap: var(--sp-3); }
+.skill-page-head { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
+.skill-page-title { font-size: var(--fs-lg); font-weight: var(--fw-semibold); color: var(--text-primary); min-width: 0; }
+.skill-count { font-size: var(--fs-xs); color: var(--text-tertiary); background: var(--bg-sunken); border-radius: 999px; padding: 1px var(--sp-2); }
+.skill-back { align-self: flex-start; display: inline-flex; align-items: center; gap: var(--sp-1); font-size: var(--fs-sm); color: var(--text-secondary); padding: 2px 0; }
+.skill-back:hover { color: var(--text-primary); }
+.skill-list { flex: 1; min-height: 0; overflow-y: auto; border-top: 1px solid var(--border-subtle); }
+.skill-row { width: 100%; display: flex; align-items: center; gap: var(--sp-3); text-align: left; padding: var(--sp-3) var(--sp-2); border-bottom: 1px solid var(--border-subtle); border-radius: 0; }
+.skill-row:hover { background: var(--bg-hover); }
+.skill-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.skill-row-title { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; font-size: var(--fs-md); color: var(--text-primary); }
+.skill-row-sub { font-size: var(--fs-sm); color: var(--text-tertiary); }
+.skill-row-go { color: var(--text-tertiary); flex: none; }
+.skill-scroll { flex: 1; min-height: 0; overflow-y: auto; }
+.skill-read-body { white-space: pre-wrap; }
+.skill-form { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: var(--sp-3); }
+.skill-form-row { display: flex; gap: var(--sp-3); }
+.skill-field { display: flex; flex-direction: column; gap: var(--sp-1); min-width: 220px; }
+.skill-field.grow { flex: 1; }
+.skill-field .field-label { margin: 0; }
+.skill-body-field { flex: 1; min-height: 0; }
+.skill-body-field .skill-body { flex: 1; min-height: 160px; resize: none; font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--fs-sm); }
+.img-empty-actions { display: flex; gap: var(--sp-2); justify-content: center; flex-wrap: wrap; }
+.skill-page .skill-editor { padding: 0; }

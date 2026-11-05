@@ -13,12 +13,15 @@ import { IconButton } from '../ui/Button'
 // `version` bumps whenever something is saved or unsaved, so the list follows.
 interface Props { root: string; version: number; onOpen: (rel: string) => void; onClose: () => void }
 
+// saved/ holds one folder per tab (Hien, 2026-11-05) plus older files at the top: list them all.
+const flatten = (ns: FileNode[]): FileNode[] => ns.flatMap((n) => (n.type === 'dir' ? flatten(n.children ?? []) : [n]))
+
 export default function SavedPanel({ root, version, onOpen, onClose }: Props) {
   const [files, setFiles] = useState<FileNode[] | null>(null)
   useEffect(() => {
     let live = true
     api.files.listTree(root, SAVED_DIR)
-      .then((t: FileNode) => { if (live) setFiles((t.children ?? []).filter((n) => n.type === 'file' && isImagePath(n.name)).sort((a, b) => (b.mtime ?? 0) - (a.mtime ?? 0))) })
+      .then((t: FileNode) => { if (live) setFiles(flatten(t.children ?? []).filter((n) => isImagePath(n.name)).sort((a, b) => (b.mtime ?? 0) - (a.mtime ?? 0))) })
       .catch(() => { if (live) setFiles([]) })
     return () => { live = false }
   }, [root, version])

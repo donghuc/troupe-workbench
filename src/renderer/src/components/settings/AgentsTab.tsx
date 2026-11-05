@@ -26,14 +26,13 @@ interface Props {
   onAgentStatus?: (id: ProviderId, s: { installed: boolean; authenticated: boolean }) => void
   lists: ModelLists                       // each agent's models incl. the typed "More models"
   extraModels: string; setExtraModelsText: (v: string) => void
-  codexImageModel: string; setCodexImageModel: (v: string) => void
 }
 
 // Settings ▸ Agents (D-071, D-072, D-078; reworked for 2.4). One compact row per agent —
 // tile, name, status, on/off — that opens to its details: which models the picker shows
 // (plus Add model, which writes the "More models" lines), Codex's image model, and for
 // user-added agents the command with Edit / Remove.
-export default function AgentsTab({ offAgents, toggleAgent, offModels, toggleModel, agentStatus, onAgentStatus, lists, extraModels, setExtraModelsText, codexImageModel, setCodexImageModel }: Props) {
+export default function AgentsTab({ offAgents, toggleAgent, offModels, toggleModel, agentStatus, onAgentStatus, lists, extraModels, setExtraModelsText }: Props) {
   const [setupFor, setSetupFor] = useState<BuiltinProviderId | null>(null)
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<CustomAgent | null>(null)
@@ -136,12 +135,6 @@ export default function AgentsTab({ offAgents, toggleAgent, offModels, toggleMod
                         <div className="agent-custom-actions">
                           <Button size="sm" title={`Opens ${OS_WORDS.terminal} and runs: ${BUILTIN_RECIPES[id].signIn!.cmd}`} onClick={() => api.agents.setupStart(id, 'signIn', true)}>Sign in…</Button>
                         </div>
-                      )}
-
-                      {agentTraits(id).imageModelSetting && (
-                        <Field label="Image model" htmlFor="codex-image-model" hint="Used on the Image canvas.">
-                          <input id="codex-image-model" className="field-input mono" placeholder="gpt-5.6-sol (default)" value={codexImageModel} onChange={(ev) => setCodexImageModel(ev.target.value)} />
-                        </Field>
                       )}
 
                       {custom && (

@@ -38,7 +38,6 @@ export interface AgentTraits {
   /** Its image tool saves into its own folder; Troupe collects the files (Grok). */
   imageSelfSaving: boolean
   /** Has its own image-model setting (Settings ▸ Agents), else its config's default (Codex). */
-  imageModelSetting: boolean
   /** A cheap model for background work like compacting a chat ('' = the CLI's default). */
   fastModel: string
   /** Its sign-in can only be seen by running it, so "installed" may still be signed out. */
@@ -49,7 +48,7 @@ export interface AgentTraits {
 
 const TRAIT_DEFAULTS: AgentTraits = {
   mcpConfig: null, mcpNeedsFull: false, chrome: false, shellOnlyInFull: false, autoShellSandbox: false,
-  readsFilesByShell: false, image: null, imageSelfSaving: false, imageModelSetting: false, fastModel: '',
+  readsFilesByShell: false, image: null, imageSelfSaving: false, fastModel: '',
   signInOnFirstUse: false, modelsFromCli: false
 }
 
@@ -64,7 +63,7 @@ export const BUILTIN_PROVIDERS: Record<BuiltinProviderId, ProviderCatalogEntry> 
     id: 'codex', label: 'Codex', handle: 'codex', cli: 'codex', strongModel: '',
     memoryFile: 'AGENTS.md', globalMemoryPath: '~/.codex/AGENTS.md',
     builtinTools: ['Shell', 'Apply patch', 'File read/write'],
-    traits: { mcpConfig: 'codex', mcpNeedsFull: true, readsFilesByShell: true, image: 'raster', imageModelSetting: true, modelsFromCli: true }
+    traits: { mcpConfig: 'codex', mcpNeedsFull: true, readsFilesByShell: true, image: 'raster', modelsFromCli: true }
   },
   grok: {
     id: 'grok', label: 'Grok', handle: 'grok', cli: 'grok', strongModel: '',

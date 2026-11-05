@@ -36,8 +36,6 @@ interface Props {
   memoryActive: boolean
   onOpenTasks: () => void
   tasksActive: boolean
-  skillsActive: boolean
-  onOpenSkills: () => void
   onOpenImage: () => void
   imageActive: boolean
   onOpenSettings: () => void
@@ -54,7 +52,7 @@ export default function Sidebar(props: Props) {
   const {
     projects, conversations, activeProjectId, activeConversationId,
     onSelectProject, onOpenConversation, onNewProject,
-    onRenameConversation, onDeleteConversation, onExportConversation, onDuplicateConversation, onOpenSearch, onSetPinned, onRenameProject, onDeleteProject, onReorderProjects, onOpenNotes, notesActive, onOpenMemory, memoryActive, onOpenTasks, tasksActive, onOpenSkills, skillsActive, onOpenImage, imageActive, onOpenSettings
+    onRenameConversation, onDeleteConversation, onExportConversation, onDuplicateConversation, onOpenSearch, onSetPinned, onRenameProject, onDeleteProject, onReorderProjects, onOpenNotes, notesActive, onOpenMemory, memoryActive, onOpenTasks, tasksActive, onOpenImage, imageActive, onOpenSettings
   } = props
   const [renaming, setRenaming] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
@@ -209,10 +207,9 @@ export default function Sidebar(props: Props) {
       </div>
       <div className="sidebar-scroll">
         <button className="nav-item" onClick={onOpenSearch}><Icon name="search" /> Search <span className="kbd">{OS_WORDS.mod}K</span></button>
-        <button className={`nav-item ${activeProjectId === null && !notesActive && !memoryActive && !tasksActive && !skillsActive && !imageActive ? 'active' : ''}`} onClick={() => onSelectProject(null)}><Icon name="grid" /> Projects</button>
+        <button className={`nav-item ${activeProjectId === null && !notesActive && !memoryActive && !tasksActive && !imageActive ? 'active' : ''}`} onClick={() => onSelectProject(null)}><Icon name="grid" /> Projects</button>
         <button className={`nav-item ${imageActive ? 'active' : ''}`} onClick={onOpenImage}><Icon name="image" /> Image</button>
         <button className={`nav-item ${notesActive ? 'active' : ''}`} onClick={onOpenNotes}><Icon name="file" /> Notes</button>
-        <button className={`nav-item ${skillsActive ? 'active' : ''}`} onClick={onOpenSkills}><Icon name="flash" /> Skills</button>
         <button className={`nav-item ${tasksActive ? 'active' : ''}`} onClick={onOpenTasks}><Icon name="clock" /> Tasks</button>
 
         {pinnedProjects.length > 0 && (

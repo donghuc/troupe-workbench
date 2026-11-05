@@ -3,7 +3,7 @@ import { OS_WORDS } from '../../../shared/platform'
 import Icon from './Icon'
 import { Stack, Field } from './Form'
 import { api } from '../api'
-import { failed, IMAGE_FOLDER_EVENT } from '../notices'
+import { failed, notify, IMAGE_FOLDER_EVENT } from '../notices'
 import { Button } from './ui/Button'
 
 // Settings ▸ Image (D-088): the Image feature's folder is chosen and changed only here,
@@ -17,10 +17,10 @@ export default function ImageSettings() {
   }
   return (
     <Stack>
-      <Field label="Image folder" hint="Stores the canvas, references, generated and saved images. Changing it opens that folder’s canvas.">
+      <Field label="Image folder" hint="Stores the canvases, references, and every generated and saved image and animation. Changing it opens that folder’s canvases.">
         <div className="image-folder-row">
           <span className={`image-folder-path truncate${folder ? '' : ' empty'}`} title={folder ?? undefined}>{folder === undefined ? 'Loading…' : folder ?? 'No folder chosen yet'}</span>
-          {folder && <Button size="sm" title={OS_WORDS.showInFolder} onClick={() => api.system.revealItem(folder, '').catch(failed(OS_WORDS.showInFolder))}><Icon name="folder-open" size="sm" /> Show</Button>}
+          {folder && <Button size="sm" title={OS_WORDS.showInFolder} onClick={() => api.system.revealItem(folder, '').then((ok) => { if (!ok) notify('Couldn’t open the Image folder — it may have been moved or deleted.') }).catch(failed(OS_WORDS.showInFolder))}><Icon name="folder-open" size="sm" /> Show</Button>}
           <Button size="sm" variant={folder ? 'secondary' : 'primary'} onClick={choose}>{folder ? 'Change…' : 'Choose folder…'}</Button>
         </div>
       </Field>

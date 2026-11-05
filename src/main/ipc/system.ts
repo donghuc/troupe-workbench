@@ -40,6 +40,9 @@ export function registerSystemIpc(): void {
   handle('system.openArtifactWindow', (_e, root: string, relPath: string) => openArtifactWindow(assertProjectRoot(root), expectString(relPath, 'path')))
   handle('system.revealItem', (_e, root: string, relPath: string) => {
     try {
+      // '' = the folder itself (Settings ▸ Image ▸ Show): open it. It used to fail the path
+      // check silently, so the button did nothing (Hien, 2026-11-05).
+      if (relPath === '') { const r = assertProjectRoot(root); if (!existsSync(r)) return false; void shell.openPath(r); return true }
       const abs = ensureInside(assertProjectRoot(root), expectString(relPath, 'path'))
       if (existsSync(abs)) shell.showItemInFolder(abs)
       else if (existsSync(dirname(abs))) shell.openPath(dirname(abs))

@@ -21,7 +21,7 @@ describe('IPC contract at runtime (D-097)', () => {
   it('main registers every path exactly once, and nothing else', async () => {
     const mods = await Promise.all([
       import('./agent'), import('./collab'), import('./context'), import('./conversations'), import('./files'), import('./image'),
-      import('./memory'), import('./notes'), import('./projects'), import('./schedules'), import('./skills'), import('./system'), import('./voice')
+      import('./memory'), import('./motion'), import('./notes'), import('./projects'), import('./schedules'), import('./skills'), import('./system'), import('./voice')
     ])
     for (const m of mods) for (const [name, fn] of Object.entries(m)) if (name.startsWith('register') && typeof fn === 'function') (fn as () => void)()
     expect([...registered].sort()).toEqual([...INVOKE_PATHS].sort())

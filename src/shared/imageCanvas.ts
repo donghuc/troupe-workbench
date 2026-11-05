@@ -38,6 +38,7 @@ export interface RunRecord {
   files: string[]            // paths relative to the image folder
   error?: string
   inputsHash: string         // inputs + engine at run time, for the stale marker
+  change?: string            // Motion (D-148): this run applied "Ask for a change"
 }
 
 export interface PromptData { text: string }
@@ -52,12 +53,24 @@ export const REF_ROLES: { id: RefRole; label: string; phrase: string }[] = [
   { id: 'composition', label: 'Composition', phrase: 'use for the layout and composition — framing, placement, proportions' }
 ]
 export const isRefRole = (v: unknown): v is RefRole => REF_ROLES.some((r) => r.id === v)
-export interface ProcessorData { slots: string[]; agent: ProviderId; model: string; count: number; roles?: Record<string, RefRole> }
+/** A run card. `mode: 'animate'` = the Animate card (D-148, Hien 2026-11-05: Motion merged into
+ *  Image Creation) — it writes a Lottie animation; otherwise it's the Image card. */
+export interface ProcessorData { slots: string[]; agent: ProviderId; model: string; count: number; roles?: Record<string, RefRole>; mode?: 'animate'; seconds?: number }
+export const isAnimateCard = (k: Card | undefined): boolean => k?.kind === 'processor' && k.data.mode === 'animate'
+/** What a run card's hash counts besides inputs, agent and model: images per run, or length. */
+export const runSize = (d: ProcessorData): number => (d.mode === 'animate' ? d.seconds ?? 0 : d.count)   // 0 = Auto length
+/** An Output shows animations (a player) rather than images (a gallery). */
+export const isAnimationFile = (p: string): boolean => /\.json$/i.test(p)
 export interface OutputData {
   runs: RunRecord[]
   selected: string[]                 // files passed on to the next card
   saved: Record<string, string>      // generated path → its copy in saved/
+  w?: number                         // Motion Result (D-148): card width, set by its resize grip
+  h?: number                         //   and the preview's height
 }
+export const OUTPUT_W = { min: 300, max: 1400 }
+export const OUTPUT_H = { min: 200, max: 1200 }
+const clampTo = (v: unknown, r: { min: number; max: number }): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? Math.round(Math.max(r.min, Math.min(r.max, v))) : undefined)
 
 export type Card =
   | { id: string; kind: 'prompt'; x: number; y: number; title?: string; data: PromptData }
@@ -83,14 +96,15 @@ export const newId = (prefix = ''): string =>
 /** The single input slot id of an Output card. */
 export const OUTPUT_SLOT = 'in'
 
-export const CARD_LABEL: Record<CardKind, string> = { prompt: 'Prompt', media: 'Media', processor: 'Processor', output: 'Output' }
+const CARD_LABEL: Record<CardKind, string> = { prompt: 'Prompt', media: 'Media', processor: 'Image', output: 'Output' }
+export const cardLabel = (k: Card): string => (isAnimateCard(k) ? 'Animate' : CARD_LABEL[k.kind])
 
-export function makeCard(kind: CardKind, x: number, y: number, defaults: { agent?: ProviderId } = {}): Card {
+export function makeCard(kind: CardKind, x: number, y: number, defaults: { agent?: ProviderId; animate?: boolean } = {}): Card {
   const id = newId(kind[0])
   switch (kind) {
     case 'prompt': return { id, kind, x, y, data: { text: '' } }
     case 'media': return { id, kind, x, y, data: { files: [] } }
-    case 'processor': return { id, kind, x, y, data: { slots: [newId('s')], agent: defaults.agent ?? 'codex', model: '', count: 1 } }
+    case 'processor': return { id, kind, x, y, data: { slots: [newId('s')], agent: defaults.agent ?? 'codex', model: '', count: 1, ...(defaults.animate ? { mode: 'animate' as const } : {}) } }
     case 'output': return { id, kind, x, y, data: { runs: [], selected: [], saved: {} } }
   }
 }
@@ -131,7 +145,7 @@ export function canConnect(c: Canvas, fromId: string, toId: string, slot: string
   if (!from || !to) return { ok: false, reason: 'Card not found' }
   if (from.id === to.id) return { ok: false, reason: 'A card can’t feed itself' }
   if (!inputSlots(to).includes(slot)) return { ok: false, reason: 'No such input' }
-  if (!accepts(to.kind, from.kind)) return { ok: false, reason: `${CARD_LABEL[from.kind]} can’t connect to ${CARD_LABEL[to.kind]}` }
+  if (!accepts(to.kind, from.kind)) return { ok: false, reason: `${cardLabel(from)} can’t connect to ${cardLabel(to)}` }
   if (reaches(c, to.id, from.id)) return { ok: false, reason: 'That would make a loop' }
   return { ok: true }
 }
@@ -280,7 +294,7 @@ export function connectChecker(c: Canvas, fromId: string): (toId: string, slot: 
     if (!from || !to) return { ok: false, reason: 'Card not found' }
     if (from.id === to.id) return { ok: false, reason: 'A card can’t feed itself' }
     if (!inputSlots(to).includes(slot)) return { ok: false, reason: 'No such input' }
-    if (!accepts(to.kind, from.kind)) return { ok: false, reason: `${CARD_LABEL[from.kind]} can’t connect to ${CARD_LABEL[to.kind]}` }
+    if (!accepts(to.kind, from.kind)) return { ok: false, reason: `${cardLabel(from)} can’t connect to ${cardLabel(to)}` }
     if (ancestors.has(to.id)) return { ok: false, reason: 'That would make a loop' }
     return { ok: true }
   }
@@ -296,14 +310,15 @@ export interface CardView {
   stale?: boolean
   feedsOn?: boolean
   hint?: string
+  animate?: boolean     // Output: fed by an Animate card (or holds animations) → a player
 }
 
 export function sourceLabel(src: Card | undefined): string {
   if (!src) return 'Empty — drag an output here'
   if (src.kind === 'prompt') { const t = src.data.text.trim(); return t ? `Prompt · “${t.slice(0, 28)}${t.length > 28 ? '…' : ''}”` : 'Prompt · empty' }
-  if (src.kind === 'media') return `Media · ${src.data.files.length} image${src.data.files.length === 1 ? '' : 's'}`
-  if (src.kind === 'output') { const n = outputImages(src).length; return `Output · ${n} image${n === 1 ? '' : 's'}` }
-  return CARD_LABEL[src.kind]
+  if (src.kind === 'media') { const n = src.data.files.length; const noun = src.data.files.every(isImagePath) ? 'image' : 'file'; return `Media · ${n} ${noun}${n === 1 ? '' : 's'}` }
+  if (src.kind === 'output') { const f = outputImages(src); if (f.some(isAnimationFile)) return 'Output · animation'; return `Output · ${f.length} image${f.length === 1 ? '' : 's'}` }
+  return cardLabel(src)
 }
 
 export function cardViews(c: Canvas, running: (processorId: string) => boolean, ix: CardIndex = indexCanvas(c)): Map<string, CardView> {
@@ -327,11 +342,12 @@ export function cardViews(c: Canvas, running: (processorId: string) => boolean, 
       const e = ix.inSlot.get(`${k.id}|${OUTPUT_SLOT}`)
       const proc = e && ix.byId.get(e.from)
       const feedsOn = (ix.outOf.get(k.id)?.length ?? 0) > 0
-      if (!proc || proc.kind !== 'processor') { out.set(k.id, { feedsOn }); continue }
+      const holdsAnim = k.data.runs.some((r) => r.files.some(isAnimationFile))
+      if (!proc || proc.kind !== 'processor') { out.set(k.id, { feedsOn, ...(holdsAnim ? { animate: true } : {}) }); continue }
       const inputs = gatherInputsIx(ix, proc.id)
       const last = k.data.runs[k.data.runs.length - 1]
-      const stale = !!(last && last.inputsHash && !running(proc.id) && last.inputsHash !== inputsHash(inputs, proc.data.agent, proc.data.model, proc.data.count))
-      out.set(k.id, { procId: proc.id, stale, feedsOn, hint: inputs.prompt })
+      const stale = !!(last && last.inputsHash && !running(proc.id) && last.inputsHash !== inputsHash(inputs, proc.data.agent, proc.data.model, runSize(proc.data)))
+      out.set(k.id, { procId: proc.id, stale, feedsOn, hint: inputs.prompt, ...(isAnimateCard(proc) ? { animate: true } : {}) })
     } else out.set(k.id, {})
   }
   return out
@@ -409,16 +425,18 @@ export function parseCanvas(raw: string | null | undefined): Canvas {
       const slots = strs(d.slots)
       const roles: Record<string, RefRole> = {}
       if (d.roles && typeof d.roles === 'object') for (const [k2, v] of Object.entries(d.roles)) if (slots.includes(k2) && isRefRole(v) && v !== 'any') roles[k2] = v
-      cards.push({ ...base, kind: 'processor', data: { slots: slots.length ? slots : [newId('s')], agent: isImageAgent(d.agent) ? d.agent : 'codex', model: typeof d.model === 'string' ? d.model : '', count: Math.max(1, Math.min(4, num(d.count, 1))), ...(Object.keys(roles).length ? { roles } : {}) } })
+      cards.push({ ...base, kind: 'processor', data: { slots: slots.length ? slots : [newId('s')], agent: isImageAgent(d.agent) ? d.agent : 'codex', model: typeof d.model === 'string' ? d.model : '', count: Math.max(1, Math.min(4, num(d.count, 1))), ...(Object.keys(roles).length ? { roles } : {}), ...(d.mode === 'animate' ? { mode: 'animate' as const } : {}), ...(typeof d.seconds === 'number' && d.seconds > 0 && d.seconds <= 60 ? { seconds: d.seconds } : {}) } })
     } else if (k.kind === 'output') {
       const runs: RunRecord[] = (Array.isArray(d.runs) ? d.runs : []).filter((r: any) => r && typeof r.id === 'string').map((r: any) => ({
         id: r.id, at: typeof r.at === 'string' ? r.at : '', agent: isImageAgent(r.agent) ? r.agent : 'codex',
         model: typeof r.model === 'string' ? r.model : '', files: strs(r.files),
-        ...(typeof r.error === 'string' ? { error: r.error } : {}), inputsHash: typeof r.inputsHash === 'string' ? r.inputsHash : ''
+        ...(typeof r.error === 'string' ? { error: r.error } : {}), inputsHash: typeof r.inputsHash === 'string' ? r.inputsHash : '',
+        ...(typeof r.change === 'string' ? { change: r.change } : {})
       }))
       const saved: Record<string, string> = {}
       if (d.saved && typeof d.saved === 'object') for (const [k, v] of Object.entries(d.saved)) if (typeof v === 'string') saved[k] = v
-      cards.push({ ...base, kind: 'output', data: { runs, selected: strs(d.selected), saved } })
+      const w = clampTo(d.w, OUTPUT_W), h = clampTo(d.h, OUTPUT_H)
+      cards.push({ ...base, kind: 'output', data: { runs, selected: strs(d.selected), saved, ...(w ? { w } : {}), ...(h ? { h } : {}) } })
     }
   }
   const ids = new Set(cards.map((k) => k.id))

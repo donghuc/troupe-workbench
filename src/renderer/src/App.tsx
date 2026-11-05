@@ -10,7 +10,6 @@ import InstructionsEditor from './components/InstructionsEditor'
 import ProvidersModal from './components/ProvidersModal'
 import ContextManager from './components/ContextManager'
 import MemoryEditor from './components/MemoryEditor'
-import SkillsView from './components/SkillsView'
 import { sendMessage, setActiveConversation } from './turnsStore'
 import { loadModelLists } from './models'
 import type { Tab as SettingsTab } from './components/SettingsModal'
@@ -64,7 +63,6 @@ export default function App() {
   const [editingInstructions, setEditingInstructions] = useState(false)
   const [editingMemory, setEditingMemory] = useState(false)
   const [memoryAppend, setMemoryAppend] = useState<string | null>(null)
-  const [showSkills, setShowSkills] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('general')
   // Any view can open Settings on a tab (D-077: the side panel's "Manage" → Tools).
@@ -102,11 +100,11 @@ export default function App() {
   // change is a step in a per-window history that Back/Forward walk.
   const [sidebarHidden, setSidebarHidden] = useState<boolean>(() => { try { return localStorage.getItem(SIDEBAR_HIDDEN_KEY) === '1' } catch { return false } })
   useEffect(() => { try { localStorage.setItem(SIDEBAR_HIDDEN_KEY, sidebarHidden ? '1' : '0') } catch { /* storage unavailable */ } }, [sidebarHidden])
-  type Loc = { p: string | null; c: string | null; b: boolean; v: 'notes' | 'memory' | 'schedules' | 'skills' | 'image' | null }
-  const locKey = JSON.stringify({ p: activeProjectId, c: activeConversationId, b: browsing, v: showNotes ? 'notes' : showMemory ? 'memory' : showSchedules ? 'schedules' : showSkills ? 'skills' : showImage ? 'image' : null } satisfies Loc)
+  type Loc = { p: string | null; c: string | null; b: boolean; v: 'notes' | 'memory' | 'schedules' | 'image' | null }
+  const locKey = JSON.stringify({ p: activeProjectId, c: activeConversationId, b: browsing, v: showNotes ? 'notes' : showMemory ? 'memory' : showSchedules ? 'schedules' : showImage ? 'image' : null } satisfies Loc)
   const applyLoc = (key: string) => {
     const l = JSON.parse(key) as Loc
-    setShowNotes(l.v === 'notes'); setShowMemory(l.v === 'memory'); setShowSchedules(l.v === 'schedules'); setShowSkills(l.v === 'skills'); setShowImage(l.v === 'image')
+    setShowNotes(l.v === 'notes'); setShowMemory(l.v === 'memory'); setShowSchedules(l.v === 'schedules'); setShowImage(l.v === 'image');
     if (l.p !== activeProjectId) { setActiveProjectId(l.p); if (l.c) setPendingOpenConv(l.c) }
     else { setActiveConversationId(l.c); setBrowsing(l.b) }
   }
@@ -162,13 +160,13 @@ export default function App() {
   }, [conversations, pendingOpenConv])
 
   const openConversation = (projectId: string, convId: string) => {
-    setShowNotes(false); setShowMemory(false); setShowSchedules(false); setShowSkills(false); setShowImage(false)
+    setShowNotes(false); setShowMemory(false); setShowSchedules(false); setShowImage(false)
     if (projectId === activeProjectId) { setBrowsing(false); setActiveConversationId(convId) }
     else { setActiveProjectId(projectId); touch(projectId); setPendingOpenConv(convId) }
   }
 
-  const selectProject = (id: string | null) => { setShowNotes(false); setShowMemory(false); setShowSchedules(false); setShowSkills(false); setShowImage(false); setActiveProjectId(id); setActiveConversationId(null); setBrowsing(false) }
-  const openProject = (id: string) => { setShowNotes(false); setShowMemory(false); setShowSchedules(false); setShowSkills(false); setShowImage(false); setActiveProjectId(id); touch(id) }
+  const selectProject = (id: string | null) => { setShowNotes(false); setShowMemory(false); setShowSchedules(false); setShowImage(false); setActiveProjectId(id); setActiveConversationId(null); setBrowsing(false) }
+  const openProject = (id: string) => { setShowNotes(false); setShowMemory(false); setShowSchedules(false); setShowImage(false); setActiveProjectId(id); touch(id) }
 
   // "Run now" a scheduled task interactively: make the thread, open it, and dispatch
   // through the normal run pipeline so the user sees it stream live.
@@ -266,7 +264,7 @@ export default function App() {
     setActiveConversationId(conv.id)
   }
 
-  const selectConversation = (id: string) => { setShowNotes(false); setShowMemory(false); setShowSchedules(false); setShowSkills(false); setShowImage(false); setBrowsing(false); setActiveConversationId(id) }
+  const selectConversation = (id: string) => { setShowNotes(false); setShowMemory(false); setShowSchedules(false); setShowImage(false); setBrowsing(false); setActiveConversationId(id) }
   const renameConversation = async (id: string, title: string) => { await api.conversations.rename(id, title); refreshConvos(); refreshConvList() }
   const setPinned = async (id: string, pinned: boolean) => { await api.conversations.setPinned(id, pinned); refreshConvos(); refreshConvList() }
   const deleteConversation = async (id: string) => {
@@ -283,7 +281,7 @@ export default function App() {
   const duplicateConversation = (id: string) => branchConversation(id, null)
   const noteHeading = (n: Note) => (n.title.trim() || n.body.trim().split('\n')[0] || 'Untitled note').slice(0, 60)
   const noteToChat = async (note: Note, projectId: string) => {
-    setShowNotes(false); setShowMemory(false); setShowSchedules(false); setShowSkills(false); setShowImage(false)
+    setShowNotes(false); setShowMemory(false); setShowSchedules(false); setShowImage(false)
     const conv = await api.conversations.create(projectId, titleFrom(noteHeading(note)), 'claude-code')
     if (projectId === activeProjectId) await refreshConvos()
     refreshConvList()
@@ -291,7 +289,7 @@ export default function App() {
     if (note.body.trim()) setPendingSend({ text: note.body, provider: 'claude-code' })
   }
   const noteToProject = async (note: Note) => {
-    setShowNotes(false); setShowMemory(false); setShowSchedules(false); setShowSkills(false); setShowImage(false)
+    setShowNotes(false); setShowMemory(false); setShowSchedules(false); setShowImage(false)
     const proj = await create({ name: noteHeading(note) })
     if (note.body.trim()) await update(proj.id, { instructions: note.body })
     openProject(proj.id)
@@ -308,7 +306,6 @@ export default function App() {
     if (showNotes) return <span className="crumb-current">Notes</span>
     if (showMemory) return <span className="crumb-current">Memory</span>
     if (showSchedules) return <span className="crumb-current">Tasks</span>
-    if (showSkills) return <span className="crumb-current">Skills</span>
     if (showImage) return <span className="crumb-current">Image</span>
     if (!project) return <span className="crumb-current">Projects</span>
     return (
@@ -352,37 +349,34 @@ export default function App() {
         onRenameProject={renameProject}
         onDeleteProject={deleteProject}
         onReorderProjects={reorderProjects}
-        onOpenNotes={() => { setShowNotes(true); setShowMemory(false); setShowSchedules(false); setShowSkills(false); setShowImage(false); setActiveConversationId(null); setBrowsing(false) }}
+        onOpenNotes={() => { setShowNotes(true); setShowMemory(false); setShowSchedules(false); setShowImage(false); setActiveConversationId(null); setBrowsing(false) }}
         notesActive={showNotes}
-        onOpenMemory={() => { setShowMemory(true); setShowNotes(false); setShowSchedules(false); setShowSkills(false); setShowImage(false); setActiveConversationId(null); setBrowsing(false) }}
+        onOpenMemory={() => { setShowMemory(true); setShowNotes(false); setShowSchedules(false); setShowImage(false); setActiveConversationId(null); setBrowsing(false) }}
         memoryActive={showMemory}
-        onOpenTasks={() => { setShowSchedules(true); setShowNotes(false); setShowMemory(false); setShowSkills(false); setShowImage(false); setActiveConversationId(null); setBrowsing(false) }}
+        onOpenTasks={() => { setShowSchedules(true); setShowNotes(false); setShowMemory(false); setShowImage(false); setActiveConversationId(null); setBrowsing(false) }}
         tasksActive={showSchedules}
-        onOpenSkills={() => { setShowSkills(true); setShowImage(false); setShowNotes(false); setShowMemory(false); setShowSchedules(false); setActiveConversationId(null); setBrowsing(false) }}
-        skillsActive={showSkills}
-        onOpenImage={() => { setShowImage(true); setShowNotes(false); setShowMemory(false); setShowSchedules(false); setShowSkills(false); setActiveConversationId(null); setBrowsing(false) }}
+        onOpenImage={() => { setShowImage(true); setShowNotes(false); setShowMemory(false); setShowSchedules(false); setActiveConversationId(null); setBrowsing(false) }}
         imageActive={showImage}
         onOpenSettings={() => { setSettingsTab('general'); setShowSettings(true) }}
       />
       </ErrorBoundary>}
       <div className="main">
-        <ErrorBoundary label="This view" resetKey={`${activeProjectId}|${activeConversationId}|${showNotes}|${showMemory}|${showSchedules}|${showSkills}|${showImage}|${browsing}`}>
-        {!(showNotes || showMemory || showSchedules || showSkills || showImage || (project && browsing)) && <header className="main-header">{crumb()}</header>}
+        <ErrorBoundary label="This view" resetKey={`${activeProjectId}|${activeConversationId}|${showNotes}|${showMemory}|${showSchedules}|${showImage}|${browsing}`}>
+        {!(showNotes || showMemory || showSchedules || showImage || (project && browsing)) && <header className="main-header">{crumb()}</header>}
 
         {showNotes && (
           <NotesView projects={projects} onNoteToChat={noteToChat} onNoteToProject={noteToProject} />
         )}
         {showMemory && <MemoryView projects={projects} onChanged={() => refreshConvList()} />}
         {showSchedules && <Suspense fallback={null}><SchedulesView projects={projects} providers={agentList} onRun={runScheduleNow} /></Suspense>}
-        {showSkills && <SkillsView projects={projects} />}
         {(showImage || imageMounted) && <div className={showImage ? 'img-host' : 'img-host hidden'}><Suspense fallback={null}><ImageView active={showImage} /></Suspense></div>}
-        {!showNotes && !showMemory && !showSchedules && !showSkills && !showImage && !project && (
+        {!showNotes && !showMemory && !showSchedules && !showImage && !project && (
           <ProjectsOverview projects={projects} onOpen={openProject} onNew={() => setShowNew(true)} />
         )}
-        {!showNotes && !showMemory && !showSchedules && !showSkills && !showImage && project && browsing && project.folderPath && (
+        {!showNotes && !showMemory && !showSchedules && !showImage && project && browsing && project.folderPath && (
           <FilesView root={project.folderPath} onBack={() => setBrowsing(false)} />
         )}
-        {!showNotes && !showMemory && !showSchedules && !showSkills && !showImage && project && !browsing && conversation && (
+        {!showNotes && !showMemory && !showSchedules && !showImage && project && !browsing && conversation && (
           <ConversationView
             key={conversation.id}
             conversation={conversation}
@@ -395,7 +389,7 @@ export default function App() {
             onBrowseFiles={project.folderPath ? () => setBrowsing(true) : undefined}
           />
         )}
-        {!showNotes && !showMemory && !showSchedules && !showSkills && !showImage && project && !browsing && !conversation && (
+        {!showNotes && !showMemory && !showSchedules && !showImage && project && !browsing && !conversation && (
           <ProjectHome
             project={project}
             providers={agentList}

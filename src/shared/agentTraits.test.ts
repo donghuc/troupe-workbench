@@ -9,7 +9,7 @@ describe('agent traits', () => {
     expect(IMAGE_AGENTS).toEqual(['codex', 'grok', 'gemini', 'claude-code'])
     expect(isVectorAgent('claude-code')).toBe(true)
     expect(isSelfSavingAgent('grok')).toBe(true)
-    expect(agentTraits('codex')).toMatchObject({ mcpConfig: 'codex', mcpNeedsFull: true, readsFilesByShell: true, imageModelSetting: true, modelsFromCli: true })
+    expect(agentTraits('codex')).toMatchObject({ mcpConfig: 'codex', mcpNeedsFull: true, readsFilesByShell: true, modelsFromCli: true })
     expect(agentTraits('claude-code')).toMatchObject({ mcpConfig: 'claude', chrome: true, fastModel: 'haiku', autoShellSandbox: true })
     expect(agentTraits('grok')).toMatchObject({ mcpConfig: 'grok', shellOnlyInFull: true, signInOnFirstUse: true })
     expect(agentTraits('gemini')).toMatchObject({ mcpConfig: null, signInOnFirstUse: true, modelsFromCli: true })

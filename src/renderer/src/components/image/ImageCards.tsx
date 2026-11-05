@@ -6,14 +6,24 @@ import ProviderAvatar from '../ProviderAvatar'
 import { api } from '../../api'
 import { failed, notify } from '../../notices'
 import { presetsFor } from '../../models'
-import { CARD_LABEL, isVectorAgent, OUTPUT_SLOT, REF_ROLES, withRole, type Card, type RefRole, type CardView as CardDerived } from '../../../../shared/imageCanvas'
+import { cardLabel, isVectorAgent, OUTPUT_SLOT, REF_ROLES, withRole, type Card, type RefRole, type CardView as CardDerived } from '../../../../shared/imageCanvas'
 import type { ProviderId, ProviderInfo } from '../../../../shared/types'
 import type { CardUi, CardLink } from './ImageCanvas'
 import { thumbUrl, fileUrl, IMAGE_REF_TYPE } from './geometry'
 import { copyImageFile } from '../../copyImage'
 import { Button, IconButton } from '../ui/Button'
+import { SECONDS_CHOICES, DEFAULT_SECONDS, isVideo, secondsLabel } from '../../../../shared/motion'
+import MotionResult from './MotionResult'
 
-export interface RunState { runId: string; label: string; startedAt: number; hash: string }
+export interface RunState { runId: string; label: string; startedAt: number; hash: string; change?: string; outId?: string }
+
+/** Animate outputs (D-148): what an Output card holding an animation can ask of the view. */
+export interface MotionActions {
+  change: (outputId: string, file: string, text: string) => void   // "Ask for a change" → a new run on this card
+  undo: (outputId: string) => void                                 // drop the latest run, show the one before
+  save: (outputId: string, file: string) => void                   // copy into saved/<tab>/
+  exportLottie: (file: string) => void                             // save dialog → copy anywhere
+}
 
 /** What a card shows from outside itself (image perf, 2026-10): its derived view (input
  *  labels, last run, stale) plus run and import state. Plain data, kept stable when unchanged. */
@@ -35,6 +45,8 @@ export interface CardCtx {
   deleteRun: (runId: string) => void                                   // delete a version and its outputs/ folder
   addMedia: (cardId: string, files: File[]) => Promise<void>             // import images into a Media card
   addMediaRefs: (cardId: string, rels: string[]) => Promise<void>        // copy folder images (saved/, outputs/) into a Media card
+  motionAgents: ProviderInfo[]                                          // agents an Animate card offers (D-148)
+  motion: MotionActions
 }
 interface CardProps<K extends Card['kind']> { card: CardOf<K>; ui: CardUi; ctx: CardCtx; d: CardData; link: CardLink | null; lod: boolean }
 
@@ -44,7 +56,7 @@ type CardOf<K extends Card['kind']> = Extract<Card, { kind: K }>
 function Head({ card, ui, ctx, children }: { card: Card; ui: CardUi; ctx: CardCtx; children?: ReactNode }) {
   return (
     <div className="img-card-head" onPointerDown={ui.startDrag}>
-      <span className={`img-kind img-kind-${card.kind}`}>{CARD_LABEL[card.kind]}</span>
+      <span className={`img-kind img-kind-${card.kind}`}>{cardLabel(card)}</span>
       <span className="img-card-head-extra">{children}</span>
       <IconButton className="img-card-x" title="Remove card" onPointerDown={(e) => e.stopPropagation()}
         onClick={() => ctx.remove(card.id)}><Icon name="close" size="sm" /></IconButton>
@@ -76,7 +88,7 @@ function PromptCard({ card, ui, ctx, link, lod }: CardProps<'prompt'>) {
       <Head card={card} ui={ui} ctx={ctx} />
       <OutPort ui={ui} link={link} />
       {lod ? <Placeholder text={card.data.text.trim().slice(0, 80) || 'Empty prompt'} /> : <div className="img-card-body">
-        <textarea className="field-textarea img-prompt img-nowheel" placeholder="Describe the image you want…" value={card.data.text}
+        <textarea className="field-textarea img-prompt img-nowheel" placeholder="Describe the image or animation you want…" value={card.data.text}
           onChange={(e) => { const text = e.target.value; ctx.patch(card.id, (k) => (k.kind === 'prompt' ? { ...k, data: { text } } : k)) }} />
       </div>}
     </>
@@ -98,26 +110,30 @@ function MediaCard({ card, ui, ctx, d, link, lod }: CardProps<'media'>) {
     if (e.dataTransfer.files.length) { e.preventDefault(); e.stopPropagation(); void add([...e.dataTransfer.files]) }
   }
   const files = card.data.files
+  const noun = 'file'
   return (
     <>
-      <Head card={card} ui={ui} ctx={ctx}>{files.length > 0 && <span className="img-meta">{files.length} image{files.length > 1 ? 's' : ''}</span>}</Head>
+      <Head card={card} ui={ui} ctx={ctx}>{files.length > 0 && <span className="img-meta">{files.length} {noun}{files.length > 1 ? 's' : ''}</span>}</Head>
       <OutPort ui={ui} link={link} />
-      {lod ? <Placeholder text={files.length ? `${files.length} image${files.length > 1 ? 's' : ''}` : 'No images'} /> : <div className={`img-card-body img-media${over ? ' over' : ''}`}
+      {lod ? <Placeholder text={files.length ? `${files.length} ${noun}${files.length > 1 ? 's' : ''}` : `No ${noun}s`} /> : <div className={`img-card-body img-media${over ? ' over' : ''}`}
         onDragOver={(e) => { if (!accepts(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setOver(true) }} onDragLeave={() => setOver(false)} onDrop={onDrop}>
         {files.length > 0 && (
           <div className="img-thumbs">
             {files.map((f) => (
               <div key={f} className="img-thumb">
-                <img src={thumbUrl(ctx.root, f, 200)} alt="" loading="lazy" decoding="async" onClick={() => ctx.openImage(f)} />
+                {isVideo(f)
+                  ? <video className="img-thumb-video" src={fileUrl(ctx.root, f)} muted loop playsInline preload="metadata" title={f.split('/').pop()}
+                      onMouseEnter={(e) => void e.currentTarget.play().catch(() => {})} onMouseLeave={(e) => e.currentTarget.pause()} />
+                  : <img src={thumbUrl(ctx.root, f, 200)} alt="" loading="lazy" decoding="async" onClick={() => ctx.openImage(f)} />}
                 <button className="img-thumb-x" title="Remove" onClick={() => ctx.patch(card.id, (k) => (k.kind === 'media' ? { ...k, data: { files: k.data.files.filter((x) => x !== f) } } : k))}><Icon name="close" size="xs" /></button>
               </div>
             ))}
           </div>
         )}
         <button className="img-drop" onClick={() => input.current?.click()} disabled={busy}>
-          {busy ? <><span className="activity-spinner" /> Adding…</> : <><Icon name="image" size="md" /> {files.length ? 'Add more' : `Drop, paste (${OS_WORDS.mod}V) or choose images`}</>}
+          {busy ? <><span className="activity-spinner" /> Adding…</> : <><Icon name="image" size="md" /> {files.length ? 'Add more' : `Drop, paste (${OS_WORDS.mod}V) or choose images, SVG or video`}</>}
         </button>
-        <input ref={input} type="file" accept="image/*" multiple hidden onChange={(e) => { void add([...(e.target.files ?? [])]); e.target.value = '' }} />
+        <input ref={input} type="file" accept="image/*,video/*,.svg" multiple hidden onChange={(e) => { void add([...(e.target.files ?? [])]); e.target.value = '' }} />
       </div>}
     </>
   )
@@ -133,7 +149,10 @@ function ProcessorCard({ card, ui, ctx, d, link, lod }: CardProps<'processor'>) 
   const run = d.run
   useTick(!!run)
   const { agent, model, count, slots } = card.data
-  const agentOn = ctx.agents.some((a) => a.id === agent)
+  const motion = card.data.mode === 'animate'   // the Animate card (D-148)
+  const seconds = card.data.seconds ?? DEFAULT_SECONDS
+  const agents = motion ? ctx.motionAgents : ctx.agents
+  const agentOn = agents.some((a) => a.id === agent)
   const models = presetsFor(agent)
   const set = (d: Partial<CardOf<'processor'>['data']>) => ctx.patch(card.id, (k) => (k.kind === 'processor' ? { ...k, data: { ...k.data, ...d } } : k))
   const last = d.lastRun
@@ -149,7 +168,7 @@ function ProcessorCard({ card, ui, ctx, d, link, lod }: CardProps<'processor'>) 
             <div key={s} className="img-slot" data-card={card.id} data-slot={s}>
               <InPort card={card} slot={s} link={link} filled={!!v?.filled} />
               <span className={`img-slot-label truncate${v?.filled ? '' : ' empty'}`} title={label}>{i + 1}. {label}</span>
-              {v?.image && (
+              {v?.image && !motion && (
                 // D-131: what this image input is for — said to the agent next to its files.
                 <select className={`img-role${v.role && v.role !== 'any' ? ' set' : ''}`} value={v.role ?? 'any'} disabled={!!run} title="What the agent should take from these images"
                   aria-label={`Input ${i + 1} is for`} onPointerDown={(e) => e.stopPropagation()}
@@ -169,7 +188,7 @@ function ProcessorCard({ card, ui, ctx, d, link, lod }: CardProps<'processor'>) 
             <span>Agent</span>
             <select className="field-input" value={agent} disabled={!!run} onChange={(e) => set({ agent: e.target.value as ProviderId, model: '' })}>
               {!agentOn && <option value={agent}>{agent} (off)</option>}
-              {ctx.agents.map((a) => <option key={a.id} value={a.id}>{a.name}{isVectorAgent(a.id) ? ' · SVG' : ''}{a.installed ? '' : ' (not installed)'}</option>)}
+              {agents.map((a) => <option key={a.id} value={a.id}>{a.name}{!motion && isVectorAgent(a.id) ? ' · SVG' : ''}{a.installed ? '' : ' (not installed)'}</option>)}
             </select>
           </label>
           <label className="img-field">
@@ -179,14 +198,24 @@ function ProcessorCard({ card, ui, ctx, d, link, lod }: CardProps<'processor'>) 
               {models.map((m) => <option key={m.v || 'default'} value={m.v}>{m.l}</option>)}
             </select>
           </label>
-          <label className="img-field img-field-count">
-            <span>Images</span>
-            <select className="field-input" value={count} disabled={!!run} onChange={(e) => set({ count: Number(e.target.value) })}>
-              {[1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
-          </label>
+          {motion ? (
+            <label className="img-field img-field-count">
+              <span>Length</span>
+              <select className="field-input" value={seconds} disabled={!!run} title="Auto: the agent picks the natural length (one cycle for a loop)" onChange={(e) => { const v = Number(e.target.value); set({ seconds: v > 0 ? v : undefined }) }}>
+                {!SECONDS_CHOICES.includes(seconds) && <option value={seconds}>{secondsLabel(seconds)}</option>}
+                {SECONDS_CHOICES.map((n) => <option key={n} value={n}>{secondsLabel(n)}</option>)}
+              </select>
+            </label>
+          ) : (
+            <label className="img-field img-field-count">
+              <span>Images</span>
+              <select className="field-input" value={count} disabled={!!run} onChange={(e) => set({ count: Number(e.target.value) })}>
+                {[1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </label>
+          )}
         </div>
-        {isVectorAgent(agent) && <div className="img-proc-note">Claude has no image model — it draws vector illustrations (SVG), not photos.</div>}
+        {!motion && isVectorAgent(agent) && <div className="img-proc-note">Claude has no image model — it draws vector illustrations (SVG), not photos.</div>}
         {run ? (
           <div className="img-run-row">
             <span className="activity-spinner" />
@@ -233,6 +262,14 @@ function OutputCard({ card, ui, ctx, d, link, lod }: CardProps<'output'>) {
   const feedsOn = !!d.feedsOn
   const sel = new Set(feedsOn ? card.data.selected : [])
   const hint = d.hint ?? ''
+  if (d.animate) return (
+    <>
+      <Head card={card} ui={ui} ctx={ctx}>{shown && <ProviderAvatar id={shown.agent} size="sm" />}</Head>
+      <InPort card={card} slot={OUTPUT_SLOT} link={link} filled={!!proc} />
+      <OutPort ui={ui} link={link} />
+      {lod ? <Placeholder text={running ? running.label : shown?.files.length ? 'Animation' : 'No animation yet'} /> : <MotionResult card={card} ctx={ctx} d={d} />}
+    </>
+  )
   const toggle = (f: string) => ctx.patch(card.id, (k) => (k.kind === 'output'
     ? { ...k, data: { ...k.data, selected: k.data.selected.includes(f) ? k.data.selected.filter((x) => x !== f) : [...k.data.selected, f] } } : k))
   return (
@@ -250,7 +287,7 @@ function OutputCard({ card, ui, ctx, d, link, lod }: CardProps<'output'>) {
       {lod ? <Placeholder text={shown ? `${shown.files.length} image${shown.files.length === 1 ? '' : 's'}${runs.length > 1 ? ` · v${runs.length}` : ''}` : 'No images yet'} /> : <div className="img-card-body img-output" data-card={card.id} data-slot={OUTPUT_SLOT}>
         {stale && <div className="img-stale">Inputs changed since this run — run again to update.</div>}
         {running && <div className="img-generating"><span className="activity-spinner" /> {running.label}</div>}
-        {!running && !shown && <div className="img-output-empty">{proc ? 'Press Run on the Processor.' : 'Connect a Processor here.'}</div>}
+        {!running && !shown && <div className="img-output-empty">{proc ? 'Press Run on the Image card.' : 'Connect an Image or Animate card here.'}</div>}
         {shown && !shown.files.length && !running && <div className="img-run-error">{shown.error || 'No image'}</div>}
         {shown && shown.files.length > 0 && (
           <div className={`img-gallery img-nowheel${shown.files.length === 1 ? ' single' : ''}`}>

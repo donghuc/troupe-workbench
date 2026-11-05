@@ -6,17 +6,8 @@ import { promises as fsp } from 'fs'
 import { homedir } from 'os'
 import { join, basename } from 'path'
 
-// Codex's built-in image_gen tool is model-dependent: the ambiguous exec default
-// often lacks it, so image requests silently no-op and Codex confabulates success.
-// For image-generation prompts, pin a model known to carry the tool — unless the
-// caller already chose a model. Stopgap until the editable Codex model catalog lands.
-const DEFAULT_IMAGE_MODEL = 'gpt-5.6-sol' // fallback; overridable in Settings ▸ Agents (codex_image_model)
-const IMAGE_NOUN = /\b(images?|pictures?|photos?|photograph|jpe?g|png|webp|illustration|portrait|icon|logo|sprite|wallpaper|artwork|drawing|render|mockup|banner|avatar|sticker|poster|wallpapers?)\b/i
-const IMAGE_VERB = /\b(generate|create|make|draw|render|design|produce|paint|illustrate|sketch|imagine)\b/i
-function looksLikeImageRequest(text: string): boolean {
-  if (!text) return false
-  return IMAGE_VERB.test(text) && IMAGE_NOUN.test(text)
-}
+// Codex runs on the model the caller chose, else the default in ~/.codex/config.toml — also for
+// images: the old image-model pin misfired on any prompt saying "make … image" (Hien, 2026-11-05).
 import { readFileSync } from 'fs'
 import { codexDefaultModel, codexServerNames } from '../tools/codexConfig'
 import { codexMcpOffArgs } from '../../shared/projectMcp'
@@ -95,10 +86,8 @@ export class CodexProvider implements AgentProvider {
     // so each goes right after `exec`, where the next `--flag` ends its value list.
     const imageFlags = (req.images ?? []).flatMap((p) => ['--image', p])
     const base = ['exec', ...imageFlags, ...permFlags, ...webOff, ...(req.addDirs ?? []).flatMap((d) => ['--add-dir', d]), ...codexMcpOffArgs(req.mcpOff ?? [], configuredServers()), '--skip-git-repo-check', '--json']   // D-075: project's MCP servers off
-    // Pin an image-capable model only for image requests when none was chosen.
-    const imageModel = (getSetting('codex_image_model') || '').trim() || DEFAULT_IMAGE_MODEL
-    const model = req.model || (looksLikeImageRequest(req.prompt) ? imageModel : '')
-    if (model) { base.push('--model', model); if (!req.model) logInfo(`[codex] image request → pinned model ${model}`) }
+    const model = req.model || ''
+    if (model) base.push('--model', model)
     // The prompt goes over STDIN (D-060 item 3): `codex exec -` reads it from stdin,
     // which removes the ~1 MiB argv ceiling and keeps the context out of `ps`. The
     // (currently unused) resume path keeps the positional form until verified.

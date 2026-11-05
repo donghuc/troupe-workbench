@@ -10,19 +10,30 @@ import { useAgentList } from '../../agents'
 import ImageCanvas from './ImageCanvas'
 import { readBase64, type CardCtx, type CardData, type RunState } from './ImageCards'
 import SavedPanel from './SavedPanel'
-import CardPalette, { CARD_DRAG_TYPE, CARD_SHORTCUTS } from './CardPalette'
+import CardPalette, { CARD_DRAG_TYPE, CARD_SHORTCUTS, type PaletteKind } from './CardPalette'
 import CanvasTabs from './CanvasTabs'
-import { fileUrl, CARD_W, IMAGE_REF_TYPE } from './geometry'
+import { fileUrl, CARD_W, IMAGE_REF_TYPE, cardWidth } from './geometry'
 import {
   emptyCanvas, makeCard, connect, canConnect, removeCard, removeSlot, updateCard, gatherInputs, validateRun, inputsHash,
-  outputsOf, newId, isImageAgent, withoutRun, findFreeSpot, IMAGE_AGENTS, OUTPUT_SLOT, CARD_LABEL,
+  outputsOf, newId, isImageAgent, withoutRun, findFreeSpot, IMAGE_AGENTS, OUTPUT_SLOT, cardLabel, runSize, isAnimateCard, isAnimationFile, isImagePath,
   type Canvas, type Card, type CardKind, type RunRecord, type ImageRunEvent, type ImageRunDone,
   applyRunResult, type CanvasIndex, cardViews, indexCanvas, stabilize
 } from '../../../../shared/imageCanvas'
+import { MOTION_AGENTS, DEFAULT_SECONDS, isMotionAgent, isMotionAsset } from '../../../../shared/motion'
+import type { ProviderId } from '../../../../shared/types'
 
-// Image (D-088): a single open canvas, kept as canvas.json in one global folder.
-// Prompt + Media → Processor (one image agent) → Output. Sits below Projects in the sidebar.
+type LiveRun = RunState & { canvasId: string; pid: string; agent?: ProviderId; model?: string; animate?: boolean }
+const ANIM_OUTPUT = { w: 460, h: 440 }   // an animation Output starts with a roomier player; its grip resizes it
+const KEEP_GOOD_RUNS = 2   // animation Outputs: the current one + the one Undo goes back to
+/** Does this Output hold the other kind of result than `animate`? Then a run gets a fresh Output. */
+const holdsOtherKind = (k: Card, animate: boolean): boolean => k.kind === 'output' && k.data.runs.some((r) => r.files.length > 0 && r.files.some(isAnimationFile) !== animate)
+const addRunTo = (c: Canvas, outId: string, rec: RunRecord): Canvas =>
+  updateCard(c, outId, (k) => (k.kind === 'output' ? { ...k, data: { ...k.data, runs: [...k.data.runs, rec].slice(-30) } } : k))
+
+// Image (D-088): canvases kept in one global folder. Prompt + Media → an Image card (image agent)
+// or an Animate card (Lottie, D-148) → Output. Sits below Projects in the sidebar.
 export default function ImageView({ active = true }: { active?: boolean }) {
+  const store = api.image
   const [folder, setFolder] = useState<string | null | undefined>(undefined)
   const [canvas, setCanvas] = useState<Canvas>(emptyCanvas)
   const [loaded, setLoaded] = useState(false)
@@ -33,7 +44,7 @@ export default function ImageView({ active = true }: { active?: boolean }) {
   const canvasIdRef = useRef(canvasId); canvasIdRef.current = canvasId
   // Runs in flight across all canvases, by runId. A run keeps going when you switch tabs; its
   // result lands on its own canvas (on screen, or loaded from disk and saved back).
-  const [runs, setRuns] = useState<Record<string, RunState & { canvasId: string; pid: string }>>({})
+  const [runs, setRuns] = useState<Record<string, LiveRun>>({})
   const runsRef = useRef(runs); runsRef.current = runs
   // The active canvas's runs keyed by processor id — what the cards read.
   const running = useMemo(() => {
@@ -59,21 +70,23 @@ export default function ImageView({ active = true }: { active?: boolean }) {
   // In IMAGE_AGENTS order (Codex first, Claude · SVG last), so a new Processor defaults to a
   // real image generator — the app's own agent order starts with Claude.
   const agents = useMemo(() => allAgents.filter((a) => isImageAgent(a.id)).sort((a, b) => IMAGE_AGENTS.indexOf(a.id) - IMAGE_AGENTS.indexOf(b.id)), [allAgents])
+  const motionAgents = useMemo(() => allAgents.filter((a) => isMotionAgent(a.id)).sort((a, b) => MOTION_AGENTS.indexOf(a.id) - MOTION_AGENTS.indexOf(b.id)), [allAgents])
   const defaultAgent = agents[0]?.id ?? IMAGE_AGENTS[0]
+  const defaultMotionAgent = motionAgents[0]?.id ?? MOTION_AGENTS[0]
   const busyCanvases = useMemo(() => new Set(Object.values(runs).map((r) => r.canvasId)), [runs])
 
   const openCanvas = async (id: string) => {
     setLoaded(false)
     setSelectedIds([])
-    setCanvas(await api.image.load(id).catch((e: unknown) => { failed('Open canvas')(e); return emptyCanvas() }))
+    setCanvas(await store.load(id).catch((e: unknown) => { failed('Open canvas')(e); return emptyCanvas() }))
     setLoaded(true)
   }
   const load = async () => {
     setLoaded(false)
-    const f: string | null = await api.image.folder().catch(() => null)
+    const f: string | null = await store.folder().catch(() => null)
     setFolder(f)
     if (!f) return
-    const ix: CanvasIndex | undefined = await api.image.canvases().catch(failed('Open canvases'))
+    const ix: CanvasIndex | undefined = await store.canvases().catch(failed('Open canvases'))
     if (!ix) return
     setIndex(ix)
     await openCanvas(ix.active)
@@ -83,7 +96,7 @@ export default function ImageView({ active = true }: { active?: boolean }) {
   // old folder (their results would land on the wrong canvas) and open the new canvas.
   useEffect(() => {
     const onChange = () => {
-      for (const r of Object.values(runsRef.current)) void api.image.cancel(r.runId).catch(() => {})
+      for (const r of Object.values(runsRef.current)) void store.cancel(r.runId).catch(() => {})
       setRuns({})
       setIndex(null)
       pending.current = null   // never write the old canvas into the new folder (load() also cancels the pending autosave)
@@ -95,7 +108,7 @@ export default function ImageView({ active = true }: { active?: boolean }) {
 
   // Autosave (debounced) to canvas.json; flushed when leaving the view.
   const pending = useRef<{ id: string; canvas: Canvas } | null>(null)
-  const flush = () => { const p = pending.current; pending.current = null; if (p) return api.image.save(p.id, p.canvas).catch(failed('Save canvas')); return Promise.resolve() }
+  const flush = () => { const p = pending.current; pending.current = null; if (p) return store.save(p.id, p.canvas).catch(failed('Save canvas')); return Promise.resolve() }
   useEffect(() => {
     if (!loaded || !canvasId) return
     pending.current = { id: canvasId, canvas }
@@ -113,17 +126,22 @@ export default function ImageView({ active = true }: { active?: boolean }) {
       const st = runsRef.current[runId]
       if (!st) return
       setRuns((m) => { const n = { ...m }; delete n[runId]; return n })
-      const rec = { id: runId, at: new Date().toISOString(), files, ...(error ? { error } : {}), inputsHash: st.hash }
+      const rec = { id: runId, at: new Date().toISOString(), files, ...(error ? { error } : {}), inputsHash: st.hash, ...(st.change ? { change: st.change } : {}) }
       const gap = CARD_W.processor + 60
-      if (st.canvasId === canvasIdRef.current) {
+      if (st.outId) {
+        // "Ask for a change" on an animation: the new run belongs to that one Output card.
+        const full: RunRecord = { ...rec, agent: st.agent ?? 'claude-code', model: st.model ?? '' }
+        if (st.canvasId === canvasIdRef.current) setCanvas((c) => addRunTo(c, st.outId!, full))
+        else void store.load(st.canvasId).then((c) => store.save(st.canvasId, addRunTo(c, st.outId!, full))).catch(failed('Save run result'))
+      } else if (st.canvasId === canvasIdRef.current) {
         setCanvas((c) => applyRunResult(c, st.pid, rec, gap))
       } else {
         // Finished on a canvas that isn't on screen: update its file directly.
-        void api.image.applyRunResult(st.canvasId, st.pid, rec, gap).catch(failed('Save run result'))
+        void store.applyRunResult(st.canvasId, st.pid, rec, gap).catch(failed('Save run result'))
         const name = indexRef.current?.tabs.find((t) => t.id === st.canvasId)?.name
-        if (!error && name) notify(`Images ready in “${name}”`)
+        if (!error && name) notify(`${st.animate ? 'Animation' : 'Images'} ready in “${name}”`)
       }
-      if (error && error !== 'Stopped' && !files.length) notify(`Image run failed: ${error.slice(0, 160)}`)
+      if (error && error !== 'Stopped' && !files.length) notify(`${st.animate ? 'Animation' : 'Image'} run failed: ${error.slice(0, 160)}`)
     })
     return () => { offEv(); offDone() }
   }, [])
@@ -140,13 +158,16 @@ export default function ImageView({ active = true }: { active?: boolean }) {
     const v = canvasRef.current.view
     const cx = ((r ? r.width / 2 : 400) - v.x) / v.zoom - CARD_W[kind] / 2
     const cy = ((r ? r.height / 2 : 300) - v.y) / v.zoom - 120
-    const taken = canvasRef.current.cards.map((k) => ({ x: k.x, y: k.y, w: CARD_W[k.kind], h: heights.get(k.id) ?? 240 }))
+    const taken = canvasRef.current.cards.map((k) => ({ x: k.x, y: k.y, w: cardWidth(k), h: heights.get(k.id) ?? 240 }))
     const p = findFreeSpot(taken, { x: Math.round(cx), y: Math.round(cy) }, { w: CARD_W[kind], h: 240 })
     return { x: Math.round(p.x), y: Math.round(p.y) }
   }
-  const addCard = (kind: CardKind, at?: { x: number; y: number }) => {
+  const sized = (k: Card): Card => (k.kind === 'output' ? { ...k, data: { ...k.data, w: ANIM_OUTPUT.w, h: ANIM_OUTPUT.h } } : k)
+  const addCard = (pk: PaletteKind, at?: { x: number; y: number }) => {
+    const animate = pk === 'animate'
+    const kind: CardKind = animate ? 'processor' : pk
     const p = at ?? spot(kind)
-    const card = makeCard(kind, Math.round(p.x), Math.round(p.y), { agent: defaultAgent })
+    const card = makeCard(kind, Math.round(p.x), Math.round(p.y), { agent: animate ? defaultMotionAgent : defaultAgent, animate })
     change((c) => ({ ...c, cards: [...c.cards, card] }))
     setSelectedIds([card.id])
   }
@@ -166,7 +187,7 @@ export default function ImageView({ active = true }: { active?: boolean }) {
       void addMediaRefsRef.current(m.id, [ref])
       return
     }
-    const kind = e.dataTransfer.getData(CARD_DRAG_TYPE) as CardKind
+    const kind = e.dataTransfer.getData(CARD_DRAG_TYPE) as PaletteKind
     if (!kind) return
     e.preventDefault()
     const r = wrap.current?.getBoundingClientRect(); const v = canvasRef.current.view
@@ -174,7 +195,9 @@ export default function ImageView({ active = true }: { active?: boolean }) {
     addCard(kind, { x: (e.clientX - r.left - v.x) / v.zoom - 20, y: (e.clientY - r.top - v.y) / v.zoom - 20 })
   }
 
-  const addTemplate = () => {
+  // The starter cards; `chain` adds the Image → Animate flow: the image Output feeds an Animate card
+  // with its own motion prompt, into a player Output.
+  const addTemplate = (chain: boolean) => {
     const { x, y } = spot()
     const a = makeCard('prompt', x - 360, y - 60)
     const b = makeCard('media', x - 380, y + 160)
@@ -186,6 +209,15 @@ export default function ImageView({ active = true }: { active?: boolean }) {
     change((c) => {
       let n: Canvas = { ...c, cards: [...c.cards, a, b, p, o] }
       n = connect(n, a.id, p.id, slot0); n = connect(n, b.id, p.id, slot1); n = connect(n, p.id, o.id, OUTPUT_SLOT)
+      if (!chain) return n
+      const mp = makeCard('prompt', x + 400, y + 380)
+      if (mp.kind === 'prompt') mp.data.text = ''
+      const q = makeCard('processor', x + 800, y - 40, { agent: defaultMotionAgent, animate: true })
+      if (q.kind === 'processor') q.data.slots.push(newId('s'))
+      const qs = q.kind === 'processor' ? q.data.slots : []
+      const o2 = sized(makeCard('output', x + 1180, y - 60))
+      n = { ...n, cards: [...n.cards, mp, q, o2] }
+      n = connect(n, o.id, q.id, qs[0]); n = connect(n, mp.id, q.id, qs[1]); n = connect(n, q.id, o2.id, OUTPUT_SLOT)
       return n
     })
   }
@@ -194,14 +226,14 @@ export default function ImageView({ active = true }: { active?: boolean }) {
 
   // Import images into a Media card (choose / drop / paste all land here).
   const addMedia = async (cardId: string, files: File[]) => {
-    const imgs = files.filter((f) => f.type.startsWith('image/'))
-    if (!imgs.length) { if (files.length) notify('Only images can be used as references.'); return }
+    const imgs = files.filter((f) => f.type.startsWith('image/') || f.type.startsWith('video/') || isMotionAsset(f.name))
+    if (!imgs.length) { if (files.length) notify('Use images, SVG or video here.'); return }
     setImporting((l) => [...l, cardId])
     try {
       const rels: string[] = []
-      for (const f of imgs) rels.push(await api.image.importMedia(await readBase64(f), f.name || 'pasted.png'))
+      for (const f of imgs) rels.push(await store.importMedia(await readBase64(f), f.name || 'pasted.png'))
       change((c) => updateCard(c, cardId, (k) => (k.kind === 'media' ? { ...k, data: { files: [...k.data.files, ...rels] } } : k)))
-    } catch (e) { failed('Add images')(e) } finally { setImporting((l) => l.filter((x) => x !== cardId)) }
+    } catch (e) { failed('Add files')(e) } finally { setImporting((l) => l.filter((x) => x !== cardId)) }
   }
 
   // An image already in the folder (dragged from the Saved panel or an Output card) is copied
@@ -213,7 +245,7 @@ export default function ImageView({ active = true }: { active?: boolean }) {
       const out: string[] = []
       for (const rel of rels) {
         const dataUrl: string = await api.files.readDataUrl(folder, rel)
-        out.push(await api.image.importMedia(dataUrl.replace(/^data:[^,]*,/, ''), rel.split('/').pop() || 'image.png'))
+        out.push(await store.importMedia(dataUrl.replace(/^data:[^,]*,/, ''), rel.split('/').pop() || 'image.png'))
       }
       change((c) => updateCard(c, cardId, (k) => (k.kind === 'media' ? { ...k, data: { files: [...k.data.files, ...out] } } : k)))
     } catch (e) { failed('Add image')(e) } finally { setImporting((l) => l.filter((x) => x !== cardId)) }
@@ -250,13 +282,13 @@ export default function ImageView({ active = true }: { active?: boolean }) {
   const ctx: CardCtx = useMemo(() => ({
     addMedia: (id, files) => addMediaRef.current(id, files),
     addMediaRefs: (id, rels) => addMediaRefsRef.current(id, rels),
-    root: folder || '', agents,
+    root: folder || '', agents, motionAgents,
     patch: (id, fn) => change((c) => updateCard(c, id, fn)),
     remove: async (id) => {
       const k = canvasRef.current.cards.find((x) => x.id === id)
       if (!k) return
       if (runningRef.current[id]) { notify('Stop the run before removing this card.'); return }
-      if (hasContent(k) && !(await confirmDialog({ title: `Remove this ${CARD_LABEL[k.kind]} card?`, message: 'Image files stay in the folder.', confirmLabel: 'Remove' }))) return
+      if (hasContent(k) && !(await confirmDialog({ title: `Remove this ${cardLabel(k)} card?`, message: 'Its files stay in the folder.', confirmLabel: 'Remove' }))) return
       change((c) => removeCard(c, id))
     },
     addSlot: (id) => change((c) => updateCard(c, id, (k) => (k.kind === 'processor' ? { ...k, data: { ...k.data, slots: [...k.data.slots, newId('s')] } } : k))),
@@ -268,19 +300,30 @@ export default function ImageView({ active = true }: { active?: boolean }) {
       const inputs = gatherInputs(c, id)
       const problem = validateRun(inputs)
       if (problem) { notify(problem); return }
-      if (!outputsOf(c, id).length) {   // every run needs somewhere to land
-        const o = makeCard('output', p.x + CARD_W.processor + 60, p.y)
-        change((cur) => connect({ ...cur, cards: [...cur.cards, o] }, id, o.id, OUTPUT_SLOT))
+      const animate = isAnimateCard(p)
+      // An Output holding the other kind (images on an Animate card, or the reverse) is
+      // disconnected and a fresh one takes its place, so one Output never mixes both.
+      const outs = outputsOf(c, id)
+      const other = outs.filter((o) => holdsOtherKind(o, animate))
+      if (other.length || !outs.length) {   // every run needs somewhere to land
+        const o = makeCard('output', p.x + CARD_W.processor + 60, p.y + (other.length ? 40 : 0))
+        const fresh = animate ? sized(o) : o
+        change((cur) => connect({ ...cur, cards: [...cur.cards, fresh], edges: cur.edges.filter((e) => !(e.from === id && other.some((x) => x.id === e.to))) }, id, fresh.id, OUTPUT_SLOT))
       }
       const { agent, model, count } = p.data
-      const hash = inputsHash(inputs, agent, model, count)
+      const seconds = p.data.seconds ?? DEFAULT_SECONDS
+      const hash = inputsHash(inputs, agent, model, runSize(p.data))
       try {
-        const runId: string = await api.image.run({ agent, model, prompt: inputs.prompt, refs: inputs.refs, groups: inputs.groups, count })
+        const runId: string = animate
+          ? await api.motion.run({ agent, model, prompt: inputs.prompt, refs: inputs.refs, seconds })
+          // An Image card takes only pictures from its inputs (an animation or a video can't be a reference).
+          : await api.image.run({ agent, model, prompt: inputs.prompt, refs: inputs.refs.filter(isImagePath), groups: inputs.groups?.map((g) => ({ ...g, refs: g.refs.filter(isImagePath) })).filter((g) => g.refs.length), count })
         const cid = canvasIdRef.current
-        if (cid) setRuns((m) => ({ ...m, [runId]: { runId, label: 'Starting…', startedAt: Date.now(), hash, canvasId: cid, pid: id } }))
+        if (cid) setRuns((m) => ({ ...m, [runId]: { runId, label: 'Starting…', startedAt: Date.now(), hash, canvasId: cid, pid: id, animate } }))
       } catch (e) { failed('Run')(e) }
     },
-    stop: (id) => { const r = runningRef.current[id]; if (r) api.image.cancel(r.runId).catch(failed('Stop')) },
+    // By card id, or by run id (an Output stops the change run filling it).
+    stop: (id) => { const r = runningRef.current[id] ?? Object.values(runningRef.current).find((x) => x.runId === id); if (r) store.cancel(r.runId).catch(failed('Stop')) },
     openImage: (rel) => setViewing(rel),
     toggleSaved: async (outputId, rel, hint) => {
       const o = canvasRef.current.cards.find((k) => k.id === outputId)
@@ -294,7 +337,7 @@ export default function ImageView({ active = true }: { active?: boolean }) {
       try {
         const cur = o.data.saved[rel]
         if (cur) { await api.image.unsaveImage(cur); setLink(null) }
-        else { const dest: string = await api.image.saveImage(rel, hint); setLink(dest); notify(`Saved to ${dest}`) }
+        else { const dest: string = await api.image.saveImage(rel, hint, canvasIdRef.current ?? ''); setLink(dest); notify(`Saved to ${dest}`) }
         setSavedVersion((v) => v + 1)
       } catch (e) { failed('Save image')(e) }
     },
@@ -304,11 +347,77 @@ export default function ImageView({ active = true }: { active?: boolean }) {
       const savedCount = owners.reduce((n, k) => n + (k.kind === 'output' ? (k.data.runs.find((r) => r.id === runId)?.files ?? []).filter((f) => k.data.saved[f]).length : 0), 0)
       if (!(await confirmDialog({ title: 'Delete this version?', message: `Its images are removed from outputs/.${savedCount ? ` ${savedCount} saved cop${savedCount > 1 ? 'ies stay' : 'y stays'} in saved/.` : ''}`, confirmLabel: 'Delete' }))) return
       try {
-        await api.image.deleteRun(runId, canvasIdRef.current ?? '')
+        await store.deleteRun(runId, canvasIdRef.current ?? '')
         change((cur) => ({ ...cur, cards: cur.cards.map((k) => withoutRun(k, runId)) }))
       } catch (e) { failed('Delete version')(e) }
+    },
+    motion: {
+      change: async (outId, file, text) => {
+        const c = canvasRef.current
+        const o = c.cards.find((k) => k.id === outId)
+        if (!o || o.kind !== 'output' || runningRef.current[outId]) return
+        const e = c.edges.find((x) => x.to === outId && x.slot === OUTPUT_SLOT)
+        const p = c.cards.find((k) => k.id === e?.from)
+        const last = [...o.data.runs].reverse().find((r) => r.files.length)
+        const agent = p?.kind === 'processor' ? p.data.agent : last?.agent
+        const model = p?.kind === 'processor' ? p.data.model : last?.model ?? ''
+        const seconds = p?.kind === 'processor' ? p.data.seconds ?? DEFAULT_SECONDS : DEFAULT_SECONDS
+        if (!agent) return
+        try {
+          const runId: string = await api.motion.run({ agent, model, prompt: '', refs: [], seconds, base: file, change: text })
+          const cid = canvasIdRef.current
+          if (cid) setRuns((m) => ({ ...m, [runId]: { runId, label: 'Changing the animation…', startedAt: Date.now(), hash: last?.inputsHash ?? '', canvasId: cid, pid: outId, outId, change: text, agent, model, animate: true } }))
+        } catch (err) { failed('Ask for a change')(err) }
+      },
+      undo: (outId) => {
+        const c = canvasRef.current
+        const o = c.cards.find((k) => k.id === outId)
+        if (!o || o.kind !== 'output' || o.data.runs.length < 2 || runningRef.current[outId]) return
+        const last = o.data.runs[o.data.runs.length - 1]
+        const elsewhere = c.cards.some((k) => k.id !== outId && k.kind === 'output' && k.data.runs.some((r) => r.id === last.id))
+        change((cur) => updateCard(cur, outId, (k) => withoutRun(k, last.id)))
+        if (!elsewhere) void store.deleteRun(last.id, canvasIdRef.current ?? '').catch(() => {})
+      },
+      save: async (outId, file) => {
+        try {
+          const dest: string = await api.image.saveImage(file, prevDerived.current?.get(outId)?.hint ?? '', canvasIdRef.current ?? '')
+          change((c) => updateCard(c, outId, (k) => (k.kind === 'output' ? { ...k, data: { ...k.data, saved: { ...k.data.saved, [file]: dest } } } : k)))
+          notify(`Saved to ${dest}`)
+          setSavedVersion((v) => v + 1)
+        } catch (e) { failed('Save animation')(e) }
+      },
+      exportLottie: async (file) => {
+        const name = indexRef.current?.tabs.find((t) => t.id === canvasIdRef.current)?.name ?? 'animation'
+        const to = await api.motion.exportLottie(file, name).catch(failed('Export'))
+        if (to) notify(`Exported to ${to}`)
+      }
     }
-  }), [folder, agents])
+  }), [folder, agents, motionAgents])
+
+  // An animation Output keeps its current animation and the one Undo goes back to; older runs'
+  // folders are deleted (unless another card still shows them). Image Outputs keep every version.
+  const isAnimOutput = (k: Card) => k.kind === 'output' && k.data.runs.some((r) => r.files.some(isAnimationFile))
+  useEffect(() => {
+    if (!loaded) return
+    const drop = new Set<string>()
+    for (const k of canvas.cards) {
+      if (k.kind !== 'output' || !isAnimOutput(k) || runningRef.current[k.id]) continue
+      const good = k.data.runs.map((r, i) => (r.files.length ? i : -1)).filter((i) => i >= 0)
+      if (good.length <= KEEP_GOOD_RUNS) continue
+      for (const r of k.data.runs.slice(0, good[good.length - KEEP_GOOD_RUNS])) drop.add(r.id)
+    }
+    if (!drop.size) return
+    // Drop per card first; delete a folder only when no card refers to that run any more.
+    const next = canvas.cards.map((k) => {
+      if (k.kind !== 'output' || !isAnimOutput(k)) return k
+      const good = k.data.runs.map((r, i) => (r.files.length ? i : -1)).filter((i) => i >= 0)
+      if (good.length <= KEEP_GOOD_RUNS || runningRef.current[k.id]) return k
+      return k.data.runs.slice(0, good[good.length - KEEP_GOOD_RUNS]).reduce((acc, r) => withoutRun(acc, r.id), k as Card)
+    })
+    const still = new Set(next.flatMap((k) => (k.kind === 'output' ? k.data.runs.map((r) => r.id) : [])))
+    setCanvas((c) => ({ ...c, cards: c.cards.map((k) => next.find((n) => n.id === k.id) ?? k) }))
+    for (const id of drop) if (!still.has(id) && !runsRef.current[id]) void store.deleteRun(id, canvasIdRef.current ?? '').catch(() => {})
+  }, [canvas.cards, loaded])
 
   // Delete / Backspace removes the selected card (same confirm as its ✕ when it has content);
   // Escape deselects. Ignored while typing in a field or when a dialog/lightbox is open.
@@ -345,6 +454,7 @@ export default function ImageView({ active = true }: { active?: boolean }) {
     for (const [id, v] of views) {
       const k = ix.byId.get(id)
       if (k?.kind === 'processor' && running[id]) views.set(id, { ...v, run: running[id] })
+      else if (k?.kind === 'output' && running[id]) views.set(id, { ...v, run: running[id] })   // Motion: a change run on this Result
       else if (k?.kind === 'output' && v.procId && running[v.procId]) views.set(id, { ...v, run: running[v.procId] })
       else if (k?.kind === 'media' && busy.has(id)) views.set(id, { ...v, busy: true })
     }
@@ -385,7 +495,7 @@ export default function ImageView({ active = true }: { active?: boolean }) {
   const switchTo = async (id: string) => {
     if (id === canvasIdRef.current) return
     await flush()
-    const ix: CanvasIndex | undefined = await api.image.setActive(id).catch(failed('Switch canvas'))
+    const ix: CanvasIndex | undefined = await store.setActive(id).catch(failed('Switch canvas'))
     if (!ix) return
     setIndex(ix)
     await openCanvas(ix.active)
@@ -396,24 +506,24 @@ export default function ImageView({ active = true }: { active?: boolean }) {
     setIndex(ix)
     if (changed) await openCanvas(ix.active)
   }
-  const createCanvas = async () => { await flush(); await afterIndexChange(await api.image.createCanvas(canvasIdRef.current ?? undefined).catch(failed('New canvas'))) }
-  const duplicateCanvas = async (id: string) => { await flush(); await afterIndexChange(await api.image.duplicateCanvas(id).catch(failed('Duplicate canvas'))) }
-  const renameCanvas = async (id: string, name: string) => { const ix = await api.image.renameCanvas(id, name).catch(failed('Rename canvas')); if (ix) setIndex(ix) }
+  const createCanvas = async () => { await flush(); await afterIndexChange(await store.createCanvas(canvasIdRef.current ?? undefined).catch(failed('New canvas'))) }
+  const duplicateCanvas = async (id: string) => { await flush(); await afterIndexChange(await store.duplicateCanvas(id).catch(failed('Duplicate canvas'))) }
+  const renameCanvas = async (id: string, name: string) => { const ix = await store.renameCanvas(id, name).catch(failed('Rename canvas')); if (ix) setIndex(ix) }
   const nameOf = (id: string) => index?.tabs.find((t) => t.id === id)?.name ?? 'this canvas'
   const clearCanvas = async (id: string) => {
     if (busyCanvases.has(id)) { notify('Stop the running images on that canvas before clearing it.'); return }
     if (!(await confirmDialog({ title: `Clear “${nameOf(id)}”?`, message: 'Every card is removed. Your images stay in the folder, and the old canvas is kept in .history/.', confirmLabel: 'Clear' }))) return
     if (id === canvasIdRef.current) {
       pending.current = null
-      const c: Canvas | undefined = await api.image.clear(id).catch(failed('Clear canvas'))
+      const c: Canvas | undefined = await store.clear(id).catch(failed('Clear canvas'))
       if (c) { setSelectedIds([]); setCanvas(c) }
-    } else await api.image.clear(id).catch(failed('Clear canvas'))
+    } else await store.clear(id).catch(failed('Clear canvas'))
   }
   const deleteCanvas = async (id: string) => {
     if (busyCanvases.has(id)) { notify('Stop the running images on that canvas before deleting it.'); return }
     if (!(await confirmDialog({ title: `Delete “${nameOf(id)}”?`, message: 'Its images stay in the folder, and the canvas is kept in .history/.', confirmLabel: 'Delete' }))) return
     if (id === canvasIdRef.current) pending.current = null   // don't write it back after deleting
-    await afterIndexChange(await api.image.deleteCanvas(id).catch(failed('Delete canvas')))
+    await afterIndexChange(await store.deleteCanvas(id).catch(failed('Delete canvas')))
   }
 
   // Zoom around the middle of the visible canvas, so what you're looking at stays put.
@@ -449,7 +559,7 @@ export default function ImageView({ active = true }: { active?: boolean }) {
         <div className="img-gate">
           <div className="img-gate-icon"><Icon name="image" size="xl" /></div>
           <h2>Connect a folder to use Image</h2>
-          <p>Image keeps the canvas, your reference images and every generated image in one folder on your {OS_WORDS.computer}, so nothing is lost when you clear the canvas. Choose it in Settings ▸ Image.</p>
+          <p>Image keeps the canvases, your references, and every generated image and animation in one folder on your {OS_WORDS.computer}, so nothing is lost when you clear the canvas. Choose it in Settings ▸ Image.</p>
           <Button variant="primary" onClick={() => openSettings('image')}><Icon name="settings" size="md" /> Open Settings ▸ Image</Button>
         </div>
       )}
@@ -471,8 +581,11 @@ export default function ImageView({ active = true }: { active?: boolean }) {
             onSelect={setSelectedIds}
             empty={
               <div className="img-empty">
-                <p>Add a Prompt and Media, feed them into a Processor, and see the result in an Output.</p>
-                <Button variant="primary" onClick={addTemplate}><Icon name="plus" size="sm" /> Start with Prompt → Processor → Output</Button>
+                <p>Feed a Prompt and Media into an Image card to make pictures, or into an Animate card to make a Lottie animation — or connect an image Output into Animate to bring it to life.</p>
+                <div className="img-empty-actions">
+                  <Button variant="primary" onClick={() => addTemplate(false)}><Icon name="plus" size="sm" /> Prompt → Image → Output</Button>
+                  <Button onClick={() => addTemplate(true)}><Icon name="film" size="sm" /> Image → Animate</Button>
+                </div>
                 {!agents.length && <p className="img-empty-warn">No agent that can make images is on. Turn on Codex, Grok, Gemini or Claude in Settings ▸ Agents.</p>}
               </div>
             }

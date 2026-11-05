@@ -103,3 +103,15 @@ describe('canvases on disk', () => {
     expect(readdirSync(join(folder, 'canvases')).filter((n) => n.endsWith('.tmp'))).toEqual([])
   })
 })
+
+describe('Saves per tab (D-148)', () => {
+  it('copies images and animations into saved/<tab name>/, a safe folder name', async () => {
+    const ix = await svc.renameCanvas((await svc.canvasIndex()).active, 'Leaves: v2 / draft')
+    mkdirSync(join(folder, 'outputs/run-a'), { recursive: true })
+    writeFileSync(join(folder, 'outputs/run-a/animation.json'), '{}')
+    const dest = await svc.saveImage('outputs/run-a/animation.json', 'leaves', ix.active)
+    expect(dest.startsWith('saved/Leaves- v2 - draft/')).toBe(true)
+    expect(existsSync(join(folder, dest))).toBe(true)
+    expect(svc.tabFolderName('..')).toBe('Canvas')
+  })
+})

@@ -29,7 +29,7 @@ export function registerImageIpc(): void {
   handle('image.deleteCanvas', (_e, id: string) => deleteCanvas(expectString(id, 'canvas')))
   handle('image.importMedia', (_e, base64: string, name: string) => importMedia(expectString(base64, 'data'), typeof name === 'string' ? name : 'image.png'))
   handle('image.run', (e, input: ImageRunInput) => startImageRun(e.sender, input))
-  handle('image.saveImage', (_e, rel: string, hint: string) => saveImage(expectString(rel, 'path'), typeof hint === 'string' ? hint : ''))
+  handle('image.saveImage', (_e, rel: string, hint: string, canvasId?: string) => saveImage(expectString(rel, 'path'), typeof hint === 'string' ? hint : '', typeof canvasId === 'string' ? canvasId : ''))
   handle('image.unsaveImage', (_e, rel: string) => unsaveImage(expectString(rel, 'path')))
   handle('image.deleteRun', (_e, runId: string, fromCanvas?: string) => deleteRun(expectString(runId, 'runId'), typeof fromCanvas === 'string' ? fromCanvas : ''))
   handle('image.cancel', (_e, runId: string) => cancelImageRun(expectString(runId, 'runId')))

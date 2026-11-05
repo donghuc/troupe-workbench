@@ -4,6 +4,7 @@
 // agent (Codex / Grok / Gemini) with the prompt contract from shared/imageCanvas.ts —
 // the agents aren't image APIs, so after the run we collect what they actually saved.
 import { promises as fsp, existsSync, statSync, readFileSync } from 'fs'
+import { isMotionAsset } from '../../shared/motion'
 import { renameRetry } from '../platform/winFs'
 import { join, resolve, relative, sep, extname, basename, isAbsolute } from 'path'
 import { createHash, randomUUID } from 'crypto'
@@ -46,7 +47,7 @@ export function setImageFolder(p: string): string {
   return p
 }
 
-function requireFolder(): string {
+export function requireFolder(): string {
   const f = getImageFolder()
   if (!f) throw new Error('Connect a folder for Image first')
   return f
@@ -219,7 +220,7 @@ export function deleteCanvas(id: string): Promise<CanvasIndex> {
 export async function importMedia(base64: string, name: string): Promise<string> {
   const f = requireFolder()
   let ext = extname(name || '').toLowerCase()
-  if (!isImagePath(`x${ext}`)) ext = '.png'
+  if (!isImagePath(`x${ext}`) && !isMotionAsset(`x${ext}`)) ext = '.png'   // + SVG/video for Animate (D-148)
   const stem = (basename(name || 'image', extname(name || '')) || 'image').replace(/[^\w.-]+/g, '-').slice(0, 40) || 'image'
   const rel = `${INPUTS_DIR}/${stem}-${newId()}${ext}`
   const abs = ensureInside(f, rel)
@@ -232,16 +233,21 @@ export async function importMedia(base64: string, name: string): Promise<string>
 // outputs/ holds every run and is disposable; saved/ holds copies the user chose to keep,
 // so deleting runs never touches what was saved.
 
-/** Copy a generated image into saved/; returns the saved path (relative). */
-export async function saveImage(rel: string, hint: string): Promise<string> {
+/** A tab name as a folder name: saved files go into saved/<tab>/ (Hien, 2026-11-05). */
+export const tabFolderName = (name: string): string => name.replace(/[\\/:*?"<>|\x00-\x1f]+/g, '-').replace(/^[.\s-]+|[.\s]+$/g, '').slice(0, 60) || 'Canvas'
+
+/** Copy a generated image or animation into saved/<tab>/; returns the saved path (relative). */
+export async function saveImage(rel: string, hint: string, canvasId = ''): Promise<string> {
   const f = requireFolder()
   const src = ensureInside(f, rel)
-  if (!isImagePath(src) || !existsSync(src)) throw new Error('Image not found')
-  await fsp.mkdir(join(f, SAVED_DIR), { recursive: true })
+  if (!(isImagePath(src) || /\.json$/i.test(src)) || !existsSync(src)) throw new Error('File not found')
+  const tab = canvasId ? (await canvasIndex()).tabs.find((t) => t.id === canvasId) : undefined
+  const dir = tab ? join(f, SAVED_DIR, tabFolderName(tab.name)) : join(f, SAVED_DIR)
+  await fsp.mkdir(dir, { recursive: true })
   const name = savedName(hint || '', rel)
   const ext = extname(name), stem = name.slice(0, name.length - ext.length)
-  let dest = join(f, SAVED_DIR, name), n = 2
-  while (existsSync(dest)) dest = join(f, SAVED_DIR, `${stem}-${n++}${ext}`)
+  let dest = join(dir, name), n = 2
+  while (existsSync(dest)) dest = join(dir, `${stem}-${n++}${ext}`)
   await fsp.copyFile(src, dest)
   logInfo('[image] saved', { from: rel, to: toRel(f, dest) })
   return toRel(f, dest)
@@ -280,19 +286,19 @@ export async function deleteRun(runId: string, fromCanvas = ''): Promise<boolean
 
 // ── Runs ─────────────────────────────────────────────────────────────────────
 const live = new Map<string, { provider: AgentProvider; cancelled: boolean }>()
+/** Animate runs (D-148) share the live list, so Stop, Delete and quit treat them like image runs. */
+export const trackRun = (runId: string, entry: { provider: AgentProvider; cancelled: boolean }): void => { live.set(runId, entry) }
+export const untrackRun = (runId: string): void => { live.delete(runId) }
 
 const codexConfig = (): string => { try { return readFileSync(join(homedir(), '.codex', 'config.toml'), 'utf8') } catch { return '' } }
 const codexServers = (): string[] => codexServerNames(codexConfig())
 
 /**
- * The model a run really uses. Codex with "Default": the model in ~/.codex/config.toml,
- * passed explicitly — otherwise CodexProvider swaps in its chat image pin
- * (`codex_image_model`), which can name a model the account can't use (Hien, 2026-10-05:
- * gpt-6.1-sol → 400 "not supported when using Codex with a ChatGPT account"; gpt-6-astra
- * from his config works).
+ * The model a run really uses. Codex with "Default": the model in ~/.codex/config.toml, named
+ * explicitly so the run record shows it (Hien, 2026-11-05: images use the default model too).
  */
 function runModel(agent: string, model: string): string {
-  if (model || !agentTraits(agent).imageModelSetting) return model
+  if (model || agent !== 'codex') return model
   return codexDefaultModel(codexConfig())
 }
 
@@ -397,6 +403,7 @@ async function collect(root: string, outDir: string, sinceMs: number, reported: 
 function send(sender: WebContents, channel: string, payload: unknown) {
   if (!sender.isDestroyed()) sender.send(channel, payload)
 }
+export { send as sendToWindow }
 
 export function startImageRun(sender: WebContents, input: ImageRunInput): string {
   const root = requireFolder()

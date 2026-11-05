@@ -16,7 +16,9 @@ export const CARD_W: Record<CardKind, number> = {
 
 export interface Pt { x: number; y: number }
 
-export const outPort = (k: Card): Pt => ({ x: k.x + CARD_W[k.kind], y: k.y + HEAD_H / 2 })
+/** A card's width: fixed per kind, except a resized Motion Result (D-148). */
+export const cardWidth = (k: Card): number => (k.kind === 'output' && k.data.w ? k.data.w : CARD_W[k.kind])
+export const outPort = (k: Card): Pt => ({ x: k.x + cardWidth(k), y: k.y + HEAD_H / 2 })
 
 export function inPort(k: Card, slot: string): Pt {
   if (k.kind === 'processor') {

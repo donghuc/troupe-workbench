@@ -15,6 +15,9 @@ import { THINKING_AGENT_SETTING, THINKING_MODEL_SETTING, COMPARE_AUTO_SETTING } 
 import { MODES_SETTING, parseModeTemplates, type ModeTemplates } from '../../../shared/modes'
 import Icon from './Icon'
 import AgentsTab from './settings/AgentsTab'
+import SkillsSettings from './settings/SkillsSettings'
+import { skillEditUnsaved } from './SkillsView'
+import { confirmDialog } from './ui/ConfirmDialog'
 import ThinkingTab from './settings/ThinkingTab'
 import { CommandsTab, AboutTab } from './settings/InfoTabs'
 import { api } from '../api'
@@ -29,12 +32,13 @@ const THEMES: { v: ThemeChoice; l: string }[] = [
   { v: 'system', l: 'System' }, { v: 'light', l: 'Light' }, { v: 'dark', l: 'Dark' }
 ]
 
-export type Tab = 'general' | 'appearance' | 'conversations' | 'agents' | 'tools' | 'image' | 'thinking' | 'commands' | 'about'
+export type Tab = 'general' | 'appearance' | 'conversations' | 'agents' | 'skills' | 'tools' | 'image' | 'thinking' | 'commands' | 'about'
 const TABS: { v: Tab; l: string; icon: 'settings' | 'image' | 'copy' | 'flash' | 'grid' | 'memory' | 'file' | 'info' }[] = [
   { v: 'general', l: 'General', icon: 'settings' },
   { v: 'appearance', l: 'Appearance', icon: 'image' },
   { v: 'conversations', l: 'Conversations', icon: 'copy' },
   { v: 'agents', l: 'Agents', icon: 'flash' },
+  { v: 'skills', l: 'Skills', icon: 'flash' },   // moved from the sidebar (Hien, 2026-11-04)
   { v: 'tools', l: 'Tools', icon: 'grid' },
   { v: 'image', l: 'Image', icon: 'image' },
   { v: 'thinking', l: 'Thinking', icon: 'memory' },
@@ -61,7 +65,6 @@ export default function SettingsModal({ onClose, initialTab = 'general' }: { onC
   const [chromeAccess, setChromeAccess] = useState(false)
   const [extraModels, setExtraModelsText] = useState('')   // global "More models" (D-078)
   const [autoLists, setAutoLists] = useState<ModelLists>({})   // each agent's own list (D-076, D-079)
-  const [codexImageModel, setCodexImageModel] = useState('')
   const [globalInstr, setGlobalInstr] = useState('')
   const [theme, setTheme] = useState<ThemeChoice>('system')
   const [font, setFont] = useState(DEFAULT_CHAT_FONT)
@@ -97,7 +100,6 @@ export default function SettingsModal({ onClose, initialTab = 'general' }: { onC
     api.settings.get(CHROME_ACCESS_SETTING).then((v: string | null) => setChromeAccess(v === '1'))
     api.settings.get(EXTRA_MODELS_SETTING).then((v: string | null) => setExtraModelsText(v ?? ''))
     api.system.autoModels().then((l: ModelLists) => { setAutoLists(l); setAutoModels(l) }).catch(() => {})
-    api.settings.get('codex_image_model').then((v: string | null) => setCodexImageModel(v ?? ''))
     api.settings.get('global_instructions').then((v: string | null) => setGlobalInstr(v ?? ''))
     Promise.all([api.settings.get('theme'), api.settings.get('chat_font_px'), api.settings.get('artifact_font_px')]).then(([t, f, a]) => {
       const th = (t === 'light' || t === 'dark' || t === 'system' ? t : 'system') as ThemeChoice
@@ -142,7 +144,6 @@ export default function SettingsModal({ onClose, initialTab = 'general' }: { onC
     await api.settings.set(CLI_FULL_SETTING, cliAccess && cliFull ? '1' : '0')
     await api.settings.set(CHROME_ACCESS_SETTING, chromeAccess ? '1' : '0')
     await api.settings.set(EXTRA_MODELS_SETTING, extraModels)
-    await api.settings.set('codex_image_model', codexImageModel.trim())
     setExtraModels(extraModels) // update the live picker lists immediately
     await api.settings.set('global_instructions', globalInstr)
     await api.settings.set('theme', theme)
@@ -155,11 +156,16 @@ export default function SettingsModal({ onClose, initialTab = 'general' }: { onC
     setTimeout(() => setSaveState((st) => (st === 'saved' ? 'idle' : st)), 1600)
     } catch (e) { setSaveState('idle'); reportError('Save settings', e) }
   }
-  const cancel = () => { applyAppearance(saved.theme, saved.font, saved.artifactFont); onClose() }
+  const cancel = async () => {
+    if (skillEditUnsaved() && !(await confirmDialog({ title: 'Discard changes?', message: 'Your changes to this skill aren’t saved.', confirmLabel: 'Discard' }))) return
+    applyAppearance(saved.theme, saved.font, saved.artifactFont); onClose()
+  }
 
   return (
-    <Modal title="Settings" wide onClose={cancel} footer={<>
-      <Button onClick={cancel}>{savedOnce ? 'Close' : 'Cancel'}</Button>
+    // One size for every tab, large enough for Skills (Hien, 2026-11-05). Skills save on their
+    // own, so that tab has no Save/Cancel footer — only the skill's own "Save skill".
+    <Modal title="Settings" className="settings-modal" onClose={() => void cancel()} footer={tab === 'skills' ? undefined : <>
+      <Button onClick={() => void cancel()}>{savedOnce ? 'Close' : 'Cancel'}</Button>
       <Button variant="primary" onClick={save} disabled={saveState === 'saving'}>{saveState === 'saving' ? 'Saving…' : saveState === 'saved' ? <><Icon name="check" size="sm" /> Saved</> : 'Save'}</Button>
     </>}>
       <div className="settings-tabs">
@@ -170,7 +176,7 @@ export default function SettingsModal({ onClose, initialTab = 'general' }: { onC
             </button>
           ))}
         </nav>
-        <div className="settings-pane">
+        <div className={`settings-pane${tab === 'skills' ? ' settings-pane-full' : ''}`}>
           {tab === 'general' && (
             <Stack>
               <Field label="Global instructions" htmlFor="global-instr">
@@ -216,7 +222,7 @@ export default function SettingsModal({ onClose, initialTab = 'general' }: { onC
 
           {tab === 'agents' && (
             <AgentsTab offAgents={offAgents} toggleAgent={toggleAgent} offModels={offModels} toggleModel={toggleModel} agentStatus={agentStatus} onAgentStatus={(id, st) => setAgentStatus((p) => ({ ...p, [id]: st }))}
-              lists={lists} extraModels={extraModels} setExtraModelsText={setExtraModelsText} codexImageModel={codexImageModel} setCodexImageModel={setCodexImageModel} />
+              lists={lists} extraModels={extraModels} setExtraModelsText={setExtraModelsText} />
           )}
 
           {tab === 'tools' && (
@@ -232,6 +238,7 @@ export default function SettingsModal({ onClose, initialTab = 'general' }: { onC
 
           {tab === 'commands' && <CommandsTab />}
 
+          {tab === 'skills' && <SkillsSettings />}
           {tab === 'image' && <ImageSettings />}
 
           {tab === 'about' && <AboutTab />}

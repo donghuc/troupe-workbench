@@ -181,6 +181,8 @@ export const INVOKE_PATHS = [
   'image.saveImage',
   'image.unsaveImage',
   'image.deleteRun',
+  'motion.run',
+  'motion.exportLottie',
 
   'collab.start',
   'collab.confirmPlan',

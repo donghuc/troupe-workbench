@@ -18,6 +18,30 @@ Each version here matches a packaged build — the dmg is named
 > - Bumping rules: PATCH = fixes/small tweaks, MINOR = new features (backward-compatible),
 >   MAJOR = breaking changes or a data format users can't roll back from.
 
+## [2.20.0] - 2026-11-05
+
+### Added
+- **Animate card** on the Image canvas: makes a Lottie animation. Pick Claude, Codex or Grok and a length, connect a Prompt, Media (images, SVG or a reference video), or an image Output, and press Run. Generate an image, then connect its Output into Animate to bring it to life. The start screen has an **Image → Animate** template for that flow.
+- An Output fed by Animate becomes a player:
+  - a Mobile, Desktop or Custom frame, resizable from its corner, with a checkerboard, light or dark background;
+  - play/pause, Loop and Speed (0.25×–2×);
+  - **Ask for a change**, so the agent edits the animation (**Stop change** stops it), and **Undo** to go back one step;
+  - **Export**: save into the tab's saved folder, or Lottie (.json) anywhere.
+
+  Its controls only affect the animation; runs are stopped on the Animate card.
+- How animations are made: the agent draws the artwork first and checks it against your references, then renders and looks at its own frames while building, without starting a browser. Finally Troupe renders key frames (start, ¼, ½, ¾, end) with the same player for up to two review rounds. Troupe also measures 16 frames — artwork cut off at or very close to an edge, how much it moves, whether the loop joins — and tells the agent. Animations loop only when you ask for a loop, and words are outlined from real fonts. Runs can take up to 20 minutes.
+- Animate runs follow a motion guide adapted from [diffusionstudio/lottie](https://github.com/diffusionstudio/lottie) (MIT): easing chosen by role from named curves (never linear on organic motion), timing per kind of animation, staged beats with the focal subject leading, and a recipe picked from your brief: character/mascot (Troupe's own: rig, walk cycle, squash and stretch, overlap), loader/icon, logo, text, or SVG. The review checks a list of automatic fails, and Troupe's measurements also catch a loop that hitches at the seam.
+- Animate's **Length** defaults to **Auto**: the agent picks the natural duration (one cycle for a loop) and says what it chose; pick a fixed length to override.
+
+### Changed
+- The Processor card is now called **Image**. Media cards also take SVG and video (video is used by Animate only).
+- Saved images and animations go into `saved/<tab name>/`. Files saved earlier stay where they are, and the Saved panel lists both.
+- Codex always uses your default model (the one in its own settings) unless you pick one, for chats and Image alike; Settings ▸ Agents ▸ Codex ▸ Image model is gone.
+- **Skills** moved from the sidebar to Settings ▸ Skills: a list of skills; click one to read it, **Edit** to change it, with a single **Save skill** (the tab has no Settings Save, since skills save on their own). Leaving or closing with unsaved skill changes asks first. The Settings window is larger, the same size on every tab.
+
+### Fixed
+- Settings ▸ Image ▸ **Show** now opens the Image folder in Finder (it did nothing).
+
 ## [2.19.0] - 2026-11-02
 
 ### Added

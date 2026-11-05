@@ -1,6 +1,6 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type PointerEvent as RPointerEvent, type WheelEvent as RWheelEvent } from 'react'
 import { connectChecker, type Canvas, type Card, type CardView as CardDerived } from '../../../../shared/imageCanvas'
-import { outPort, inPort, edgePath, CARD_W, type Pt } from './geometry'
+import { outPort, inPort, edgePath, cardWidth, type Pt } from './geometry'
 import { CardView, type CardCtx } from './ImageCards'
 
 // The open canvas (D-088): pan (drag the background, or two-finger scroll), zoom
@@ -147,7 +147,7 @@ export default function ImageCanvas({ canvas, onChange, onViewCommit, ctx, deriv
         const b = toWorld(ev.clientX, ev.clientY)
         setBox({ a, b })
         const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x), y0 = Math.min(a.y, b.y), y1 = Math.max(a.y, b.y)
-        const hits = canvasRef.current.cards.filter((k) => k.x < x1 && k.x + CARD_W[k.kind] > x0 && k.y < y1 && k.y + heightOf(k) > y0).map((k) => k.id)
+        const hits = canvasRef.current.cards.filter((k) => k.x < x1 && k.x + cardWidth(k) > x0 && k.y < y1 && k.y + heightOf(k) > y0).map((k) => k.id)
         const next = [...new Set([...base, ...hits])]
         if (next.length !== selRef.current.length || next.some((id, i) => id !== selRef.current[i])) select(next)
       }, () => setBox(null))
@@ -281,7 +281,7 @@ export default function ImageCanvas({ canvas, onChange, onViewCommit, ctx, deriv
     if (ae && ae !== t && !t.closest('input, textarea, select') && ae.matches('input, textarea, select, [contenteditable="true"]')) ae.blur()
   }).current
 
-  const visible = canvas.cards.filter((k) => k.x < cull.x1 && k.x + CARD_W[k.kind] > cull.x0 && k.y < cull.y1 && k.y + heightOf(k) > cull.y0)
+  const visible = canvas.cards.filter((k) => k.x < cull.x1 && k.x + cardWidth(k) > cull.x0 && k.y < cull.y1 && k.y + heightOf(k) > cull.y0)
   const v0 = viewRef.current
 
   return (
@@ -341,7 +341,7 @@ const CardShell = memo(function CardShell({ card: k, selected, d, ui, ctx, link,
   useEffect(() => { const n = el.current; if (!n || !ro) return; ro.observe(n); return () => ro.unobserve(n) }, [ro])
   return (
     <div ref={el} data-card-id={k.id} className={`img-card img-card-${k.kind}${selected ? ' selected' : ''}${lod ? ' lod' : ''}`}
-      style={{ left: k.x, top: k.y, width: CARD_W[k.kind], ...(lod && height ? { height } : {}) }}
+      style={{ left: k.x, top: k.y, width: cardWidth(k), ...(lod && height ? { height } : {}) }}
       // Shift-click would otherwise extend the page's text selection across the cards.
       onMouseDownCapture={(e) => {
         if (e.shiftKey && !(e.target as HTMLElement).closest('input, textarea, select, [contenteditable="true"]')) { e.preventDefault(); window.getSelection()?.removeAllRanges() }

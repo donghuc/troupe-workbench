@@ -1,8 +1,7 @@
 import { Badge } from './ui/Badge'
 import { confirmDialog } from './ui/ConfirmDialog'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Icon from './Icon'
-import MasterDetail from './MasterDetail'
 import { api } from '../api'
 import type { Skill, SkillScope, Project } from '../../../shared/types'
 import { Menu, MenuItem } from './ui/Menu'
@@ -14,6 +13,13 @@ type Sel =
   | { mode: 'edit'; id: string }
   | { mode: 'new' }
   | { mode: 'draft' }
+
+// Settings ▸ Skills (Hien, 2026-11-05, after Claude's own settings): a list page, and a skill's
+// own page for reading and editing. One Save per edit ("Save skill"); the Settings footer is hidden
+// on this tab, since skills save on their own.
+let unsaved = false
+/** A skill edit or draft that hasn't been saved — Settings asks before closing. */
+export const skillEditUnsaved = (): boolean => unsaved
 
 export default function SkillsView({ projects }: { projects: Project[] }) {
   const [skills, setSkills] = useState<Skill[]>([])
@@ -62,7 +68,19 @@ export default function SkillsView({ projects }: { projects: Project[] }) {
   }
   const openNew = () => { setMenuOpen(false); setSel({ mode: 'new' }); setName(''); setDescription(''); setBody(''); setTriggers(''); setScope('global') }
   const openDraft = () => { setMenuOpen(false); setSel({ mode: 'draft' }); setPurpose(''); setDraftError(null) }
-  const cancelEdit = () => setSel(current ? { mode: 'view', id: current.id } : { mode: 'none' })
+  // What the open form started from, to know when it has unsaved changes.
+  const orig = useRef('')
+  const fields = JSON.stringify([name, description, body, triggers, scope])
+  useEffect(() => { if (sel.mode === 'edit' || sel.mode === 'new') orig.current = fields
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sel.mode, selId])
+  const dirty = ((sel.mode === 'edit' || sel.mode === 'new') && fields !== orig.current) || (sel.mode === 'draft' && !!purpose.trim() && !draftBusy)
+  useEffect(() => { unsaved = dirty; return () => { unsaved = false } }, [dirty])
+  const leave = async (to: Sel) => {
+    if (dirty && !(await confirmDialog({ title: 'Discard changes?', message: 'Your changes to this skill aren’t saved.', confirmLabel: 'Discard' }))) return
+    setSel(to)
+  }
+  const cancelEdit = () => void leave(current ? { mode: 'view', id: current.id } : { mode: 'none' })
 
   const save = async () => {
     if (!name.trim()) return
@@ -96,101 +114,116 @@ export default function SkillsView({ projects }: { projects: Project[] }) {
     </span>
   )
 
-  const header = () => {
-    if (sel.mode === 'draft') return <><span className="md-head-title">Draft with agent</span><span className="md-head-spacer" /><Button size="sm" onClick={() => setSel({ mode: 'none' })} disabled={draftBusy}>Cancel</Button><Button variant="primary" size="sm" disabled={!purpose.trim() || draftBusy} onClick={doDraft}>{draftBusy ? <><span className="activity-spinner spinner-xs" />Drafting</> : 'Draft'}</Button></>
-    if (sel.mode === 'new' || editing) return (
-      <>
-        <span className="md-head-title truncate">{editing ? name || editing.name : 'New skill'}</span>
+  // A skill that was deleted (or reset away) while open: back to the list.
+  useEffect(() => { if ((sel.mode === 'view' || sel.mode === 'edit') && skills.length && !current) setSel({ mode: 'none' }) }, [sel, skills, current])
+  const badges = (k: Skill) => <>{k.builtin && <Badge className="skill-builtin-badge">Built-in</Badge>}<Badge className="skill-scope-badge">{scopeLabel(k)}</Badge></>
+  const back = <button className="skill-back" onClick={() => void leave({ mode: 'none' })}><Icon name="chevron-left" size="sm" /> Skills</button>
+
+  // ── List ──
+  if (sel.mode === 'none') return (
+    <div className="skill-page">
+      <div className="skill-page-head">
+        <span className="skill-page-title">Skills</span>
+        <span className="skill-count">{skills.length}</span>
         <span className="md-head-spacer" />
-        <Button size="sm" onClick={editing ? cancelEdit : () => setSel({ mode: 'none' })}>Cancel</Button>
-        <Button variant="primary" size="sm" disabled={!name.trim()} onClick={save}>Save</Button>
-      </>
-    )
-    if (sel.mode === 'view' && current) return (
-      <>
-        <span className="md-head-title truncate">{current.name}</span>
-        {current.builtin && <Badge className="skill-builtin-badge">Built-in</Badge>}
-        <Badge className="skill-scope-badge">{scopeLabel(current)}</Badge>
+        <Button size="sm" onClick={openDraft}><Icon name="flash" size="sm" />Draft with agent</Button>
+        <Button size="sm" variant="primary" onClick={openNew}><Icon name="plus" size="sm" />New skill</Button>
+      </div>
+      <div className="skill-list">
+        {skills.length === 0 && <div className="md-placeholder">No skills yet.</div>}
+        {skills.map((k) => (
+          <button key={k.id} className="skill-row" onClick={() => openView(k)}>
+            <span className="skill-row-main">
+              <span className="skill-row-title"><span className="truncate">{k.name}</span>{badges(k)}</span>
+              <span className="skill-row-sub truncate">{k.description || k.body.slice(0, 140)}</span>
+            </span>
+            <Icon name="chevron-right" size="sm" className="skill-row-go" />
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+
+  // ── A skill: read ──
+  if (sel.mode === 'view' && current) return (
+    <div className="skill-page">
+      {back}
+      <div className="skill-page-head">
+        <span className="skill-page-title truncate">{current.name}</span>
+        {badges(current)}
         <span className="md-head-spacer" />
         <Button size="sm" onClick={() => openEdit(current)}><Icon name="edit" size="sm" />Edit</Button>
         {overflow(current)}
-      </>
-    )
-    return null
-  }
+      </div>
+      <div className="skill-scroll">
+        <div className="md-read-label">Description</div>
+        <div className={`md-read-text ${current.description ? '' : 'muted'}`}>{current.description || 'No description'}</div>
+        <div className="md-read-label">Instructions</div>
+        <div className={`md-read-body skill-read-body ${current.body ? '' : 'muted'}`}>{current.body || 'No instructions'}</div>
+        <div className="md-read-label">Auto-apply triggers</div>
+        <div className={`md-read-text ${current.triggers ? '' : 'muted'}`}>{current.triggers || 'None'}</div>
+        <div className="md-read-label">Scope</div>
+        <div className="md-read-text">{scopeLabel(current)}{current.builtin ? ' · Built-in (editable; reset to default from the ⋯ menu)' : ''}</div>
+      </div>
+    </div>
+  )
 
-  return (
-    <MasterDetail
-      listHeader={
-        <>
-          <Button size="sm" onClick={openNew}><Icon name="plus" size="sm" />New skill</Button>
-          <Button size="sm" onClick={openDraft}><Icon name="flash" size="sm" />Draft</Button>
-        </>
-      }
-      list={
-        <>
-          {skills.length === 0 && <div className="sidebar-empty">No skills yet.</div>}
-          {skills.map((s) => (
-            <div key={s.id} className={`md-row ${selId === s.id ? 'active' : ''}`} onClick={() => openView(s)}>
-              <div className="md-row-main">
-                <div className="truncate md-row-title">{s.name} {s.builtin && <Badge className="skill-builtin-badge">Built-in</Badge>}<Badge className="skill-scope-badge">{scopeLabel(s)}</Badge></div>
-                <div className="truncate md-row-sub">{s.description || s.body.slice(0, 100)}</div>
-              </div>
-            </div>
-          ))}
-        </>
-      }
-      header={header()}
-    >
-      {sel.mode === 'none' && <div className="md-placeholder">Select a skill, or create one.</div>}
+  // ── Draft with an agent ──
+  if (sel.mode === 'draft') return (
+    <div className="skill-page">
+      {back}
+      <div className="skill-page-head">
+        <span className="skill-page-title">Draft a skill with an agent</span>
+        <span className="md-head-spacer" />
+        <Button size="sm" onClick={() => void leave({ mode: 'none' })} disabled={draftBusy}>Cancel</Button>
+        <Button variant="primary" size="sm" disabled={!purpose.trim() || draftBusy} onClick={doDraft}>{draftBusy ? <><span className="activity-spinner spinner-xs" />Drafting</> : 'Draft skill'}</Button>
+      </div>
+      <div className="skill-editor skill-scroll">
+        <label className="field-label">Purpose</label>
+        <textarea className="field-textarea" autoFocus value={purpose} placeholder={'e.g. Review a React component for accessibility issues and list them by severity with fixes.'} onChange={(e) => setPurpose(e.target.value)} />
+        <label className="field-label">Scope</label>
+        <select className="field-input" value={draftScope} onChange={(e) => setDraftScope(e.target.value)}>
+          <option value="global">Global — all projects</option>
+          {withFolder.map((p) => <option key={p.id} value={p.id}>Project: {p.name}</option>)}
+        </select>
+        {draftError && <div className="mcp-error">⚠ {draftError}</div>}
+      </div>
+    </div>
+  )
 
-      {sel.mode === 'view' && current && (
-        <div className="md-read">
-          <div className="md-read-label">Description</div>
-          <div className={`md-read-text ${current.description ? '' : 'muted'}`}>{current.description || 'No description'}</div>
-          <div className="md-read-label">Instructions</div>
-          <div className={`md-read-body ${current.body ? '' : 'muted'}`}>{current.body || 'No instructions'}</div>
-          <div className="md-read-label">Auto-apply triggers</div>
-          <div className={`md-read-text ${current.triggers ? '' : 'muted'}`}>{current.triggers || 'None'}</div>
-          <div className="md-read-label">Scope</div>
-          <div className="md-read-text">{scopeLabel(current)}{current.builtin ? ' · Built-in (editable; reset to default from the ⋯ menu)' : ''}</div>
+  // ── New or edit ──
+  if (sel.mode === 'new' || editing) return (
+    <div className="skill-page">
+      {back}
+      <div className="skill-page-head">
+        <span className="skill-page-title truncate">{editing ? name || editing.name : 'New skill'}</span>
+        {editing && badges(editing)}
+        <span className="md-head-spacer" />
+        <Button size="sm" onClick={editing ? cancelEdit : () => void leave({ mode: 'none' })}>Cancel</Button>
+        <Button variant="primary" size="sm" disabled={!name.trim() || !dirty} onClick={save}>Save skill</Button>
+      </div>
+      <div className="skill-editor skill-form">
+        <div className="skill-form-row">
+          <label className="skill-field"><span className="field-label">Name</span>
+            <input className="field-input" autoFocus value={name} placeholder="e.g. UX review" onChange={(e) => setName(e.target.value)} /></label>
+          <label className="skill-field grow"><span className="field-label">Description</span>
+            <input className="field-input" value={description} placeholder="When to use it" onChange={(e) => setDescription(e.target.value)} /></label>
         </div>
-      )}
-
-      {sel.mode === 'draft' && (
-        <div className="skill-editor">
-          <label className="field-label">Purpose</label>
-          <textarea className="field-textarea" autoFocus value={purpose} placeholder={'e.g. Review a React component for accessibility issues and list them by severity with fixes.'} onChange={(e) => setPurpose(e.target.value)} />
-          <label className="field-label">Scope</label>
-          <select className="field-input" value={draftScope} onChange={(e) => setDraftScope(e.target.value)}>
-            <option value="global">Global — all projects</option>
-            {withFolder.map((p) => <option key={p.id} value={p.id}>Project: {p.name}</option>)}
-          </select>
-          {draftError && <div className="mcp-error">⚠ {draftError}</div>}
-        </div>
-      )}
-
-      {(sel.mode === 'new' || editing) && (
-        <div className="skill-editor">
-          <label className="field-label">Name</label>
-          <input className="field-input" autoFocus value={name} placeholder="e.g. UX review" onChange={(e) => setName(e.target.value)} />
-          <label className="field-label">Description</label>
-          <input className="field-input" value={description} placeholder="When to use it" onChange={(e) => setDescription(e.target.value)} />
-          <label className="field-label">Instructions</label>
-          <textarea className="field-textarea skill-body" value={body} placeholder="What should the AI do when this skill is applied?" onChange={(e) => setBody(e.target.value)} />
-          <label className="field-label">Auto-apply triggers</label>
-          <input className="field-input" value={triggers} placeholder="e.g. review, critique, heuristics" onChange={(e) => setTriggers(e.target.value)} />
+        <label className="skill-field skill-body-field"><span className="field-label">Instructions</span>
+          <textarea className="field-textarea skill-body" value={body} placeholder="What should the AI do when this skill is applied?" onChange={(e) => setBody(e.target.value)} /></label>
+        <div className="skill-form-row">
+          <label className="skill-field grow"><span className="field-label">Auto-apply triggers</span>
+            <input className="field-input" value={triggers} placeholder="e.g. review, critique, heuristics" onChange={(e) => setTriggers(e.target.value)} /></label>
           {!editing && (
-            <>
-              <label className="field-label">Scope</label>
+            <label className="skill-field"><span className="field-label">Scope</span>
               <select className="field-input" value={scope} onChange={(e) => setScope(e.target.value)}>
                 <option value="global">Global — all projects</option>
                 {withFolder.map((p) => <option key={p.id} value={p.id}>Project: {p.name}</option>)}
-              </select>
-            </>
+              </select></label>
           )}
         </div>
-      )}
-    </MasterDetail>
+      </div>
+    </div>
   )
+  return null
 }

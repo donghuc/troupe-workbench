@@ -26,6 +26,7 @@ import { seedAndMigrateSkills } from './skills/skillsFs'
 import { refreshSkillsWatch, stopSkillsWatch } from './skills/skillsWatcher'
 import { registerSystemIpc } from './ipc/system'
 import { registerImageIpc } from './ipc/image'
+import { registerMotionIpc } from './ipc/motion'
 import { registerVoiceIpc, releaseVoice } from './ipc/voice'
 import { cancelAllImageRuns } from './image/imageService'
 import { thumbnail, pruneThumbs, type ThumbImage } from './image/thumbs'
@@ -195,6 +196,7 @@ app.whenReady().then(() => {
   registerNoteIpc()
   registerSystemIpc()
   registerImageIpc()
+  registerMotionIpc()
   registerVoiceIpc()
   try { seedAndMigrateSkills() } catch { /* non-fatal */ }
   refreshSkillsWatch()
