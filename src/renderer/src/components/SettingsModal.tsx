@@ -211,7 +211,7 @@ export default function SettingsModal({ onClose, initialTab = 'general' }: { onC
               <Field label="Auto-compress after N messages" htmlFor="compress-n">
                 <input id="compress-n" className="field-input" type="number" min={2} value={threshold} onChange={(e) => setThreshold(e.target.value)} />
               </Field>
-              <Field label="Stop an agent run after N minutes (0 = never)" htmlFor="run-timeout" hint="Counted from the last output. Collab runs get 3×.">
+              <Field label="Stop an agent run after N minutes without output (0 = never)" htmlFor="run-timeout" hint="A run that keeps working is stopped after 4× this in total. Collab: the Planner gets 1.5×, the Maker 2×.">
                 <input id="run-timeout" className="field-input" type="number" min={0} value={runTimeout} onChange={(e) => setRunTimeout(e.target.value)} />
               </Field>
               <Field label="Warn after N minutes without output (0 = never)" htmlFor="idle-warn">

@@ -35,7 +35,7 @@ export interface RunParams {
   onEvent?: (event: AgentEvent) => void   // main-side observer (turn orchestration, D-061)
   chained?: boolean
   parallelGroup?: string
-  timeoutMs?: number       // hard deadline for this run; default from the run_timeout_min setting (D-060 item 4)
+  timeoutMs?: number       // stop after this long without output (×RUN_CEILING overall); default run_timeout_min (D-060 item 4)
   extraMetadata?: Record<string, unknown>   // merged into the saved reply's metadata (e.g. { synthesis: true }, D-081)
 }
 
@@ -43,6 +43,8 @@ export interface RunParams {
 // 0 disables. Collab passes a longer deadline explicitly.
 const DEFAULT_RUN_TIMEOUT_MIN = 15
 const DEFAULT_IDLE_WARN_MIN = 5
+/** A run that keeps producing output is still stopped after this many times the timeout. */
+const RUN_CEILING = 4
 export function runTimeoutMs(): number { return getNumberSetting('run_timeout_min', DEFAULT_RUN_TIMEOUT_MIN) * 60_000 }
 
 // Pull a useful label out of a tool's input object (file path, command, query).
@@ -156,24 +158,32 @@ export function startRun(sender: WebContents, params: RunParams): string {
     }
     const startedAt = Date.now()
     logInfo('run start', { provider: params.providerId, contextMode, conv: params.conversationId, ...(resume ? { resume } : {}) })
-    // Watchdog (D-060 item 4): a CLI that hangs must not hold the conversation busy
-    // forever. Hard deadline → cancel the provider and report a timeout error; idle
-    // warning → a status line in the lane after N minutes with no event at all.
+    // Watchdog (D-060 item 4; changed 2026-11-03): a run is stopped after N minutes WITHOUT
+    // OUTPUT (any event: text, a tool call, a status), so a run that's still working keeps
+    // going and only a stuck one is stopped. A hard ceiling of RUN_CEILING × N still ends a
+    // run that never stops producing output. The idle warning stays a status line.
     const timeoutMs = params.timeoutMs ?? runTimeoutMs()
     const idleWarnMs = getNumberSetting('run_idle_warn_min', DEFAULT_IDLE_WARN_MIN) * 60_000
     let timedOut = false
-    const deadline = timeoutMs > 0 ? setTimeout(() => {
-      timedOut = true
-      logError('run timed out', { provider: params.providerId, conv: params.conversationId, ms: timeoutMs })
-      emit({ type: 'status', message: `No response after ${Math.round(timeoutMs / 60_000)} min — stopping…` })
+    let stoppedBy: 'idle' | 'ceiling' = 'idle'
+    const mins = (ms: number): number => Math.round(ms / 60_000)
+    const stop = (why: string, ms: number) => () => {
+      timedOut = true; stoppedBy = why === 'idle' ? 'idle' : 'ceiling'
+      logError('run timed out', { provider: params.providerId, conv: params.conversationId, ms, why })
+      emit({ type: 'status', message: why === 'idle' ? `No output for ${mins(ms)} min — stopping…` : `Still running after ${mins(ms)} min — stopping…` })
       void provider.cancel().catch(() => {})
-    }, timeoutMs) : null
+    }
+    const ceiling = timeoutMs > 0 ? setTimeout(stop('ceiling', timeoutMs * RUN_CEILING), timeoutMs * RUN_CEILING) : null
+    let deadline: ReturnType<typeof setTimeout> | null = null
     let idleTimer: ReturnType<typeof setTimeout> | null = null
     const armIdle = (): void => {
+      if (timedOut) return
+      if (deadline) clearTimeout(deadline)
+      if (timeoutMs > 0) deadline = setTimeout(stop('idle', timeoutMs), timeoutMs)
       if (idleTimer) clearTimeout(idleTimer)
-      if (idleWarnMs > 0) idleTimer = setTimeout(() => emit({ type: 'status', message: `Still working — no output for ${Math.round(idleWarnMs / 60_000)} min` }), idleWarnMs)
+      if (idleWarnMs > 0 && (timeoutMs <= 0 || idleWarnMs < timeoutMs)) idleTimer = setTimeout(() => emit({ type: 'status', message: `Still working — no output for ${mins(idleWarnMs)} min` }), idleWarnMs)
     }
-    const clearWatchdog = (): void => { if (deadline) clearTimeout(deadline); if (idleTimer) clearTimeout(idleTimer) }
+    const clearWatchdog = (): void => { if (deadline) clearTimeout(deadline); if (ceiling) clearTimeout(ceiling); if (idleTimer) clearTimeout(idleTimer) }
     armIdle()
     if (handoffUsed) emit({ type: 'status', message: 'Reading the conversation…' })
     let full = ''
@@ -227,7 +237,9 @@ export function startRun(sender: WebContents, params: RunParams): string {
       if (timedOut) {
         // Killed by the deadline: the provider may end cleanly (signal exit → no error
         // event), so treat the run as failed here rather than saving it as complete.
-        const msg = `${provider.name} timed out after ${Math.round(timeoutMs / 60_000)} min with no reply.`
+        const msg = stoppedBy === 'idle'
+          ? `${provider.name} was stopped after ${mins(timeoutMs)} min without any output.`
+          : `${provider.name} was stopped: still running after ${mins(timeoutMs * RUN_CEILING)} min (the limit is ${RUN_CEILING}× the run timeout).`
         emit({ type: 'error', message: msg, fatal: true })
         const saved = full.trim()
           ? appendMessage({ conversationId: params.conversationId, role: 'assistant', provider: params.providerId, content: full, metadata: { providerSessionId, modelUsed, contextMode, partial: true, timedOut: true, actions, ...(params.parallelGroup ? { parallelGroup: params.parallelGroup } : {}), ...(params.extraMetadata ?? {}) } })

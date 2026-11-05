@@ -18,6 +18,11 @@ Each version here matches a packaged build — the dmg is named
 > - Bumping rules: PATCH = fixes/small tweaks, MINOR = new features (backward-compatible),
 >   MAJOR = breaking changes or a data format users can't roll back from.
 
+## [2.20.1] - 2026-11-05
+
+### Changed
+- An agent run is now stopped only after the set number of minutes **without any output** (Settings ▸ Conversations), so a run that's still working isn't cut off mid-task. A run that keeps going is still stopped after 4× that time in total.
+
 ## [2.20.0] - 2026-11-05
 
 ### Added
