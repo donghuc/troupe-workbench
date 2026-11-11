@@ -325,6 +325,7 @@ export default function ConversationView({ conversation, providers, pendingSend,
   const onStartCollabStable = useStableCallback((...a: Parameters<typeof startCollab>) => startCollab(...a))
   const onQuickMemoryStable = useStableCallback((line: string) => quickMemory(line))
   const onStopStable = useStableCallback(() => cancelRun(conversation.id))
+  const onAgentPickStable = useStableCallback((p: ProviderId, m: string) => { api.conversations.setAgent(conversation.id, p, m).catch(failed('Remember agent')) })
   const onPermModeStable = useStableCallback((m: PermissionMode) => { api.conversations.setPermissionMode(conversation.id, m).catch(failed('Remember permission mode')) })
 
   const idxOf = useMemo(() => { const map = new Map<string, number>(); messages.forEach((mm, i) => map.set(mm.id, i)); return map }, [messages])
@@ -508,6 +509,7 @@ export default function ConversationView({ conversation, providers, pendingSend,
               defaultModel={conversation.model ?? (pendingSend?.model || null)}
               defaultPermissionMode={permDefault}
               onPermissionModeChange={onPermModeStable}
+              onAgentPick={onAgentPickStable}
               draftKey={conversation.id}
               chatId={conversation.id}
             />

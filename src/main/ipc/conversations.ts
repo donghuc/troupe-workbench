@@ -3,13 +3,14 @@ import { handle } from './handle'
 import { writeFile } from 'fs/promises'
 import type { ProviderId, NewMessageInput } from '../../shared/types'
 import {
-  listConversations, listRecentConversations, getConversation, createConversation, renameConversation, setConversationPinned, setConversationPermissionMode, branchConversation, searchAll
+  listConversations, listRecentConversations, getConversation, createConversation, renameConversation, setConversationPinned, setConversationPermissionMode, setConversationAgent, branchConversation, searchAll
 } from '../conversations/conversationsRepo'
 import { listMessages, listMessagesSince, appendMessage, deleteMessagesFrom } from '../conversations/messagesRepo'
 import { setSetting } from '../database/settingsRepo'
 import { deleteChatWithFiles, chatAttachmentCount } from '../attachments/deleteChat'
 import { clearQueue } from '../agent/turnQueue'
-import { providerLabel } from '../../shared/providers'
+import { providerLabel, isProviderId } from '../../shared/providers'
+import { broadcastConversationsChanged } from '../agent/headless'
 
 export function registerConversationIpc(): void {
   handle('conversations.list', (_e, projectId: string) => listConversations(projectId))
@@ -23,7 +24,14 @@ export function registerConversationIpc(): void {
   handle('conversations.setPinned', (_e, id: string, pinned: boolean) => setConversationPinned(id, pinned))
   // Remember the composer's permission mode for this chat AND as the app-wide last
   // choice, so a new chat starts where the user left off.
-  handle('conversations.setPermissionMode', (_e, id: string, mode: string) => { setConversationPermissionMode(id, mode); setSetting('last_permission_mode', mode) })
+  // Both are told to every window, so the open chat list holds what was picked (it is loaded once
+  // per project; without this, switching chats and back brought the old agent/model/mode back).
+  handle('conversations.setPermissionMode', (_e, id: string, mode: string) => { setConversationPermissionMode(id, mode); setSetting('last_permission_mode', mode); broadcastConversationsChanged() })
+  handle('conversations.setAgent', (_e, id: string, provider: string, model: string | null) => {
+    if (!isProviderId(provider)) throw new Error('Unknown agent')
+    setConversationAgent(id, provider, typeof model === 'string' ? model : null)
+    broadcastConversationsChanged()
+  })
   handle('messages.list', (_e, conversationId: string) => listMessages(conversationId))
   handle('messages.since', (_e, conversationId: string, since: number) => listMessagesSince(conversationId, Number(since) || 0))
   handle('messages.deleteFrom', (_e, conversationId: string, messageId: string) => deleteMessagesFrom(conversationId, messageId))

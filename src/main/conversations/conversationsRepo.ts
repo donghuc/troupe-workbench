@@ -61,6 +61,13 @@ export function setConversationModel(id: string, model: string | null): void {
   getDb().prepare('UPDATE conversations SET model = ? WHERE id = ?').run(model, id)
 }
 
+/** The agent and model picked in a chat's composer, remembered as soon as they're picked — not
+ *  only when a message is sent — so switching chats and coming back keeps them. '' / null = the
+ *  agent's default model. Doesn't touch updated_at: picking isn't activity. */
+export function setConversationAgent(id: string, provider: ProviderId, model: string | null): void {
+  getDb().prepare('UPDATE conversations SET provider = ?, model = ? WHERE id = ?').run(provider, model || null, id)
+}
+
 export function setConversationPermissionMode(id: string, mode: string | null): void {
   getDb().prepare('UPDATE conversations SET permission_mode = ? WHERE id = ?').run(mode, id)
 }

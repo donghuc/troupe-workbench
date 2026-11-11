@@ -18,6 +18,12 @@ Each version here matches a packaged build — the dmg is named
 > - Bumping rules: PATCH = fixes/small tweaks, MINOR = new features (backward-compatible),
 >   MAJOR = breaking changes or a data format users can't roll back from.
 
+## [2.20.3] - 2026-11-11
+
+### Fixed
+- A chat keeps the agent and model you pick in its composer, including Default, as soon as you pick them. Switching to another chat and back no longer brings back the agent or model the chat had before. This also affected chats started from the CLI.
+- A chat's permission mode is kept the same way when you switch chats and come back.
+
 ## [2.20.2] - 2026-11-05
 
 ### Fixed

@@ -45,6 +45,8 @@ interface Props {
   onQuickMemory?: (line: string) => void
   onProviderChange?: (id: ProviderId) => void
   onStartCollab?: (goal: string, provider: ProviderId, permMode: PermissionMode, model?: string) => void
+  /** The user picked an agent/model in the menu ('' = default) — the chat remembers it. */
+  onAgentPick?: (provider: ProviderId, model: string) => void
   collabAvailable?: boolean
   collabBusy?: boolean
 }
@@ -57,7 +59,7 @@ const PERM_OPTS: { v: PermissionMode; l: string; d: string }[] = [
   { v: 'full', l: 'Full access', d: 'No restrictions' }
 ]
 
-function Composer({ providers, onSend, disabled, placeholder = 'How can I help you today?', autoFocus, defaultProvider, folderPath, enableSkills, defaultModel, defaultPermissionMode, onPermissionModeChange, draftKey, chatId, busy, onStop, inject, onQuickMemory, onProviderChange, onStartCollab, collabAvailable, collabBusy }: Props) {
+function Composer({ providers, onSend, disabled, placeholder = 'How can I help you today?', autoFocus, defaultProvider, folderPath, enableSkills, defaultModel, defaultPermissionMode, onPermissionModeChange, draftKey, chatId, busy, onStop, inject, onQuickMemory, onProviderChange, onStartCollab, onAgentPick, collabAvailable, collabBusy }: Props) {
   const [text, setText] = useState(() => (draftKey ? getDraft(draftKey) : ''))
   const [providerId, setProviderId] = useState<ProviderId>(defaultProvider ?? providers[0]?.id ?? 'claude-code')
   // If the chosen agent is turned off (Settings ▸ Agents, D-071), fall back to the first one that is on.
@@ -164,7 +166,7 @@ function Composer({ providers, onSend, disabled, placeholder = 'How can I help y
   const collabBlocked = collabMode && (!collabAvailable || !!collabBusy || !!busy)   // a Collab run isn't queued (D-138)
   const showCollabMention = !!onStartCollab && mentionQuery !== null && 'collab'.startsWith(mentionQuery)
 
-  const choose = (pid: ProviderId, m: string) => { setProviderId(pid); setModel(m); setPmOpen(false); setHovered(null) }
+  const choose = (pid: ProviderId, m: string) => { setProviderId(pid); setModel(m); setPmOpen(false); setHovered(null); if (pid !== providerId || m !== model) onAgentPick?.(pid, m) }
 
   // Detect an @token immediately before the caret and open the picker.
   const refreshMention = (value: string, caret: number) => {

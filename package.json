@@ -1,6 +1,6 @@
 {
   "name": "ai-workbench",
-  "version": "2.20.2",
+  "version": "2.20.3",
   "description": "Local-first workspace for multiple AI agent runtimes",
   "author": "Hien Do",
   "license": "Apache-2.0",

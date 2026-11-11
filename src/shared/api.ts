@@ -98,6 +98,8 @@ export interface WorkbenchApi {
     attachmentCount(id: string): Promise<number>
     setPinned(id: string, pinned: boolean): Promise<void>
     setPermissionMode(id: string, mode: string): Promise<void>
+    /** Remember the composer's agent and model for this chat ('' = the agent's default). */
+    setAgent(id: string, provider: ProviderId, model: string): Promise<void>
     branch(id: string, throughMessageId: string | null): Promise<Conversation>
     export(id: string): Promise<string | null>
     search(query: string): Promise<SearchHit[]>
