@@ -64,7 +64,10 @@ export class CodexProvider implements AgentProvider {
     // means Codex would otherwise run on different memory than Claude (D-055).
     // Global memory reaches Codex natively only when ~/.codex/AGENTS.md is a true
     // mirror of ~/.claude/CLAUDE.md; otherwise it's injected ahead of project memory (D-055).
-    const prompt = withPreamble(buildContextBlock('codex', req), req.prompt)
+    // The reply-block guide (D-149) goes in as developer instructions, not in the preamble:
+    // in the user message Codex treated it as background and kept writing lists (2026-11-16 test).
+    const blocksGuide = req.context?.replyBlocks
+    const prompt = withPreamble(buildContextBlock('codex', blocksGuide ? { ...req, context: { ...req.context, replyBlocks: undefined } } : req), req.prompt)
 
     // --sandbox is an exec-level flag (not global) so it must precede the `resume`
     // subcommand; --json and --skip-git-repo-check are global and may go anywhere.
@@ -85,7 +88,9 @@ export class CodexProvider implements AgentProvider {
     // Reference images (D-088, image canvas): `--image` is exec-level and takes 1+ values,
     // so each goes right after `exec`, where the next `--flag` ends its value list.
     const imageFlags = (req.images ?? []).flatMap((p) => ['--image', p])
-    const base = ['exec', ...imageFlags, ...permFlags, ...webOff, ...(req.addDirs ?? []).flatMap((d) => ['--add-dir', d]), ...codexMcpOffArgs(req.mcpOff ?? [], configuredServers()), '--skip-git-repo-check', '--json']   // D-075: project's MCP servers off
+    // A TOML basic string: JSON's escapes (\n, \", \\) are valid TOML.
+    const blocksFlags = blocksGuide ? ['-c', `developer_instructions=${JSON.stringify(blocksGuide)}`] : []
+    const base = ['exec', ...imageFlags, ...permFlags, ...webOff, ...blocksFlags, ...(req.addDirs ?? []).flatMap((d) => ['--add-dir', d]), ...codexMcpOffArgs(req.mcpOff ?? [], configuredServers()), '--skip-git-repo-check', '--json']   // D-075: project's MCP servers off
     const model = req.model || ''
     if (model) base.push('--model', model)
     // The prompt goes over STDIN (D-060 item 3): `codex exec -` reads it from stdin,

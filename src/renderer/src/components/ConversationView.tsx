@@ -10,7 +10,9 @@ import ProviderAvatar from './ProviderAvatar'
 import ContextInspector from './ContextInspector'
 import SaveToProject from './SaveToProject'
 import ArtifactViewer from './ArtifactViewer'
-import { failed, reportError, notify } from '../notices'
+import { failed, reportError, notify, SETTINGS_SAVED_EVENT } from '../notices'
+import { ReplyBlocksContext, type ReplyBlocksCtx } from './ReplyBlocks'
+import { replyBlocksOn, uiAnswerOf, REPLY_BLOCKS_SETTING } from '../../../shared/replyBlocks'
 import { quoteWithSource, selectionSource, selectionContext, type QuoteSource } from '../quoteSource'
 import { providerLabel } from '../../../shared/providers'
 import { composeWithSelections, selectionsFromMeta, type SelectionItem } from '../../../shared/selections'
@@ -326,7 +328,27 @@ export default function ConversationView({ conversation, providers, pendingSend,
   const onQuickMemoryStable = useStableCallback((line: string) => quickMemory(line))
   const onStopStable = useStableCallback(() => cancelRun(conversation.id))
   const onAgentPickStable = useStableCallback((p: ProviderId, m: string) => { api.conversations.setAgent(conversation.id, p, m).catch(failed('Remember agent')) })
-  const onPermModeStable = useStableCallback((m: PermissionMode) => { api.conversations.setPermissionMode(conversation.id, m).catch(failed('Remember permission mode')) })
+  const permNow = useRef<PermissionMode>(permDefault ?? 'auto')   // the composer's current mode, for block answers
+  const onPermModeStable = useStableCallback((m: PermissionMode) => { permNow.current = m; api.conversations.setPermissionMode(conversation.id, m).catch(failed('Remember permission mode')) })
+
+  // Reply blocks (D-149): drawn while the setting is on; a choices answer is sent as your next
+  // message to the agent that asked, saved with `uiAnswer` so the block shows it afterwards.
+  const [blocksOn, setBlocksOn] = useState(true)
+  useEffect(() => {
+    const load = () => { api.settings.get(REPLY_BLOCKS_SETTING).then((v: string | null) => setBlocksOn(replyBlocksOn(v))).catch(() => setBlocksOn(true)) }
+    load()
+    window.addEventListener(SETTINGS_SAVED_EVENT, load)
+    return () => window.removeEventListener(SETTINGS_SAVED_EVENT, load)
+  }, [])
+  // Keyed by content, so a new message without an answer doesn't re-render every reply (D-090).
+  const answersKey = useMemo(() => JSON.stringify(messages.flatMap((m) => { const a = m.role === 'user' ? uiAnswerOf(m.metadata) : null; return a ? [[`${a.messageId}#${a.blockId}`, a.values]] : [] })), [messages])
+  const blockAnswers = useMemo(() => new Map<string, string[][]>(JSON.parse(answersKey) as [string, string[][]][]), [answersKey])
+  const answerBlock = useStableCallback((messageId: string, blockId: string, text: string, values: string[][]) => {
+    const asker = messages.find((mm) => mm.id === messageId)?.provider ?? conversation.provider
+    const model = asker === conversation.provider ? conversation.model ?? undefined : undefined
+    void sendMessage(conversation.id, cwd, text, asker, undefined, undefined, model, permNow.current, { uiAnswer: { messageId, blockId, values } })
+  })
+  const blocksCtx = useMemo<ReplyBlocksCtx | null>(() => (blocksOn ? { answers: blockAnswers, answer: answerBlock } : null), [blocksOn, blockAnswers, answerBlock])
 
   const idxOf = useMemo(() => { const map = new Map<string, number>(); messages.forEach((mm, i) => map.set(mm.id, i)); return map }, [messages])
   // Group consecutive assistant messages that share a parallelGroup so blind-parallel
@@ -377,6 +399,7 @@ export default function ConversationView({ conversation, providers, pendingSend,
   )
 
   return (
+    <ReplyBlocksContext.Provider value={blocksCtx}>
     <div className={`chat-layout${openArtifact && cwd ? ' viewing-artifact' : ''}`} onContextMenu={onContextMenu} onMouseDown={() => { if (sel) setSel(null) }}>
       <div className="conversation">
         <div className="conv-scroll" ref={scrollRef} onScroll={onScroll}>
@@ -385,7 +408,7 @@ export default function ConversationView({ conversation, providers, pendingSend,
               const renderCard = (m: Message) => (
                 <div key={m.id} className="synthesis-card" data-quote-label="the comparison">
                   <div className="synthesis-head"><Icon name="flash" size="xs" /> Compare · {providerName(providers, (m.metadata?.synthesisAgent as ProviderId | undefined) ?? m.provider)}</div>
-                  <div className="msg-body markdown-body synthesis-body"><MessageMarkdown onOpenArtifact={openArtifactFn} onOpenMedia={openMedia} root={cwd}>{m.content}</MessageMarkdown></div>
+                  <div className="msg-body markdown-body synthesis-body"><MessageMarkdown onOpenArtifact={openArtifactFn} onOpenMedia={openMedia} root={cwd} blocks={{ messageId: m.id }}>{m.content}</MessageMarkdown></div>
                   <div className="synthesis-foot">
                     <span className="msg-tokens" title={usageBreakdown(m) ?? undefined}>{usageMain(m)}</span>
                     <Button type="button" variant="link" className="synthesis-save" onClick={() => setSaveOutcomeFor(m.id)}>Save outcome</Button>
@@ -546,5 +569,6 @@ export default function ConversationView({ conversation, providers, pendingSend,
       {saveOutcomeFor !== null && <SaveOutcomeModal conversationId={conversation.id} projectId={conversation.projectId} messageId={saveOutcomeFor} onClose={() => setSaveOutcomeFor(null)} onSaved={(o) => { setSaveOutcomeFor(null); notify(`Saved ${o.id} to the decisions log`) }} />}
       {saveSkill !== null && <SaveAsSkillModal content={saveSkill} cwd={cwd} onClose={() => setSaveSkill(null)} onSaved={() => setSaveSkill(null)} />}
     </div>
+    </ReplyBlocksContext.Provider>
   )
 }

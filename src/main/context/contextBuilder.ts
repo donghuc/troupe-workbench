@@ -16,6 +16,7 @@ import { renderPinnedFile, memoryWarning, staleMemoryNote, renderScheduledTask, 
 import { getScheduleByConv } from '../schedules/schedulesRepo'
 import { decisionsContext, DECISIONS_FILE } from '../../shared/decisions'
 import { listOutcomes } from './decisionsRepo'
+import { replyBlocksOn, REPLY_BLOCKS_SETTING, REPLY_BLOCK_GUIDE } from '../../shared/replyBlocks'
 
 const approxTokens = (s: string) => Math.ceil(s.length / 4)
 const preview = (s: string, n = 240) => (s.length > n ? s.slice(0, n) + '…' : s)
@@ -126,6 +127,7 @@ export function inspectContext(conversationId: string, providerId: ProviderId = 
   const decisions = decisionsContext(outcomes)
   const pinnedTask = scheduledTaskBlock(conversationId)
   const convo = conversationBlock(conversationId, 0)
+  const blocksGuide = replyBlocksOn(getSetting(REPLY_BLOCKS_SETTING)) ? REPLY_BLOCK_GUIDE : ''
 
   // Instructions live in SQLite and reach the agent only because Workbench sends them.
   const sent = (v: string): Delivery => (v ? 'injected' : 'none')
@@ -146,6 +148,7 @@ export function inspectContext(conversationId: string, providerId: ProviderId = 
     },
     { name: 'Persistent Context', text: persistent, note: pc.referenced.length ? `Sent as references, not inlined (over 8 KB): ${pc.referenced.join(', ')}` : undefined },
     { name: 'Decisions log', text: decisions, delivery: sent(decisions), source: project?.folderPath ? DECISIONS_FILE : 'Workbench database (no project folder)', always: true, note: outcomes.length ? `${outcomes.length} entries · index of the latest ${Math.min(50, outcomes.length)} + the latest ${Math.min(3, outcomes.length)} in full` : 'Nothing saved yet — use Save outcome on a reply.' },
+    { name: 'Reply blocks guide', text: blocksGuide, delivery: sent(blocksGuide), source: 'Built in (Settings ▸ Conversations)', note: blocksGuide ? undefined : 'Off in Settings ▸ Conversations.' },
     { name: 'Conversation (summary + recent)', text: convo, note: pinnedTask ? 'Starts with the scheduled task, pinned so repeat runs keep it without re-sending the prompt.' : undefined }
   ]
 

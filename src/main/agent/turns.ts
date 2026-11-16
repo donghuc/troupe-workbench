@@ -15,6 +15,7 @@ import { appendRunLog } from './runLog'
 import { encodeRunId, filesChanged } from '../../shared/cliProtocol'
 import { modelForProvider, parseDisabledModels, DISABLED_MODELS_SETTING } from '../../shared/models'
 import { getSetting } from '../database/settingsRepo'
+import { replyBlocksOn, REPLY_BLOCKS_SETTING } from '../../shared/replyBlocks'
 import { enabledProviderIds, offMessage, DISABLED_AGENTS_SETTING } from '../../shared/providers'
 import { getDb } from '../database/db'
 import { logInfo, logWarn } from '../util/logger'
@@ -213,7 +214,7 @@ function dispatch(conversationId: string, provider: ProviderId, chained: boolean
     conversationId, providerId: provider, prompt, cwd: t.cwd,
     attachments: t.attachments, skillId: t.skillId, skillIds: t.modeSkill ? [`global/${t.modeSkill}`] : undefined, permissionMode: t.permMode,
     model: modelForProvider(provider, t.model, codexExtra(), parseDisabledModels(getSetting(DISABLED_MODELS_SETTING))) || undefined,   // a model switched off falls back to the agent's default (D-072)
-    chained, parallelGroup: t.parallelGroup,
+    chained, parallelGroup: t.parallelGroup, replyBlocks: replyBlocksOn(getSetting(REPLY_BLOCKS_SETTING)),
     onEvent: (ev) => onEvent(conversationId, provider, ev, t),
     onDone: (_mid, err) => onDone(conversationId, provider, runId, err, t)
   })

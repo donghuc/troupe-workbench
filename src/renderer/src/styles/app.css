@@ -767,6 +767,45 @@ button { font-family: inherit; font-size: var(--fs-sm); border: none; background
 .copy-btn { font-size: var(--fs-xs); color: var(--text-secondary); background: var(--bg-panel); border: 1px solid var(--border-default); border-radius: var(--r-sm); padding: var(--sp-0-5) var(--sp-2); }
 .copy-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
 
+/* Reply blocks (D-149): steps, choices and sources drawn inside a reply. The reply body
+   owns the gap around a block (like a code block's); the block sets no outer margin. */
+.markdown-body > .rb { margin: var(--sp-3) 0; }
+.markdown-body > .rb-invalid { margin: 0 0 var(--sp-3); }
+.rb { border: 1px solid var(--border-subtle); border-radius: var(--r-md); background: var(--bg-panel); padding: var(--sp-3) var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-3); font-size: var(--fs-sm); }
+.rb-title { font-weight: var(--fw-semibold); color: var(--text-primary); }
+.rb-intro, .rb-note { color: var(--text-secondary); }
+.rb-pending { flex-direction: row; align-items: center; gap: var(--sp-2); color: var(--text-tertiary); }
+.rb-invalid { font-size: var(--fs-xs); color: var(--text-tertiary); }
+.rb .rb-step-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; }
+.rb .rb-step { margin: 0; display: grid; grid-template-columns: 24px 1fr; column-gap: var(--sp-3); position: relative; padding-bottom: var(--sp-3); }
+.rb .rb-step:last-child { padding-bottom: 0; }
+.rb .rb-step:not(:last-child)::before { content: ''; position: absolute; left: 11.5px; top: 26px; bottom: 2px; width: 1px; background: var(--border-default); }
+.rb-step-num { width: 24px; height: 24px; border-radius: var(--r-full); border: 1px solid var(--border-default); display: inline-flex; align-items: center; justify-content: center; font-size: var(--fs-xs); color: var(--text-secondary); background: var(--bg-app); }
+.rb-step-text { display: flex; flex-direction: column; gap: var(--sp-1); padding-top: 2px; min-width: 0; }
+.rb-step-title { font-weight: var(--fw-semibold); color: var(--text-primary); }
+.rb-step-body { color: var(--text-secondary); }
+.rb-step-body > :first-child { margin-top: 0; }
+.rb-step-body > :last-child { margin-bottom: 0; }
+.rb-group { display: flex; flex-direction: column; gap: var(--sp-0-5); min-width: 0; }
+.rb-group + .rb-group { border-top: 1px solid var(--border-subtle); padding-top: var(--sp-3); }
+.rb-group-label { font-size: var(--fs-xs); color: var(--text-tertiary); padding-bottom: var(--sp-0-5); }
+.rb-group-hint { color: var(--text-tertiary); }
+.rb-option { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-0-5) 0; color: var(--text-primary); cursor: pointer; }
+.rb-option input { width: 15px; height: 15px; accent-color: var(--ink-solid); flex: none; }
+.rb-option.locked { cursor: default; }
+.rb-answers { display: flex; flex-direction: column; gap: var(--sp-1-5); }
+.rb-answer { display: grid; grid-template-columns: minmax(120px, 40%) 1fr; column-gap: var(--sp-3); }
+.rb-answer dt { color: var(--text-tertiary); }
+.rb-answer dd { margin: 0; color: var(--text-primary); }
+.rb-actions { display: flex; align-items: center; gap: var(--sp-2); }
+.rb-actions .btn { flex: 1; justify-content: center; }
+.rb-done { font-size: var(--fs-xs); color: var(--text-tertiary); }
+.rb-sources { flex-direction: row; flex-wrap: wrap; gap: var(--sp-2); border: 0; background: none; padding: 0; }
+.rb .rb-source { display: inline-flex; align-items: baseline; gap: var(--sp-1-5); max-width: 280px; padding: var(--sp-1) var(--sp-2); border: 1px solid var(--border-default); border-radius: var(--r-full); background: var(--bg-panel); font-size: var(--fs-xs); color: var(--text-primary); text-decoration: none; }
+.rb .rb-source:hover { background: var(--bg-hover); }
+.rb-source-title { min-width: 0; }
+.rb-source-host { color: var(--text-tertiary); flex: none; }
+
 /* Composer stop button (replaces the Stop text link) */
 .send-btn.stop-btn { background: var(--ink-solid); color: var(--on-ink); }
 .send-btn.stop-btn:hover { background: var(--text-secondary); }

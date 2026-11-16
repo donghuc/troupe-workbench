@@ -10,6 +10,7 @@ export interface ProviderContext {
   attachmentsText?: string // task attachment contents for this turn (spec §29)
   skillText?: string       // selected skill body for this turn (spec §57)
   snapshot?: string        // shared conversation transcript (D-009)
+  replyBlocks?: string     // how to write reply blocks — chat turns only (D-149)
 }
 
 export type PermissionMode = 'read' | 'auto' | 'full'

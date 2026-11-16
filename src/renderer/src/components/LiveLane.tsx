@@ -43,7 +43,7 @@ function LiveLane({ lane, name, root, onOpenArtifact, onOpenMedia }: Props) {
       {lane.activity && <StreamingActivity activity={lane.activity} />}
       {shown && (
         <div className="msg-body markdown-body stream-body">
-          <MessageMarkdown onOpenArtifact={onOpenArtifact} onOpenMedia={onOpenMedia} root={root}>{shown}</MessageMarkdown>
+          <MessageMarkdown onOpenArtifact={onOpenArtifact} onOpenMedia={onOpenMedia} root={root} blocks={{ messageId: `live-${lane.provider}`, live: true }}>{shown}</MessageMarkdown>
           {!lane.done && <span className="stream-spider" aria-hidden="true">🕷️</span>}
         </div>
       )}

@@ -24,6 +24,8 @@ import { api } from '../api'
 import { SHELL_SANDBOX_SETTING, SHELL_DOMAINS_SETTING, sandboxOn, parseDomains } from '../../../shared/shellSandbox'
 import { CLI_ACCESS_SETTING, CLI_FULL_SETTING } from '../../../shared/cliProtocol'
 import { Segmented } from './ui/Segmented'
+import Switch from './settings/Switch'
+import { REPLY_BLOCKS_SETTING, replyBlocksOn } from '../../../shared/replyBlocks'
 import {
   applyAppearance, DEFAULT_CHAT_FONT, MIN_CHAT_FONT, MAX_CHAT_FONT, DEFAULT_ARTIFACT_FONT, MIN_ARTIFACT_FONT, MAX_ARTIFACT_FONT, clampArtifactFont, type ThemeChoice
 } from '../appearance'
@@ -55,6 +57,7 @@ export default function SettingsModal({ onClose, initialTab = 'general' }: { onC
   const [modeTpl, setModeTpl] = useState<ModeTemplates>(() => parseModeTemplates(null))   // D-083
   const [threshold, setThreshold] = useState('20')
   const [runTimeout, setRunTimeout] = useState('15')
+  const [replyBlocks, setReplyBlocks] = useState(true)
   const [idleWarn, setIdleWarn] = useState('5')
   const [webAccess, setWebAccess] = useState(true)
   const [shellAccess, setShellAccess] = useState(true)
@@ -83,6 +86,7 @@ export default function SettingsModal({ onClose, initialTab = 'general' }: { onC
     api.settings.get('compaction_threshold').then((v: string | null) => { if (v) setThreshold(v) })
     api.settings.get('run_timeout_min').then((v: string | null) => { if (v) setRunTimeout(v) })
     api.settings.get('run_idle_warn_min').then((v: string | null) => { if (v) setIdleWarn(v) })
+    api.settings.get(REPLY_BLOCKS_SETTING).then((v: string | null) => setReplyBlocks(replyBlocksOn(v)))
     refreshAgentStatus().then((st) => setAgentStatus(st)).catch(() => {})
     api.settings.get(DISABLED_MODELS_SETTING).then((v: string | null) => setOffModels(parseDisabledModels(v)))
     api.settings.get(DISABLED_AGENTS_SETTING).then((v: string | null) => setOffAgents(parseDisabledAgents(v)))
@@ -129,6 +133,7 @@ export default function SettingsModal({ onClose, initialTab = 'general' }: { onC
     await api.settings.set('compaction_threshold', String(Math.max(2, Number(threshold) || 20)))
     await api.settings.set('run_timeout_min', String(Math.max(0, Number(runTimeout) || 0)))
     await api.settings.set('run_idle_warn_min', String(Math.max(0, Number(idleWarn) || 0)))
+    await api.settings.set(REPLY_BLOCKS_SETTING, replyBlocks ? '1' : '0')
     await saveDisabledAgents(offAgents)
     await saveDisabledModels(offModels)
     await api.settings.set(MCP_OFF_SETTING, JSON.stringify([...mcpOff].sort()))
@@ -216,6 +221,17 @@ export default function SettingsModal({ onClose, initialTab = 'general' }: { onC
               </Field>
               <Field label="Warn after N minutes without output (0 = never)" htmlFor="idle-warn">
                 <input id="idle-warn" className="field-input" type="number" min={0} value={idleWarn} onChange={(e) => setIdleWarn(e.target.value)} />
+              </Field>
+              <Field>
+                <div className="settings-group">
+                  <div className="settings-row">
+                    <div className="settings-row-text">
+                      <div className="settings-row-title">Interactive blocks in replies</div>
+                      <div className="settings-row-sub">Agents can show plans as steps, ask you questions to answer with a click, and list their sources. Off: they aren’t told how, and blocks show as code.</div>
+                    </div>
+                    <Switch on={replyBlocks} label="Interactive blocks in replies" onChange={setReplyBlocks} />
+                  </div>
+                </div>
               </Field>
             </Stack>
           )}

@@ -15,6 +15,7 @@ import { getSkillById } from '../skills/skillsFs'
 import { getNumberSetting, getSetting } from '../database/settingsRepo'
 import { createHash } from 'crypto'
 import { resumeSession, turnCost, RESUME_SETTING, type ResumeMark } from '../../shared/resumeGuard'
+import { REPLY_BLOCK_GUIDE, scanBlocks } from '../../shared/replyBlocks'
 
 export interface RunParams {
   conversationId: string
@@ -37,6 +38,7 @@ export interface RunParams {
   parallelGroup?: string
   timeoutMs?: number       // stop after this long without output (×RUN_CEILING overall); default run_timeout_min (D-060 item 4)
   extraMetadata?: Record<string, unknown>   // merged into the saved reply's metadata (e.g. { synthesis: true }, D-081)
+  replyBlocks?: boolean    // a chat turn: the agent is told how to write reply blocks (D-149)
 }
 
 // Defaults for the run watchdog (D-060 item 4). Both are user settings (minutes);
@@ -98,12 +100,12 @@ export function startRun(sender: WebContents, params: RunParams): string {
   // with every turn. D-146: a guarded resume — when the same agent answered the message right
   // before this one and nothing else changed (see shared/resumeGuard.ts), its own session is
   // resumed instead, so the history comes from its prompt cache. A failed resume runs fresh.
-  let context: ProviderContext = { ...(params.context ?? {}), ...buildProjectContext(params.conversationId) }
+  let context: ProviderContext = { ...(params.context ?? {}), ...buildProjectContext(params.conversationId), ...(params.replyBlocks ? { replyBlocks: REPLY_BLOCK_GUIDE } : {}) }
   const skillIds = [...(params.skillIds ?? []), ...(params.skillId ? [params.skillId] : [])]
     .filter((id, i, arr) => arr.indexOf(id) === i)
   const plainTurn = !params.chained && !params.noConversationContext && !params.parallelGroup && !params.extraMetadata && !params.resumeSessionId
   const canMark = plainTurn && params.providerId === 'claude-code' && getSetting(RESUME_SETTING) !== '0'
-  const ctxKey = canMark ? createHash('sha1').update(JSON.stringify([context.instructions, context.globalMemory, context.memory, context.persistentContext, skillIds, addDirs])).digest('hex') : ''
+  const ctxKey = canMark ? createHash('sha1').update(JSON.stringify([context.instructions, context.globalMemory, context.memory, context.persistentContext, context.replyBlocks ?? '', skillIds, addDirs])).digest('hex') : ''
   const countAtStart = canMark ? countMessages(params.conversationId) : 0
   let resume: string | undefined
   let costBefore: number | undefined   // the resumed session's running cost when that reply ended
@@ -254,6 +256,9 @@ export function startRun(sender: WebContents, params: RunParams): string {
         content: full, metadata: { providerSessionId, modelUsed, contextMode, usage, actions, ...(resumeMark(providerSessionId, sessionCost) ?? {}), ...(params.parallelGroup ? { parallelGroup: params.parallelGroup } : {}), ...(params.extraMetadata ?? {}) }
       })
       logInfo('run complete', { provider: params.providerId, chars: full.length, ms: Date.now() - startedAt, conv: params.conversationId })
+      // D-149 measure: how often each agent writes blocks, and whether they pass.
+      const blocks = scanBlocks(full)
+      if (blocks.length) logInfo('[blocks]', { provider: params.providerId, model: modelUsed ?? params.model ?? 'default', conv: params.conversationId, blocks })
       done(saved.id)
       void maybeCompress(params.conversationId, sender) // fire-and-forget, visible + failure-safe
     } catch (err) {

@@ -18,6 +18,11 @@ Each version here matches a packaged build — the dmg is named
 > - Bumping rules: PATCH = fixes/small tweaks, MINOR = new features (backward-compatible),
 >   MAJOR = breaking changes or a data format users can't roll back from.
 
+## [2.21.0] - 2026-11-16
+
+### Added
+- **Interactive blocks in replies.** Agents can show a plan as numbered **steps**, ask you **questions** you answer with a click (your answers go back as your next message, and the block then shows what you chose), and list the **sources** they used as chips. A block that doesn't come out right shows as normal text with a short note. Every chat agent is told how to write them; turn this off in Settings ▸ Conversations ▸ **Interactive blocks in replies**.
+
 ## [2.20.3] - 2026-11-11
 
 ### Fixed

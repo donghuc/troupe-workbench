@@ -1,6 +1,6 @@
 // One place that assembles what an agent is told besides your message (audit #16, 2026-10-27):
 // instructions, global then project memory (only when its own memory file doesn't already carry
-// it — D-055), reference context, the working-folder rules, then skills, the chat summary and
+// it — D-055), reference context, the working-folder rules, the reply-block guide (D-149), then skills, the chat summary and
 // attachments. Five agents each had a copy of this list; the D-055 rule now lives once.
 import type { AgentRequest } from '../../shared/agent'
 import type { ProviderId } from '../../shared/types'
@@ -24,7 +24,7 @@ export function buildContextBlock(id: ProviderId, req: AgentRequest, o: ContextO
   const globalMemory = globalMemoryDelivery(id, ctx?.globalMemory ?? '') === 'injected' ? ctx?.globalMemory : undefined
   const rules = o.rules === undefined ? workFolderRules(req.cwd, req.addDirs) : o.rules
   const turn = o.withTurnContext === false ? [] : [ctx?.skillText, ctx?.snapshot, ctx?.attachmentsText]
-  return [o.lead, ctx?.instructions, globalMemory, memory, ctx?.persistentContext, rules, ...turn, o.tail].filter(Boolean).join('\n\n')
+  return [o.lead, ctx?.instructions, globalMemory, memory, ctx?.persistentContext, rules, ctx?.replyBlocks, ...turn, o.tail].filter(Boolean).join('\n\n')
 }
 
 /** For agents with no system-prompt flag: the block goes in a delimited preamble (D-003). */

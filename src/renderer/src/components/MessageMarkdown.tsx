@@ -8,6 +8,8 @@ import { api } from '../api'
 
 import { ARTIFACT_EXT } from '../chatFiles'
 import { Button } from './ui/Button'
+import ReplyBlockView, { useReplyBlocks } from './ReplyBlocks'
+import { blockKindOf } from '../../../shared/replyBlocks'
 const isWebUrl = (href?: string) => !!href && /^(https?:|mailto:|tel:)/i.test(href)
 
 // A local link the app should own (open in the viewer, never the OS browser).
@@ -137,6 +139,9 @@ interface Props {
   root?: string
   // Opens an image in the lightbox (media viewer); falls back to onOpenArtifact when absent.
   onOpenMedia?: (relPath: string) => void
+  // A chat reply (D-149): `troupe-*` blocks are drawn as components while the chat provides
+  // ReplyBlocksContext. `live` = the reply is still streaming.
+  blocks?: { messageId: string; live?: boolean }
 }
 
 // Is this rendered child a local image/video (an ![]() or a link to one)? react-markdown
@@ -175,7 +180,7 @@ function groupMedia(kids: ReactNode, root: string | undefined): ReactNode {
   return out
 }
 
-function MessageMarkdown({ children, onOpenArtifact, root, onOpenMedia }: Props) {
+function MessageMarkdown({ children, onOpenArtifact, root, onOpenMedia, blocks }: Props) {
   // The components map must keep a stable identity across re-renders. react-markdown
   // maps each node to components.<tag>; a fresh function each render makes React treat
   // <pre> as a new type and remount it — which reset CodeBlock's wrap toggle whenever
@@ -187,6 +192,9 @@ function MessageMarkdown({ children, onOpenArtifact, root, onOpenMedia }: Props)
   rootRef.current = root
   const onMediaRef = useRef(onOpenMedia)
   onMediaRef.current = onOpenMedia
+  const blocksCtx = useReplyBlocks()
+  const blocksRef = useRef(blocks && blocksCtx ? blocks : undefined)
+  blocksRef.current = blocks && blocksCtx ? blocks : undefined
   const components = useMemo<Components>(() => ({
     li({ children: kids, node: _n, ...props }) { return <li {...props}>{groupMedia(kids, rootRef.current)}</li> },
     p({ children: kids, node: _n, ...props }) { return <p {...props}>{groupMedia(kids, rootRef.current)}</p> },
@@ -231,6 +239,14 @@ function MessageMarkdown({ children, onOpenArtifact, root, onOpenMedia }: Props)
       return <code className={className}>{kids}</code>
     },
     pre({ children: kids }) {
+      const b = blocksRef.current
+      const only = Children.toArray(kids)
+      const code = only.length === 1 && isValidElement(only[0]) ? only[0] : null
+      const kind = b && code ? blockKindOf((code.props as { className?: string }).className) : null
+      if (b && kind) {
+        return <ReplyBlockView kind={kind} raw={nodeText(kids)} messageId={b.messageId} live={!!b.live} fallback={<CodeBlock kids={kids} />}
+          renderMd={(t) => <MemoMarkdown onOpenArtifact={onOpenRef.current} onOpenMedia={onMediaRef.current} root={rootRef.current}>{t}</MemoMarkdown>} />
+      }
       return <CodeBlock kids={kids} />
     }
   }), [])
@@ -247,6 +263,8 @@ const REMARK_PLUGINS = [remarkGfm]
 // saved message was re-parsed by react-markdown each time. The callbacks are read through
 // refs above, so only the text, the root and whether a callback exists change the output.
 const sameOutput = (a: Props, b: Props): boolean =>
-  a.children === b.children && a.root === b.root && !!a.onOpenArtifact === !!b.onOpenArtifact && !!a.onOpenMedia === !!b.onOpenMedia
+  a.children === b.children && a.root === b.root && !!a.onOpenArtifact === !!b.onOpenArtifact && !!a.onOpenMedia === !!b.onOpenMedia &&
+  a.blocks?.messageId === b.blocks?.messageId && !!a.blocks?.live === !!b.blocks?.live
 
-export default memo(MessageMarkdown, sameOutput)
+const MemoMarkdown = memo(MessageMarkdown, sameOutput)
+export default MemoMarkdown
