@@ -22,15 +22,11 @@ export default function ArtifactViewer({ root, relPath, onClose, popout }: Props
   const copy = async () => { try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1200) } catch { /* ignore */ } }
   const copyImage = async () => { if (await copyImageFile(root, current, wbfileSrc(root, current))) { setCopied(true); setTimeout(() => setCopied(false), 1200) } else notify('Couldn’t copy this image.') }
 
+  // A link in the open document: already resolved from the document's folder by
+  // MessageMarkdown (baseDir), so project-relative, or an absolute path in the project.
   const openLink = (href: string) => {
-    let h = href
-    const under = relUnder(h, root)
-    if (under !== null) h = under
-    else if (!isAbsPath(h)) {
-      const dir = current.includes('/') ? current.slice(0, current.lastIndexOf('/')) : ''
-      h = normalizePath(dir ? `${dir}/${h}` : h)
-    }
-    setCurrent(h)
+    const under = relUnder(href, root)
+    setCurrent(under !== null ? under : isAbsPath(href) ? href : normalizePath(href))
   }
 
   return (

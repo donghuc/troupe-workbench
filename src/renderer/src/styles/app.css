@@ -758,6 +758,9 @@ button { font-family: inherit; font-size: var(--fs-sm); border: none; background
 
 /* Copy buttons: code blocks + message content */
 .code-block { position: relative; }
+/* The reply/document body owns the gap around a code block, so two in a row don't touch */
+.markdown-body > .code-block { margin: var(--sp-3) 0; }
+.markdown-body > .code-block > pre { margin: 0; }
 .code-tools { position: absolute; top: 6px; right: 6px; display: inline-flex; gap: var(--sp-1); opacity: 0; transition: opacity var(--dur-fast); z-index: var(--z-raised); }
 .code-block:hover .code-tools, .code-block:focus-within .code-tools { opacity: 1; }
 .code-tools .code-copy { position: static; opacity: 1; }
@@ -822,7 +825,7 @@ button { font-family: inherit; font-size: var(--fs-sm); border: none; background
 .sel-menu button + button { border-left: 1px solid var(--border-subtle); }
 
 /* Clickable file-path chips inside chat markdown */
-.artifact-chip { display: inline-flex; align-items: center; gap: var(--sp-1); font-family: var(--font-ui); font-size: var(--fs-sm); padding: 1px var(--sp-2); border-radius: var(--r-full); background: var(--bg-active); color: var(--text-primary); border: 1px solid var(--border-subtle); cursor: pointer; vertical-align: baseline; }
+.artifact-chip { display: inline-flex; align-items: center; gap: var(--sp-1); text-align: left; font-family: var(--font-ui); font-size: var(--fs-sm); padding: 1px var(--sp-2); border-radius: var(--r-full); background: var(--bg-active); color: var(--text-primary); border: 1px solid var(--border-subtle); cursor: pointer; vertical-align: baseline; }
 .artifact-chip:hover { background: var(--bg-hover); }
 
 /* Per-message "…" actions menu */
@@ -899,10 +902,15 @@ body.resizing .resize-handle::after { background: var(--text-tertiary); }
 .main-body-panel { padding-right: var(--context-panel-w); }
 
 /* Artifact viewer: make code/pre blocks stand out on the white page */
-.artifact-viewer .markdown-body pre { background: var(--bg-sunken); border: 1px solid var(--border-subtle); }
-.artifact-viewer .markdown-body code { background: var(--bg-hover); }
+/* Code blocks sit on the white page as white panels with a border (paper tints read as beige) */
+.artifact-viewer .markdown-body pre { background: var(--surface-white); border: 1px solid var(--border-default); }
+/* Inline code in documents (artifact viewer, Browse files) is an info wash; chat keeps its own (Hien, 2026-11-17) */
+.artifact-viewer .markdown-body :not(pre) > code, .doc-preview :not(pre) > code { background: var(--info-wash); }
 .artifact-viewer .markdown-body pre code { background: none; }
-.artifact-viewer .markdown-body blockquote { background: var(--bg-sunken); border-left-color: var(--border-strong); padding: var(--sp-2) var(--sp-3); border-radius: 0 var(--r-sm) var(--r-sm) 0; }
+.artifact-viewer .markdown-body blockquote { background: var(--surface-white); border: 1px solid var(--border-default); border-left: 3px solid var(--border-strong); padding: var(--sp-2) var(--sp-3); border-radius: 0 var(--r-sm) var(--r-sm) 0; }
+/* Chips on the white page: white with a border, not paper tints (Hien, 2026-11-17) */
+.artifact-viewer .markdown-body .artifact-chip, .artifact-viewer .markdown-body .outside-file { background: var(--surface-white); border: 1px solid var(--border-default); }
+.artifact-viewer .markdown-body .artifact-chip:hover { background: var(--bg-hover); }
 
 /* Active-agent indicator on a conversation row (multi-session) */
 @keyframes run-pulse { 0%, 100% { opacity: 1; } 50% { opacity: var(--opacity-30); } }

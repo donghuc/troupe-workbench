@@ -158,7 +158,7 @@ export default function FilePreview({ root, relPath, onOpenLink, onText }: Props
         </div>
       )}
       {kind === 'pdf' && <Suspense fallback={<div className="field-hint">Loading PDF viewer…</div>}><PdfViewer url={wbUrl(root, relPath)} root={root} relPath={relPath} onPageTextChange={(t) => onText?.(t)} /></Suspense>}
-      {kind === 'md' && <div className="markdown-body"><MessageMarkdown onOpenArtifact={onOpenLink} root={root}>{text}</MessageMarkdown></div>}
+      {kind === 'md' && <div className="markdown-body"><MessageMarkdown onOpenArtifact={onOpenLink} root={root} baseDir={relPath.includes('/') ? relPath.slice(0, relPath.lastIndexOf('/')) : ''}>{text}</MessageMarkdown></div>}
       {kind === 'html' && (
         // Interactive: scripts run in an opaque origin (no allow-same-origin), so the
         // page can't reach the app, cookies, or local files. Forms/popups/modals allowed.

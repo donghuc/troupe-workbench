@@ -17,6 +17,8 @@ interface Props {
   isRoot?: boolean
   // Project folder, so a folder the walk skipped (D-068) can be loaded on request.
   loadRoot?: string
+  // A folder to open and mark (a folder link followed from a document).
+  revealDir?: string | null
 }
 
 function fileIcon(name: string): IconName {
@@ -50,7 +52,7 @@ const SKIP_TEXT: Record<NonNullable<FileNode['truncated']>, string> = {
   limit: 'Folder is large — the rest isn’t listed'
 }
 
-export default function FileTree({ node, activePath, onOpenFile, filter = '', sort = 'name', depth = 0, isRoot = false, loadRoot }: Props) {
+export default function FileTree({ node, activePath, onOpenFile, filter = '', sort = 'name', depth = 0, isRoot = false, loadRoot, revealDir }: Props) {
   // Contents of a skipped folder, once loaded on request.
   const [loaded, setLoaded] = useState<FileNode | null>(null)
   const [loading, setLoading] = useState(false)
@@ -61,10 +63,10 @@ export default function FileTree({ node, activePath, onOpenFile, filter = '', so
   }
   const f = filter.trim().toLowerCase()
   // Folders start closed (like Finder's list view), except the ones holding the open file.
-  const holdsActive = node.type === 'dir' && !!activePath && !!node.relPath && activePath.startsWith(node.relPath + '/')
+  const holdsActive = node.type === 'dir' && !!node.relPath && ((!!activePath && activePath.startsWith(node.relPath + '/')) || (!!revealDir && (revealDir === node.relPath || revealDir.startsWith(node.relPath + '/'))))
   const [openState, setOpenState] = useState(holdsActive)
   // Opening a file from search (or a link) reveals it: open its folders.
-  useEffect(() => { if (holdsActive) setOpenState(true) }, [holdsActive, activePath])
+  useEffect(() => { if (holdsActive) setOpenState(true) }, [holdsActive, activePath, revealDir])
   // While filtering, force directories open so matches are visible.
   const open = f ? true : openState
 
@@ -91,7 +93,7 @@ export default function FileTree({ node, activePath, onOpenFile, filter = '', so
     return (
       <div className="tree-root">
         {children.map((c) => (
-          <FileTree key={c.relPath} node={c} activePath={activePath} onOpenFile={onOpenFile} filter={filter} sort={sort} depth={0} loadRoot={loadRoot} />
+          <FileTree key={c.relPath} node={c} activePath={activePath} onOpenFile={onOpenFile} revealDir={revealDir} filter={filter} sort={sort} depth={0} loadRoot={loadRoot} />
         ))}
         {children.length === 0 && <div className="tree-empty">{f ? 'No matching files' : 'Empty folder'}</div>}
       </div>
@@ -101,7 +103,7 @@ export default function FileTree({ node, activePath, onOpenFile, filter = '', so
   return (
     <div>
       <button
-        className="tree-row tree-dir"
+        className={`tree-row tree-dir${revealDir && revealDir === node.relPath ? ' active' : ''}`}
         style={{ paddingLeft: `calc(var(--sp-2) + ${depth} * var(--tree-indent))` }}
         onClick={() => setOpenState((o) => !o)}
       >
@@ -120,7 +122,7 @@ export default function FileTree({ node, activePath, onOpenFile, filter = '', so
       )}
       {open &&
         children.map((c) => (
-          <FileTree key={c.relPath} node={c} activePath={activePath} onOpenFile={onOpenFile} filter={filter} sort={sort} depth={depth + 1} loadRoot={loadRoot} />
+          <FileTree key={c.relPath} node={c} activePath={activePath} onOpenFile={onOpenFile} revealDir={revealDir} filter={filter} sort={sort} depth={depth + 1} loadRoot={loadRoot} />
         ))}
     </div>
   )

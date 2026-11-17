@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
+import MessageMarkdown from './MessageMarkdown'
 import { api } from '../api'
 import { Button } from './ui/Button'
 import { previewRefusal } from '../fileKinds'
@@ -14,9 +13,11 @@ interface Props {
   externalChangeToken: number
   // when set (from a search hit), jump to this 1-based line; nonce forces re-jump
   jumpTo?: { line: number; nonce: number } | null
+  // links in the preview open here (Browse files); without it they were dead plain links
+  onOpenLink?: (relPath: string) => void
 }
 
-export default function MarkdownDoc({ root, relPath, externalChangeToken, jumpTo }: Props) {
+export default function MarkdownDoc({ root, relPath, externalChangeToken, jumpTo, onOpenLink }: Props) {
   const [content, setContent] = useState('')
   const [draft, setDraft] = useState('')
   const [mode, setMode] = useState<'preview' | 'edit'>('preview')
@@ -127,7 +128,7 @@ export default function MarkdownDoc({ root, relPath, externalChangeToken, jumpTo
       {mode === 'preview' || !isMd ? (
         isMd ? (
           <div className="doc-preview markdown-body">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+            <MessageMarkdown onOpenArtifact={onOpenLink} root={root} baseDir={relPath.includes('/') ? relPath.slice(0, relPath.lastIndexOf('/')) : ''}>{content}</MessageMarkdown>
           </div>
         ) : (
           <pre className="doc-plain" ref={plainRef}>{content}</pre>

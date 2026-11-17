@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { linkUrlTransform, normalizeRel } from './links'
+import { linkUrlTransform, normalizeRel, resolveFrom, looksLikeFolder } from './links'
 
 const abs = '/Users/me/Projects/Atlas/ATLAS-DESIGN-MASTER.md'
 
@@ -24,5 +24,22 @@ describe('local file links (B-048)', () => {
     expect(normalizeRel('notes/Issue%20%2312.md#top')).toBe('notes/Issue #12.md')
     expect(normalizeRel('a/What%3F.md')).toBe('a/What?.md')
     expect(normalizeRel('a/100% done.md')).toBe('a/100% done.md')
+  })
+})
+
+describe('links inside a document resolve from its folder', () => {
+  it('climbs within the project, and keeps ../ when it leaves it', () => {
+    expect(resolveFrom('skills/copy-audit', '../figma-mcp-basics/')).toBe('skills/figma-mcp-basics/')
+    expect(resolveFrom('skills/copy-audit', 'assets/writing-guidelines-template.md')).toBe('skills/copy-audit/assets/writing-guidelines-template.md')
+    expect(resolveFrom('', 'docs/a.md')).toBe('docs/a.md')
+    expect(resolveFrom('skills', '../../other/x.md')).toBe('../other/x.md')
+    expect(resolveFrom('/Users/me/Projects/Atlas', '../Shared/x.md')).toBe('/Users/me/Projects/Shared/x.md')
+    expect(resolveFrom('skills/a', '/abs/file.md')).toBe('/abs/file.md')
+  })
+  it('tells folder links from file links', () => {
+    expect(looksLikeFolder('skills/figma-mcp-basics/')).toBe(true)
+    expect(looksLikeFolder('skills/figma-mcp-basics')).toBe(true)
+    expect(looksLikeFolder('skills/a/README.md')).toBe(false)
+    expect(looksLikeFolder('icon-spec.yaml')).toBe(false)
   })
 })

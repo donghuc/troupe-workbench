@@ -13,7 +13,7 @@ import MemoryEditor from './components/MemoryEditor'
 import { sendMessage, setActiveConversation } from './turnsStore'
 import { loadModelLists } from './models'
 import type { Tab as SettingsTab } from './components/SettingsModal'
-import { OPEN_SETTINGS_EVENT } from './notices'
+import { OPEN_SETTINGS_EVENT, BROWSE_FOLDER_EVENT } from './notices'
 import FilesView from './components/FilesView'
 import ConversationView from './components/ConversationView'
 import NotesView from './components/NotesView'
@@ -72,6 +72,7 @@ export default function App() {
     return () => window.removeEventListener(OPEN_SETTINGS_EVENT, open)
   }, [])
   const [browsing, setBrowsing] = useState(false)
+  const [browseDir, setBrowseDir] = useState<string | null>(null)   // a folder link followed from a document
   const [showProviders, setShowProviders] = useState(false)
   const [showContextMgr, setShowContextMgr] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
@@ -151,6 +152,20 @@ export default function App() {
   useEffect(() => { refreshConvList() }, [projects, conversations])
   // D-117: a chat started from the command line (or a scheduled task) appears without a reload.
   useEffect(() => api.conversations.onChanged(() => { refreshConvos(); refreshConvList() }), [refreshConvos])  // eslint-disable-line react-hooks/exhaustive-deps
+  // A folder link in a document (reply, artifact, Browse files) opens that folder in Browse files.
+  const projectRoot = project?.folderPath ?? null
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<{ root: string; rel: string }>).detail
+      if (!d || !projectRoot || d.root !== projectRoot) return
+      e.preventDefault()
+      setShowNotes(false); setShowMemory(false); setShowSchedules(false); setShowImage(false)
+      setBrowseDir(d.rel); setBrowsing(true)
+    }
+    window.addEventListener(BROWSE_FOLDER_EVENT, on)
+    return () => window.removeEventListener(BROWSE_FOLDER_EVENT, on)
+  }, [projectRoot])
+  useEffect(() => { if (!browsing) setBrowseDir(null) }, [browsing])
 
   // Apply a cross-project "open conversation" once its project's list has loaded.
   useEffect(() => {
@@ -374,7 +389,7 @@ export default function App() {
           <ProjectsOverview projects={projects} onOpen={openProject} onNew={() => setShowNew(true)} />
         )}
         {!showNotes && !showMemory && !showSchedules && !showImage && project && browsing && project.folderPath && (
-          <FilesView root={project.folderPath} onBack={() => setBrowsing(false)} />
+          <FilesView root={project.folderPath} revealDir={browseDir} onBack={() => setBrowsing(false)} />
         )}
         {!showNotes && !showMemory && !showSchedules && !showImage && project && !browsing && conversation && (
           <ConversationView

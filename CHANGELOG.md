@@ -18,6 +18,19 @@ Each version here matches a packaged build — the dmg is named
 > - Bumping rules: PATCH = fixes/small tweaks, MINOR = new features (backward-compatible),
 >   MAJOR = breaking changes or a data format users can't roll back from.
 
+## [2.21.1] - 2026-11-17
+
+### Fixed
+- Links in a Markdown file now work from that file's own folder. A guide in a subfolder linking to a sibling folder (`../other-guide/`) no longer shows as **outside project**; only links that really leave the project do, with their real path for Finder and Copy into project.
+- A link to a folder in the project opens it in **Browse files**, with the folder open and marked (in a pop-out window, it shows the folder in Finder).
+- Links and images in Markdown files opened in **Browse files** work; they were plain text that did nothing.
+- Two code blocks in a row no longer touch: replies and documents put a gap around each one.
+- A file chip in a reply whose name wraps onto two lines (in a narrow table column, say) is left-aligned instead of centred.
+
+### Changed
+- Inline code in documents (the artifact viewer and Browse files) has a light blue background (the info wash), so it stands out on the page. Chat replies keep their current style.
+- Code blocks, quotes and file chips in the artifact viewer are white with a border, matching the white page (they were beige).
+
 ## [2.21.0] - 2026-11-16
 
 ### Added

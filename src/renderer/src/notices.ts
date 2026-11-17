@@ -69,3 +69,7 @@ export const openSettings = (tab: string): void => { window.dispatchEvent(new Cu
 export const SETTINGS_SAVED_EVENT = 'troupe:settings-saved'
 // The Image folder changed in Settings ▸ Image (D-088); the Image view reloads its canvas.
 export const IMAGE_FOLDER_EVENT = 'troupe:image-folder'
+
+/** Open a folder of the open project in Browse files: detail { root, rel }. Cancelled by the
+ *  app when it handled it; otherwise (a pop-out window) the caller shows it in Finder. */
+export const BROWSE_FOLDER_EVENT = 'troupe:browse-folder'

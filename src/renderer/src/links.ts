@@ -23,3 +23,21 @@ export function normalizeRel(href: string): string {
   h = h.replace(FILE_SCHEME, '').replace(/^\.\//, '')
   return h.replace(/:\d+(?::\d+)?$/, '')   // editor-style "file.md:12" / "file.ts:12:5"
 }
+
+/** A relative link in a document, resolved from that document's folder (`baseDir`, relative to
+ *  the project, or an absolute folder). Keeps leading `../` when the link climbs above the base,
+ *  so the caller can tell it leaves the project. Absolute links come back unchanged. */
+export function resolveFrom(baseDir: string, rel: string): string {
+  if (/^(\/|[A-Za-z]:\/)/.test(rel)) return rel
+  const abs = baseDir.startsWith('/') ? '/' : ''
+  const out: string[] = []
+  for (const seg of `${baseDir}/${rel}`.split('/')) {
+    if (seg === '' || seg === '.') continue
+    if (seg === '..') { if (out.length && out[out.length - 1] !== '..') out.pop(); else if (!abs) out.push('..') }
+    else out.push(seg)
+  }
+  return abs + out.join('/') + (rel.endsWith('/') && out.length ? '/' : '')
+}
+
+/** A link target that names a folder: ends with / or its last part has no extension. */
+export const looksLikeFolder = (p: string): boolean => p.endsWith('/') || !/\.[^./]+$/.test(p.split('/').filter(Boolean).pop() ?? '')

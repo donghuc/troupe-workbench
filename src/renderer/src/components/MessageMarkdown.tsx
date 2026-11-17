@@ -3,7 +3,8 @@ import { OS_WORDS, isAbsPath, relUnder } from '../../../shared/platform'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import Icon, { type IconName } from './Icon'
-import { linkUrlTransform, normalizeRel } from '../links'
+import { linkUrlTransform, normalizeRel, resolveFrom, looksLikeFolder } from '../links'
+import { BROWSE_FOLDER_EVENT } from '../notices'
 import { api } from '../api'
 
 import { ARTIFACT_EXT } from '../chatFiles'
@@ -142,6 +143,20 @@ interface Props {
   // A chat reply (D-149): `troupe-*` blocks are drawn as components while the chat provides
   // ReplyBlocksContext. `live` = the reply is still streaming.
   blocks?: { messageId: string; live?: boolean }
+  // A markdown file: its folder, relative to the project. Its relative links and images are
+  // resolved from there (a guide in skills/a/ linking ../b/ means skills/b/, not outside).
+  baseDir?: string
+}
+
+// A folder link: open it in Browse files; a pop-out window (no app around it) shows it in Finder.
+// A link with no extension may still be a file (LICENSE): if it isn't a folder, open it as one.
+async function openFolderLink(root: string, rel: string, openFile?: (rel: string) => void) {
+  const clean = rel.replace(/\/+$/, '')
+  let isDir = rel.endsWith('/')
+  if (!isDir) { try { isDir = (await api.files.listTree(root, clean))?.type === 'dir' } catch { isDir = false } }
+  if (!isDir) { openFile?.(clean); return }
+  const handled = !window.dispatchEvent(new CustomEvent(BROWSE_FOLDER_EVENT, { detail: { root, rel: clean }, cancelable: true }))
+  if (!handled) void api.system.revealItem(root, clean)
 }
 
 // Is this rendered child a local image/video (an ![]() or a link to one)? react-markdown
@@ -180,7 +195,7 @@ function groupMedia(kids: ReactNode, root: string | undefined): ReactNode {
   return out
 }
 
-function MessageMarkdown({ children, onOpenArtifact, root, onOpenMedia, blocks }: Props) {
+function MessageMarkdown({ children, onOpenArtifact, root, onOpenMedia, blocks, baseDir }: Props) {
   // The components map must keep a stable identity across re-renders. react-markdown
   // maps each node to components.<tag>; a fresh function each render makes React treat
   // <pre> as a new type and remount it — which reset CodeBlock's wrap toggle whenever
@@ -192,6 +207,14 @@ function MessageMarkdown({ children, onOpenArtifact, root, onOpenMedia, blocks }
   rootRef.current = root
   const onMediaRef = useRef(onOpenMedia)
   onMediaRef.current = onOpenMedia
+  const baseRef = useRef(baseDir)
+  baseRef.current = baseDir
+  // A local link as a project-relative (or absolute) path, resolved from the document's folder.
+  const localPath = (href: string): string => {
+    const n = normalizeRel(href)
+    const b = baseRef.current
+    return b === undefined || isAbsPath(n) ? n : resolveFrom(b, n)
+  }
   const blocksCtx = useReplyBlocks()
   const blocksRef = useRef(blocks && blocksCtx ? blocks : undefined)
   blocksRef.current = blocks && blocksCtx ? blocks : undefined
@@ -201,13 +224,18 @@ function MessageMarkdown({ children, onOpenArtifact, root, onOpenMedia, blocks }
     a({ href, children: kids, ...props }) {
       if (isLocalLink(href)) {
         const r = rootRef.current
-        const norm = normalizeRel(href!)
-        if (isOutsideRoot(norm, r)) return <OutsideFileLink abs={norm} root={r} label={kids} onOpen={onOpenRef.current} />
+        const norm = localPath(href!)
+        // A ../ link that climbs out of the project: show it with its real absolute path.
+        if (isOutsideRoot(norm, r)) return <OutsideFileLink abs={norm.startsWith('../') && r ? resolveFrom(r, norm) : norm} root={r} label={kids} onOpen={onOpenRef.current} />
         // A local image renders as an inline thumbnail; other files stay a link.
-        if (r && isMediaPath(normalizeRel(href!))) return imageThumb(r, onOpenRef.current, onMediaRef.current, href!, nodeText(kids))
+        if (r && isMediaPath(norm)) return imageThumb(r, onOpenRef.current, onMediaRef.current, norm, nodeText(kids))
+        // A folder in the project opens in Browse files.
+        if (r && looksLikeFolder(norm)) {
+          return <a className="artifact-link folder-link" href={href} title={`Open ${norm.replace(/\/+$/, '')} in Browse files`} onClick={(e) => { e.preventDefault(); void openFolderLink(r, norm, onOpenRef.current) }}>{kids}</a>
+        }
         // Always internal — never let a local file path open the OS browser.
         return (
-          <a className="artifact-link" href={href} onClick={(e) => { e.preventDefault(); onOpenRef.current?.(normalizeRel(href!)) }}>
+          <a className="artifact-link" href={href} onClick={(e) => { e.preventDefault(); onOpenRef.current?.(norm) }}>
             {kids}
           </a>
         )
@@ -219,7 +247,7 @@ function MessageMarkdown({ children, onOpenArtifact, root, onOpenMedia, blocks }
       const a = typeof alt === 'string' ? alt : undefined
       const r = rootRef.current
       if (s && isLocalLink(s)) {
-        if (r) return imageThumb(r, onOpenRef.current, onMediaRef.current, s, a)
+        if (r) return imageThumb(r, onOpenRef.current, onMediaRef.current, localPath(s), a)
         return <span className="artifact-link">{a || s}</span>
       }
       return <img src={s} alt={a || ''} style={{ maxWidth: '100%' }} />
@@ -264,7 +292,7 @@ const REMARK_PLUGINS = [remarkGfm]
 // refs above, so only the text, the root and whether a callback exists change the output.
 const sameOutput = (a: Props, b: Props): boolean =>
   a.children === b.children && a.root === b.root && !!a.onOpenArtifact === !!b.onOpenArtifact && !!a.onOpenMedia === !!b.onOpenMedia &&
-  a.blocks?.messageId === b.blocks?.messageId && !!a.blocks?.live === !!b.blocks?.live
+  a.blocks?.messageId === b.blocks?.messageId && !!a.blocks?.live === !!b.blocks?.live && a.baseDir === b.baseDir
 
 const MemoMarkdown = memo(MessageMarkdown, sameOutput)
 export default MemoMarkdown

@@ -15,6 +15,8 @@ import { Segmented } from './ui/Segmented'
 interface Props {
   root: string
   onBack: () => void
+  /** A folder to reveal in the tree (a folder link in a document, D-086 follow-up). */
+  revealDir?: string | null
 }
 
 // Split a line around the query so the match can be emphasised (case-insensitive).
@@ -32,7 +34,7 @@ function highlight(text: string, q: string) {
   return <>{text.slice(0, i)}<mark>{text.slice(i, i + q.length)}</mark>{text.slice(i + q.length)}</>
 }
 
-export default function FilesView({ root, onBack }: Props) {
+export default function FilesView({ root, onBack, revealDir }: Props) {
   const [tree, setTree] = useState<FileNode | null>(null)
   const [activePath, setActivePath] = useState<string | null>(null)
   const [jump, setJump] = useState<{ line: number; nonce: number } | null>(null)
@@ -77,15 +79,10 @@ export default function FilesView({ root, onBack }: Props) {
   }, [q, root])
 
   // A link inside a previewed file (relative to that file, or an absolute path in the project).
+  // Already resolved from the document's folder by MessageMarkdown (baseDir).
   const openLink = (href: string) => {
-    let h = href
-    const under = relUnder(h, root)
-    if (under !== null) h = under
-    else if (!isAbsPath(h) && activePath) {
-      const dir = activePath.includes('/') ? activePath.slice(0, activePath.lastIndexOf('/')) : ''
-      h = normalizePath(dir ? `${dir}/${h}` : h)
-    }
-    setActivePath(h); setJump(null)
+    const under = relUnder(href, root)
+    setActivePath(under !== null ? under : isAbsPath(href) ? href : normalizePath(href)); setJump(null)
   }
 
   const hitCount = hits.reduce((n, r) => n + r.hits.length, 0)
@@ -150,7 +147,7 @@ export default function FilesView({ root, onBack }: Props) {
               {!searching && hits.length === 0 && <div className="file-search-empty">No content matches</div>}
             </div>
           )}
-          {tree && q.length < 2 && <FileTree node={tree} isRoot loadRoot={root} activePath={activePath} onOpenFile={(p) => { setActivePath(p); setJump(null) }} filter={filter} sort={sort} />}
+          {tree && q.length < 2 && <FileTree node={tree} isRoot loadRoot={root} activePath={activePath} revealDir={revealDir} onOpenFile={(p) => { setActivePath(p); setJump(null) }} filter={filter} sort={sort} />}
         </>
       }
     >
@@ -158,7 +155,7 @@ export default function FilesView({ root, onBack }: Props) {
         // Markdown and text open in the editor (edit, save, jump to a search hit); every other
         // kind uses the artifact viewer's preview, and unsupported files say so (no raw bytes).
         kindOf(activePath) === 'md' || kindOf(activePath) === 'text' ? (
-          <MarkdownDoc root={root} relPath={activePath} externalChangeToken={changeTokens[activePath] ?? 0} jumpTo={jump} />
+          <MarkdownDoc root={root} relPath={activePath} externalChangeToken={changeTokens[activePath] ?? 0} jumpTo={jump} onOpenLink={openLink} />
         ) : (
           <div className="doc">
             <div className="doc-toolbar">
