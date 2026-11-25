@@ -10,8 +10,12 @@ import ProviderAvatar from './ProviderAvatar'
 import ContextInspector from './ContextInspector'
 import SaveToProject from './SaveToProject'
 import ArtifactViewer from './ArtifactViewer'
-import { failed, reportError, notify, SETTINGS_SAVED_EVENT } from '../notices'
+import { failed, reportError, notify, openSettings, SETTINGS_SAVED_EVENT } from '../notices'
+import FailureCard from './FailureCard'
+import type { FailureAction } from '../../../shared/failures'
 import { ReplyBlocksContext, type ReplyBlocksCtx } from './ReplyBlocks'
+import { confirmDialog } from './ui/ConfirmDialog'
+import { changesOf, laterOverlap } from '../../../shared/changes'
 import { replyBlocksOn, uiAnswerOf, REPLY_BLOCKS_SETTING } from '../../../shared/replyBlocks'
 import { quoteWithSource, selectionSource, selectionContext, type QuoteSource } from '../quoteSource'
 import { providerLabel } from '../../../shared/providers'
@@ -327,6 +331,7 @@ export default function ConversationView({ conversation, providers, pendingSend,
   const onStartCollabStable = useStableCallback((...a: Parameters<typeof startCollab>) => startCollab(...a))
   const onQuickMemoryStable = useStableCallback((line: string) => quickMemory(line))
   const onStopStable = useStableCallback(() => cancelRun(conversation.id))
+  const onKeepWaitingStable = useStableCallback(() => { api.turns.keepWaiting(conversation.id).catch(failed('Keep waiting')) })
   const onAgentPickStable = useStableCallback((p: ProviderId, m: string) => { api.conversations.setAgent(conversation.id, p, m).catch(failed('Remember agent')) })
   const permNow = useRef<PermissionMode>(permDefault ?? 'auto')   // the composer's current mode, for block answers
   const onPermModeStable = useStableCallback((m: PermissionMode) => { permNow.current = m; api.conversations.setPermissionMode(conversation.id, m).catch(failed('Remember permission mode')) })
@@ -369,13 +374,67 @@ export default function ConversationView({ conversation, providers, pendingSend,
   }, [messages])
 
   const renderLane = (lane: Lane) => (
-    <LiveLane lane={lane} name={providerName(providers, lane.provider)} root={cwd} onOpenArtifact={openArtifactFn} onOpenMedia={openMedia} />
+    <LiveLane lane={lane} name={providerName(providers, lane.provider)} root={cwd} onOpenArtifact={openArtifactFn} onOpenMedia={openMedia} onKeepWaiting={onKeepWaitingStable} />
   )
 
   // One stable actions object for every row, always calling the latest handlers, so
   // memoized rows are not re-rendered just because a closure was re-created (D-098).
-  const latest = useRef({ openArtifactFn, openMedia, regenerateFrom, editUser, branchFrom, secondOpinion, onAddToMemory })
-  latest.current = { openArtifactFn, openMedia, regenerateFrom, editUser, branchFrom, secondOpinion, onAddToMemory }
+  // D-151 B: what a failure card's buttons do. "Try again" / "Ask X instead" re-run the last
+  // message (dropping a partial reply first); "Continue" asks the same agent to carry on.
+  const lastUserIdx = (): number => { for (let i = messages.length - 1; i >= 0; i--) if (messages[i].role === 'user') return i; return -1 }
+  const rerun = (provider: ProviderId) => {
+    const i = lastUserIdx(); if (i < 0) return
+    const after = messages[i + 1]
+    regenerate(conversation.id, cwd, after?.id ?? `none-${Date.now()}`, provider, messages[i].content, provider === conversation.provider ? conversation.model ?? undefined : undefined)
+  }
+  const onFailureAction = async (a: FailureAction) => {
+    const failedAgent = run.errorProvider ?? conversation.provider
+    if (a === 'retry') rerun(failedAgent)
+    else if (a === 'switch') { const o = otherProviderFor(failedAgent); if (o) rerun(o.id) }
+    else if (a === 'setup') openSettings('agents')
+    else if (a === 'continue') sendMessage(conversation.id, cwd, 'Continue from where you stopped.', failedAgent, undefined, undefined, failedAgent === conversation.provider ? conversation.model ?? undefined : undefined)
+    else if (a === 'compress') {
+      try { await api.conversations.compressNow(conversation.id); notify('Conversation compressed — try sending again.') } catch (e) { reportError('Compress conversation', e) }
+    }
+  }
+  // D-151: Restore asks first — naming the files, and any later reply that changed them too.
+  const restoreChanges = async (messageId: string) => {
+    const idx = messages.findIndex((x) => x.id === messageId)
+    const c = idx >= 0 ? changesOf(messages[idx].metadata) : null
+    if (!c) return
+    const later = laterOverlap(messages.map((x) => x.metadata), idx)
+    const added = new Set(c.files.filter((f) => f.status === 'A').map((f) => f.path))
+    const ok = await confirmDialog({
+      title: 'Restore files to before this reply?',
+      message: (
+        <div className="chg-confirm">
+          <p>These go back to how they were before this reply:</p>
+          <ul className="chg-confirm-list">{c.files.slice(0, 12).map((f) => <li key={f.path}><code>{f.path}</code>{added.has(f.path) ? ' — deleted (it was new; it goes to the Trash)' : ''}</li>)}</ul>
+          {c.files.length > 12 && <p>and {c.files.length - 12 + (c.more ?? 0)} more.</p>}
+          {later.length > 0 && <p className="chg-confirm-warn">A later reply also changed {later.map((l) => l.path.split('/').pop()).join(', ')}. Its changes to {later.length === 1 ? 'that file' : 'those files'} go too.</p>}
+          <p className="chg-confirm-note">You can undo this from the same card.</p>
+        </div>
+      ),
+      confirmLabel: `Restore ${c.files.length + (c.more ?? 0)} file${c.files.length + (c.more ?? 0) === 1 ? '' : 's'}`,
+      danger: true
+    })
+    if (!ok) return
+    try {
+      const r = await api.changes.restore(messageId)
+      if (r.failed.length) notify(`${r.failed.length} file${r.failed.length === 1 ? '' : 's'} couldn’t be restored: ${r.failed.slice(0, 3).join(', ')}`)
+    } catch (e) { reportError('Restore files', e) }
+    reloadConversation(conversation.id)
+  }
+  const undoRestore = async (messageId: string) => {
+    try {
+      const r = await api.changes.undoRestore(messageId)
+      if (r.failed.length) notify(`${r.failed.length} file${r.failed.length === 1 ? '' : 's'} couldn’t be put back: ${r.failed.slice(0, 3).join(', ')}`)
+    } catch (e) { reportError('Undo restore', e) }
+    reloadConversation(conversation.id)
+  }
+  const continueFrom = (m: Message) => { const p = m.provider ?? conversation.provider; sendMessage(conversation.id, cwd, 'Continue from where you stopped.', p, undefined, undefined, p === conversation.provider ? conversation.model ?? undefined : undefined) }
+  const latest = useRef({ openArtifactFn, openMedia, regenerateFrom, editUser, branchFrom, secondOpinion, onAddToMemory, restoreChanges, undoRestore, continueFrom })
+  latest.current = { openArtifactFn, openMedia, regenerateFrom, editUser, branchFrom, secondOpinion, onAddToMemory, restoreChanges, undoRestore, continueFrom }
   const rowActions = useMemo<RowActions>(() => ({
     openArtifact: (rel) => latest.current.openArtifactFn?.(rel),
     openMedia: (rel) => latest.current.openMedia?.(rel),
@@ -388,7 +447,10 @@ export default function ConversationView({ conversation, providers, pendingSend,
     saveSkill: (content) => setSaveSkill(content),
     saveOutcome: (id) => setSaveOutcomeFor(id),
     addToMemory: (content) => latest.current.onAddToMemory(content),
-    secondOpinion: (m) => latest.current.secondOpinion(m)
+    secondOpinion: (m) => latest.current.secondOpinion(m),
+    restoreChanges: (id) => { void latest.current.restoreChanges(id) },
+    continueFrom: (m) => latest.current.continueFrom(m),
+    undoRestore: (id) => latest.current.undoRestore(id)
   }), [])
   const renderMessage = (m: Message) => (
     <MessageRow
@@ -503,7 +565,7 @@ export default function ConversationView({ conversation, providers, pendingSend,
             )}
             {run.phase === 'compare' && shownLanes.length === 0 && <div className="compare-row compare-busy"><span className="activity-spinner spinner-xs" /> Comparing the replies…</div>}
             {collabRun && collabActive && <CollabCard run={collabRun} providers={providers} onOpenFile={cwd ? openCollabFile : undefined} />}
-            {error && <div className="msg-error">⚠ {error}</div>}
+            {error && !isStreaming && <FailureCard error={error} agent={providerName(providers, run.errorProvider ?? conversation.provider)} other={otherProviderFor(run.errorProvider ?? conversation.provider)?.name} busy={isStreaming} onAction={onFailureAction} />}
           </div>
         </div>
         <div className="conv-composer">

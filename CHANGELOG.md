@@ -18,6 +18,19 @@ Each version here matches a packaged build — the dmg is named
 > - Bumping rules: PATCH = fixes/small tweaks, MINOR = new features (backward-compatible),
 >   MAJOR = breaking changes or a data format users can't roll back from.
 
+## [2.22.0] - 2026-11-25
+
+### Added
+- **Changes under a reply.** When an agent edits files in Auto or Full access, the reply shows which files changed (+/− lines) with a diff for each. **Restore** puts them back as they were before that turn; **Undo restore** brings the agent's version back. Troupe keeps its own restore points in the project's `.workbench` folder and never touches your git history. Not covered: files your `.gitignore` ignores and Collab runs.
+- **Failures in plain words.** When an agent stops with an error, the chat says what happened (message too long, usage limit and when it resets, signed out, couldn't start, timed out, connection failed) with the next step as a button: Compress, Ask another agent, Open Settings ▸ Agents, Retry or Continue. The agent's own error text is under Details.
+- A reply that was cut short keeps its text and shows **Stopped early** with the reason, plus Continue from here and Retry.
+- The permission menu explains what each mode can and can't do, based on your Web, Shell and Chrome settings.
+- **Live run line.** While an agent works you see how long it has run and how many steps it took; on long runs, its limits. Near the timeout a warning offers **Keep waiting**.
+- Bot scheduled tasks and the Collab plan are approved on the same card: who asked, when it runs, what it can do, its limits and how to undo, then a record of your approval.
+
+### Changed
+- Collab shows tasks done and agent runs as meters. At the run limit it pauses with **Extend · +12 runs**.
+
 ## [2.21.1] - 2026-11-17
 
 ### Fixed

@@ -4,7 +4,7 @@ import { refreshLoginPath } from '../providers/env'
 import { startSetup, cancelSetup, checkAgent } from '../agents/setupService'
 import { listCustomAgents, saveCustomAgent, removeCustomAgent, testCustomAgent, detectPresets } from '../agents/customAgentStore'
 import { maybeCompress } from '../agent/snapshotService'
-import { startTurn, regenerateTurn, cancelTurn, getTurnState, snapshotTurns, compareTurn } from '../agent/turns'
+import { startTurn, regenerateTurn, cancelTurn, getTurnState, snapshotTurns, compareTurn, keepWaiting } from '../agent/turns'
 import type { StartTurnInput, RegenerateInput } from '../../shared/turns'
 import { sendOrQueue, getQueue, editQueued, removeQueued, resumeQueue, clearQueue } from '../agent/turnQueue'
 
@@ -27,6 +27,7 @@ export function registerAgentIpc(): void {
   handle('turns.start', (e, input: StartTurnInput) => startTurn(e.sender, input))
   handle('turns.regenerate', (e, input: RegenerateInput) => regenerateTurn(e.sender, input))
   handle('turns.cancel', (_e, conversationId: string) => cancelTurn(conversationId))
+  handle('turns.keepWaiting', (_e, conversationId: string) => keepWaiting(conversationId))
   handle('turns.compare', (e, conversationId: string) => compareTurn(e.sender, conversationId))
   handle('turns.get', (_e, conversationId: string) => getTurnState(conversationId))
   handle('turns.snapshot', () => snapshotTurns())

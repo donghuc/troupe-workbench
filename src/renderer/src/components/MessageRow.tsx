@@ -5,6 +5,10 @@ import ProviderAvatar from './ProviderAvatar'
 import SelectionCard from './SelectionCard'
 import FileCard from './FileCard'
 import MessageMarkdown from './MessageMarkdown'
+import ChangesCard from './ChangesCard'
+import { Button } from './ui/Button'
+import { changesOf } from '../../../shared/changes'
+import { stoppedTag } from '../../../shared/failures'
 import Icon from './Icon'
 import { ARTIFACT_EXT, IMG_RE, wbfileSrc, usageMain, usageBreakdown, actionsOf, attachmentsMeta, userDisplayText } from '../chatFiles'
 import { Menu, MenuItem } from './ui/Menu'
@@ -23,6 +27,9 @@ export interface RowActions {
   saveOutcome: (id: string) => void
   addToMemory: (content: string) => void
   secondOpinion: (m: Message) => void
+  restoreChanges: (messageId: string) => void
+  continueFrom: (m: Message) => void
+  undoRestore: (messageId: string) => Promise<void>
 }
 
 interface Props {
@@ -70,6 +77,16 @@ function MessageRow({ m, idx, name, cwd, files, menuOpen, isStreaming, otherName
               : <FileCard key={rel} root={cwd} rel={rel} onOpen={openArtifact} />
           ))}
         </div>
+      )}
+      {m.role === 'assistant' && stoppedTag(m.metadata) && (
+        <div className="msg-stopped">
+          <span className="msg-stopped-tag"><Icon name="stop" size="xs" /> {stoppedTag(m.metadata)}</span>
+          {!isStreaming && <Button size="sm" onClick={() => actions.continueFrom(m)}>Continue from here</Button>}
+          {!isStreaming && <Button size="sm" variant="ghost" onClick={() => actions.regenerate(m, idx)}>Retry</Button>}
+        </div>
+      )}
+      {m.role === 'assistant' && changesOf(m.metadata) && (
+        <ChangesCard messageId={m.id} changes={changesOf(m.metadata)!} busy={isStreaming} onRestore={actions.restoreChanges} onUndo={actions.undoRestore} onOpenFile={openArtifact} />
       )}
       {m.role === 'user' && attachmentsMeta(m.metadata).length > 0 && (
         <div className="msg-attachments">

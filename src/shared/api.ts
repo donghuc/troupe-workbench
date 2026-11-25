@@ -87,6 +87,12 @@ export interface WorkbenchApi {
     review(id: string, approve: boolean): Promise<Schedule | null>
     onChanged(cb: () => void): () => void
   }
+  /** A reply's Changes card (D-151): one file's diff, Restore, Undo restore. */
+  changes: {
+    diff(messageId: string, path: string): Promise<string>
+    restore(messageId: string): Promise<{ failed: string[] }>
+    undoRestore(messageId: string): Promise<{ failed: string[] }>
+  }
   conversations: {
     list(projectId: string): Promise<Conversation[]>
     recent(limit?: number): Promise<RecentConversation[]>
@@ -136,6 +142,8 @@ export interface WorkbenchApi {
     start(input: StartTurnInput): Promise<TurnState>
     regenerate(input: RegenerateInput): Promise<TurnState>
     cancel(conversationId: string): Promise<void>
+    /** Restart the no-output timer of a quiet run (D-151). Returns how many runs it reached. */
+    keepWaiting(conversationId: string): Promise<number>
     compare(conversationId: string): Promise<TurnState>   // Compare card over the replies since the last user message (D-081)
     get(conversationId: string): Promise<TurnState>
     snapshot(): Promise<TurnState[]>

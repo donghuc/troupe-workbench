@@ -22,6 +22,9 @@ import VoiceButton from './VoiceButton'
 import { hasCollab, stripCollab } from '../collabMention'
 import AttachmentsModal from './AttachmentsModal'
 import { insertAtCaret } from '../../../shared/voice'
+import { explainMode, type ToolSwitches } from '../../../shared/modeExplain'
+import { CHROME_ACCESS_SETTING } from '../../../shared/providers'
+import { SHELL_SANDBOX_SETTING, sandboxOn } from '../../../shared/shellSandbox'
 
 interface Props {
   providers: ProviderInfo[]
@@ -59,6 +62,20 @@ const PERM_OPTS: { v: PermissionMode; l: string; d: string }[] = [
   { v: 'full', l: 'Full access', d: 'No restrictions' }
 ]
 
+function ModeExplainer({ mode, switches }: { mode: PermissionMode; switches: ToolSwitches }) {
+  const e = explainMode(mode, switches)
+  return (
+    <div className="mode-explain" role="note">
+      <div className="mode-explain-title">{PERM_OPTS.find((o) => o.v === mode)?.l} — in this chat, the agent can:</div>
+      <ul>
+        {e.can.map((t) => <li key={t} className="ok"><Icon name="check" size="xs" /> {t}</li>)}
+        {e.cannot.map((t) => <li key={t} className="no"><Icon name="close" size="xs" /> {t}</li>)}
+      </ul>
+      <div className="mode-explain-foot">File edits in Auto and Full can be restored per reply · Tools are set in Settings ▸ Tools</div>
+    </div>
+  )
+}
+
 function Composer({ providers, onSend, disabled, placeholder = 'How can I help you today?', autoFocus, defaultProvider, folderPath, enableSkills, defaultModel, defaultPermissionMode, onPermissionModeChange, draftKey, chatId, busy, onStop, inject, onQuickMemory, onProviderChange, onStartCollab, onAgentPick, collabAvailable, collabBusy }: Props) {
   const [text, setText] = useState(() => (draftKey ? getDraft(draftKey) : ''))
   const [providerId, setProviderId] = useState<ProviderId>(defaultProvider ?? providers[0]?.id ?? 'claude-code')
@@ -81,6 +98,14 @@ function Composer({ providers, onSend, disabled, placeholder = 'How can I help y
   // The remembered mode can arrive after mount (app-wide fallback is read async); adopt it.
   useEffect(() => { if (defaultPermissionMode) setPermModeRaw(defaultPermissionMode) }, [defaultPermissionMode])
   const [permOpen, setPermOpen] = useState(false)
+  // D-151: what the chosen mode allows, read from the same switches the runs use (Settings ▸ Tools).
+  const [switches, setSwitches] = useState<ToolSwitches | null>(null)
+  useEffect(() => {
+    if (!permOpen) return
+    Promise.all([api.settings.get('agent_web_access'), api.settings.get('agent_shell_access'), api.settings.get(CHROME_ACCESS_SETTING), api.settings.get(SHELL_SANDBOX_SETTING)])
+      .then(([w, sh, ch, sb]: (string | null)[]) => setSwitches({ web: w !== '0', shell: sh !== '0', chrome: ch === '1', sandbox: sandboxOn(sb) }))
+      .catch(() => setSwitches(null))
+  }, [permOpen])
   const [attachOpen, setAttachOpen] = useState(false)
   const [manageAttach, setManageAttach] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -432,6 +457,7 @@ function Composer({ providers, onSend, disabled, placeholder = 'How can I help y
                     <span className="perm-opt-d">{o.v === 'read' && customAgentFor(providerId) && !customAgentFor(providerId)!.readOnlyArgs?.length ? `Read-only can't be enforced for ${customAgentFor(providerId)!.name}` : o.d}</span>
                   </button>
                 ))}
+                {switches && <ModeExplainer mode={permMode} switches={switches} />}
             </Menu>
           </div>
           <input

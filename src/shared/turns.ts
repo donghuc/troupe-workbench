@@ -6,13 +6,14 @@ import type { PermissionMode } from './agent'
 // one after another, or an @all fan-out run side by side.
 
 export interface TurnActivity { label: string; startedAt: number }
-export interface TurnLane { provider: ProviderId; text: string; activity: TurnActivity | null; done: boolean }
+export interface TurnLane { provider: ProviderId; text: string; activity: TurnActivity | null; done: boolean; steps?: number }   // steps: tool calls so far (D-151)
 export interface TurnState {
   conversationId: string
   busy: boolean
   parallel: boolean        // lanes render side by side
   lanes: TurnLane[]
   error: string | null
+  errorProvider?: ProviderId   // D-151: who failed, for the failure card
   rev: number              // bumps when the conversation's messages should be reloaded
   phase?: 'compare'        // D-081: the replies are in; the drafting agent is writing the Compare card
 }
@@ -65,7 +66,7 @@ export function turnDelta(prev: TurnState | undefined, next: TurnState): TurnDel
   const append: TurnAppend[] = []
   for (let i = 0; i < next.lanes.length; i++) {
     const a = prev.lanes[i]; const b = next.lanes[i]
-    if (a.provider !== b.provider || a.done !== b.done || !sameActivity(a.activity, b.activity)) return null
+    if (a.provider !== b.provider || a.done !== b.done || a.steps !== b.steps || !sameActivity(a.activity, b.activity)) return null
     if (b.text.length < a.text.length || !b.text.startsWith(a.text)) return null
     if (b.text.length > a.text.length) append.push({ i, from: a.text.length, text: b.text.slice(a.text.length) })
   }

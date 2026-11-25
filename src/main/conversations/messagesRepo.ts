@@ -110,3 +110,12 @@ export function deleteMessagesFrom(conversationId: string, messageId: string): v
   const tx = db.transaction(() => { for (const id of ids) del.run(id) })
   tx()
 }
+
+/** Merge keys into a message's metadata (null removes a key). Used for a turn's Changes card (D-151). */
+export function mergeMessageMetadata(id: string, patch: Record<string, unknown>): Message | null {
+  const m = getMessage(id); if (!m) return null
+  const next: Record<string, unknown> = { ...(m.metadata ?? {}) }
+  for (const [k, v] of Object.entries(patch)) { if (v === null) delete next[k]; else next[k] = v }
+  getDb().prepare('UPDATE messages SET metadata = ? WHERE id = ?').run(Object.keys(next).length ? JSON.stringify(next) : null, id)
+  return getMessage(id)
+}

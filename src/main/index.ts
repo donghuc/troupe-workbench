@@ -9,6 +9,7 @@ import { getDb, closeDb } from './database/db'
 import { registerProjectIpc } from './ipc/projects'
 import { registerFileIpc } from './ipc/files'
 import { registerConversationIpc } from './ipc/conversations'
+import { registerChangesIpc } from './ipc/changes'
 import { guardNavigation, openExternalSafely } from './ipc/handle'
 import { registerAgentIpc } from './ipc/agent'
 import { registerContextIpc } from './ipc/context'
@@ -187,6 +188,7 @@ app.whenReady().then(() => {
   registerMemoryIpc()
   registerScheduleIpc()
   registerConversationIpc()
+  registerChangesIpc()
   registerDefaultProviders()
   void refreshLiveMcpNames() // warm MCP names (incl. account connectors) for headless Auto allowlisting
   registerAgentIpc()

@@ -185,7 +185,8 @@ export function startRun(sender: WebContents, params: RunParams): string {
       if (idleTimer) clearTimeout(idleTimer)
       if (idleWarnMs > 0 && (timeoutMs <= 0 || idleWarnMs < timeoutMs)) idleTimer = setTimeout(() => emit({ type: 'status', message: `Still working — no output for ${mins(idleWarnMs)} min` }), idleWarnMs)
     }
-    const clearWatchdog = (): void => { if (deadline) clearTimeout(deadline); if (ceiling) clearTimeout(ceiling); if (idleTimer) clearTimeout(idleTimer) }
+    const clearWatchdog = (): void => { keepAlives.delete(runId); if (deadline) clearTimeout(deadline); if (ceiling) clearTimeout(ceiling); if (idleTimer) clearTimeout(idleTimer) }
+    keepAlives.set(runId, armIdle)   // D-151: "Keep waiting" restarts the quiet timer
     armIdle()
     if (handoffUsed) emit({ type: 'status', message: 'Reading the conversation…' })
     let full = ''
@@ -230,7 +231,7 @@ export function startRun(sender: WebContents, params: RunParams): string {
         else if (ev.type === 'error' && ev.fatal) {
           clearWatchdog()
           const saved = full.trim()
-            ? appendMessage({ conversationId: params.conversationId, role: 'assistant', provider: params.providerId, content: full, metadata: { providerSessionId, modelUsed, contextMode, partial: true, actions, ...(params.parallelGroup ? { parallelGroup: params.parallelGroup } : {}), ...(params.extraMetadata ?? {}) } })
+            ? appendMessage({ conversationId: params.conversationId, role: 'assistant', provider: params.providerId, content: full, metadata: { providerSessionId, modelUsed, contextMode, partial: true, stopError: String(ev.message).slice(0, 300), actions, ...(params.parallelGroup ? { parallelGroup: params.parallelGroup } : {}), ...(params.extraMetadata ?? {}) } })
             : null
           return done(saved?.id ?? null, ev.message)
         }
@@ -244,7 +245,7 @@ export function startRun(sender: WebContents, params: RunParams): string {
           : `${provider.name} was stopped: still running after ${mins(timeoutMs * RUN_CEILING)} min (the limit is ${RUN_CEILING}× the run timeout).`
         emit({ type: 'error', message: msg, fatal: true })
         const saved = full.trim()
-          ? appendMessage({ conversationId: params.conversationId, role: 'assistant', provider: params.providerId, content: full, metadata: { providerSessionId, modelUsed, contextMode, partial: true, timedOut: true, actions, ...(params.parallelGroup ? { parallelGroup: params.parallelGroup } : {}), ...(params.extraMetadata ?? {}) } })
+          ? appendMessage({ conversationId: params.conversationId, role: 'assistant', provider: params.providerId, content: full, metadata: { providerSessionId, modelUsed, contextMode, partial: true, timedOut: true, stopError: msg, actions, ...(params.parallelGroup ? { parallelGroup: params.parallelGroup } : {}), ...(params.extraMetadata ?? {}) } })
           : null
         return done(saved?.id ?? null, msg)
       }
@@ -253,7 +254,7 @@ export function startRun(sender: WebContents, params: RunParams): string {
       if (usage && contextMode === 'resume') usage = { ...usage, costUsd: turnCost(sessionCost, costBefore) }
       const saved = appendMessage({
         conversationId: params.conversationId, role: 'assistant', provider: params.providerId,
-        content: full, metadata: { providerSessionId, modelUsed, contextMode, usage, actions, ...(resumeMark(providerSessionId, sessionCost) ?? {}), ...(params.parallelGroup ? { parallelGroup: params.parallelGroup } : {}), ...(params.extraMetadata ?? {}) }
+        content: full, metadata: { providerSessionId, modelUsed, contextMode, usage, actions, ...(stoppedRuns.delete(runId) ? { stoppedByUser: true } : {}), ...(resumeMark(providerSessionId, sessionCost) ?? {}), ...(params.parallelGroup ? { parallelGroup: params.parallelGroup } : {}), ...(params.extraMetadata ?? {}) }
       })
       logInfo('run complete', { provider: params.providerId, chars: full.length, ms: Date.now() - startedAt, conv: params.conversationId })
       // D-149 measure: how often each agent writes blocks, and whether they pass.
@@ -265,7 +266,7 @@ export function startRun(sender: WebContents, params: RunParams): string {
       clearWatchdog()
       emit({ type: 'error', message: String(err), fatal: true })
       const saved = full.trim()
-        ? appendMessage({ conversationId: params.conversationId, role: 'assistant', provider: params.providerId, content: full, metadata: { providerSessionId, modelUsed, contextMode, partial: true, actions, ...(params.parallelGroup ? { parallelGroup: params.parallelGroup } : {}), ...(params.extraMetadata ?? {}) } })
+        ? appendMessage({ conversationId: params.conversationId, role: 'assistant', provider: params.providerId, content: full, metadata: { providerSessionId, modelUsed, contextMode, partial: true, stopError: String(err).slice(0, 300), actions, ...(params.parallelGroup ? { parallelGroup: params.parallelGroup } : {}), ...(params.extraMetadata ?? {}) } })
         : null
       done(saved?.id ?? null, String(err))
     }
@@ -274,7 +275,15 @@ export function startRun(sender: WebContents, params: RunParams): string {
   return runId
 }
 
+/** "Keep waiting" (D-151): restart a run's no-output timer, as if it had just written something.
+ *  The overall ceiling (RUN_CEILING × the timeout) still applies. */
+const keepAlives = new Map<string, () => void>()
+export function keepRunAlive(runId: string): boolean { const f = keepAlives.get(runId); if (f) f(); return !!f }
+
+// Runs the user stopped (D-151): their reply is tagged "Stopped by you".
+const stoppedRuns = new Set<string>()
 export async function cancelRun(runId: string): Promise<void> {
+  if (active.has(runId)) stoppedRuns.add(runId)
   await active.get(runId)?.cancel()
 }
 

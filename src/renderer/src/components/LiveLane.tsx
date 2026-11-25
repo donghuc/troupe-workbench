@@ -11,6 +11,7 @@ interface Props {
   root?: string
   onOpenArtifact?: (rel: string) => void
   onOpenMedia?: (rel: string) => void
+  onKeepWaiting?: () => void
 }
 
 /** The text to render for a streaming lane, throttled by what rendering it costs (D-098). */
@@ -32,7 +33,10 @@ function useThrottledText(text: string, done: boolean): { shown: string; markRen
   return { shown, markRendered: (ms) => { cost.current = ms } }
 }
 
-function LiveLane({ lane, name, root, onOpenArtifact, onOpenMedia }: Props) {
+function LiveLane({ lane, name, root, onOpenArtifact, onOpenMedia, onKeepWaiting }: Props) {
+  // When this lane last showed any output — the quiet-timeout warning counts from here (D-151).
+  const lastOutput = useRef(Date.now())
+  useEffect(() => { lastOutput.current = Date.now() }, [lane.text.length, lane.activity?.label, lane.steps])
   const { shown, markRendered } = useThrottledText(lane.text, lane.done)
   const started = performance.now()
   // Render + commit time of this lane, which is almost all markdown parsing.
@@ -40,7 +44,7 @@ function LiveLane({ lane, name, root, onOpenArtifact, onOpenMedia }: Props) {
   return (
     <div className="msg msg-assistant">
       <div className="msg-author"><ProviderAvatar id={lane.provider} /><span>{name}</span></div>
-      {lane.activity && <StreamingActivity activity={lane.activity} />}
+      {lane.activity && <StreamingActivity activity={lane.activity} steps={lane.steps} lastOutput={lastOutput} onKeepWaiting={onKeepWaiting} />}
       {shown && (
         <div className="msg-body markdown-body stream-body">
           <MessageMarkdown onOpenArtifact={onOpenArtifact} onOpenMedia={onOpenMedia} root={root} blocks={{ messageId: `live-${lane.provider}`, live: true }}>{shown}</MessageMarkdown>

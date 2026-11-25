@@ -6,9 +6,11 @@ import type { AgentEvent } from '../../shared/agent'
 import type { TurnState, TurnLane, StartTurnInput, RegenerateInput, TurnAttachment } from '../../shared/turns'
 import { EMPTY_TURN, turnDelta } from '../../shared/turns'
 import type { TurnOutcome } from '../../shared/turnQueue'
-import { startRun, cancelRun } from './runner'
+import { startRun, cancelRun, keepRunAlive } from './runner'
 import { planTurn } from './turnPlan'
-import { appendMessage, deleteMessagesFrom, listMessagesSince } from '../conversations/messagesRepo'
+import { appendMessage, deleteMessagesFrom, listMessagesSince, mergeMessageMetadata } from '../conversations/messagesRepo'
+import { takeSnapshot, diffSnapshots, pruneSnapshots } from './restorePoints'
+import { CHANGES_LIST_MAX, type TurnChanges } from '../../shared/changes'
 import { setConversationPermissionMode, getConversation } from '../conversations/conversationsRepo'
 import { getProject } from '../projects/projectsRepo'
 import { appendRunLog } from './runLog'
@@ -51,6 +53,8 @@ interface Turn {
   modeSkill?: string
   // D-118: what the run log needs when the turn ends (the user message's time and where it came from).
   log?: { at: number; source: 'app' | 'cli' | 'schedule' }
+  // D-151: the restore point taken before the turn (Auto / Full in a project folder).
+  restore?: { root: string; since: number; before: Promise<{ id: string } | { error: string }>; overlap: boolean }
 }
 
 const turns = new Map<string, Turn>()
@@ -128,10 +132,52 @@ export function sweepInterruptedTurns(): number {
 // ── lifecycle ─────────────────────────────────────────────────────────────────
 const codexExtra = modelLists   // each agent's own newest models + typed extras (D-076, D-078)
 
+// ── restore points (D-151) ──────────────────────────────────────────────────────
+// Turns running in each project folder right now, so a card can say another chat ran alongside.
+const activeRoots = new Map<string, Set<Turn>>()
+
+/** Take the "before" snapshot, then start the turn. Read-only turns and folderless chats just start. */
+function startWithRestorePoint(conversationId: string, t: Turn, start: () => void): void {
+  const root = t.cwd
+  if (!root || t.permMode === 'read' || t.compare) { start(); return }
+  const others = activeRoots.get(root) ?? new Set<Turn>()
+  const overlap = others.size > 0
+  for (const o of others) if (o.restore) o.restore.overlap = true
+  others.add(t); activeRoots.set(root, others)
+  t.restore = { root, since: Date.now(), before: takeSnapshot(root, `before-${conversationId.slice(0, 8)}`), overlap }
+  set(conversationId, { lanes: [{ provider: t.plan.chain[0], text: '', activity: { label: 'Saving a restore point…', startedAt: Date.now() }, done: false }] }, true)
+  void t.restore.before.then(() => {
+    if (!isCurrent(conversationId, t)) return
+    if (t.cancelled) { finish(conversationId); return }
+    start()
+  })
+  void pruneSnapshots(root).catch(() => undefined)
+}
+
+/** After the turn: the "after" snapshot, and the difference saved on the turn's last reply. */
+async function endRestorePoint(conversationId: string, t: Turn): Promise<void> {
+  const r = t.restore; if (!r) return
+  const set2 = activeRoots.get(r.root); set2?.delete(t); if (set2 && !set2.size) activeRoots.delete(r.root)
+  const before = await r.before
+  if (!('id' in before)) return
+  const after = await takeSnapshot(r.root, `after-${conversationId.slice(0, 8)}`)
+  if (!('id' in after)) return
+  const files = await diffSnapshots(r.root, before.id, after.id)
+  if (!files.length) return
+  const last = listMessagesSince(conversationId, r.since).filter((m) => m.role === 'assistant').pop()
+  if (!last) return
+  const changes: TurnChanges = { before: before.id, after: after.id, files: files.slice(0, CHANGES_LIST_MAX), ...(files.length > CHANGES_LIST_MAX ? { more: files.length - CHANGES_LIST_MAX } : {}), ...(r.overlap ? { overlap: true } : {}) }
+  mergeMessageMetadata(last.id, { changes })
+  logInfo('[restore] turn changes', { conv: conversationId, files: files.length, overlap: r.overlap })
+  bumpRev(conversationId)
+}
+
 function finish(conversationId: string): void {
   const t = turns.get(conversationId)
   turns.delete(conversationId)
   unlockRow(conversationId)
+  // Queued before the next turn can start, so its "before" comes after this "after".
+  if (t?.restore) void endRestorePoint(conversationId, t).catch((e) => logWarn('[restore] end failed', { err: String(e) }))
   const err = getTurnState(conversationId).error
   if (t?.log) logFinishedTurn(conversationId, t, err)
   set(conversationId, { busy: false, lanes: [], parallel: false, phase: undefined }, true)
@@ -170,7 +216,8 @@ function onEvent(conversationId: string, provider: ProviderId, ev: AgentEvent, o
     case 'status': updateLane(conversationId, provider, withActivity(ev.message)); break
     case 'tool_start': {
       const detail = typeof ev.input === 'string' ? ev.input : ''
-      updateLane(conversationId, provider, withActivity(`Running ${ev.tool}${detail ? ` · ${detail.slice(0, 40)}` : ''}…`)); break
+      const act = withActivity(`Running ${ev.tool}${detail ? ` · ${detail.slice(0, 40)}` : ''}…`)
+      updateLane(conversationId, provider, (l) => ({ ...act(l), steps: (l.steps ?? 0) + 1 })); break
     }
     case 'tool_end': updateLane(conversationId, provider, withActivity('Working…')); break
     case 'file_changed': updateLane(conversationId, provider, withActivity(`Edited ${ev.path}`)); break
@@ -181,7 +228,7 @@ function onEvent(conversationId: string, provider: ProviderId, ev: AgentEvent, o
 function onDone(conversationId: string, provider: ProviderId, runId: string, error: string | undefined, owner: Turn): void {
   const t = turns.get(conversationId); if (!t || t !== owner) return
   t.runIds.delete(runId)
-  if (error) set(conversationId, { error })
+  if (error) set(conversationId, { error, errorProvider: provider })
   if (t.compare) { bumpRev(conversationId); finish(conversationId); return }   // the Compare run itself just ended
   if (t.plan.mode === 'parallel') {
     updateLane(conversationId, provider, (l) => ({ ...l, done: true, activity: null }))
@@ -320,10 +367,10 @@ export function startTurn(sender: WebContents, input: StartTurnInput, h?: { onFi
   if (h) hooks.set(input.conversationId, h); else hooks.delete(input.conversationId)
   turns.set(input.conversationId, turn)
   lockRow(input.conversationId, plan.chain, plan.mode === 'parallel')
-  set(input.conversationId, { busy: true, error: null }, true)
+  set(input.conversationId, { busy: true, error: null, errorProvider: undefined }, true)
   bumpRev(input.conversationId)
   logInfo('turn start', { conv: input.conversationId, mode: plan.mode, chain: plan.chain })
-  if (plan.mode === 'parallel') startParallel(input.conversationId); else runNext(input.conversationId)
+  startWithRestorePoint(input.conversationId, turn, () => { if (plan.mode === 'parallel') startParallel(input.conversationId); else runNext(input.conversationId) })
   return getTurnState(input.conversationId)
 }
 
@@ -342,8 +389,16 @@ export function regenerateTurn(sender: WebContents, input: RegenerateInput): Tur
   lockRow(input.conversationId, [input.provider], false)
   set(input.conversationId, { busy: true, error: null }, true)
   bumpRev(input.conversationId)
-  runNext(input.conversationId)
+  startWithRestorePoint(input.conversationId, turn, () => runNext(input.conversationId))
   return getTurnState(input.conversationId)
+}
+
+/** "Keep waiting" on a quiet run (D-151): restart the no-output timer of the turn's runs. */
+export function keepWaiting(conversationId: string): number {
+  const t = turns.get(conversationId); if (!t) return 0
+  let n = 0
+  for (const rid of t.runIds) if (keepRunAlive(rid)) n++
+  return n
 }
 
 export async function cancelTurn(conversationId: string): Promise<void> {

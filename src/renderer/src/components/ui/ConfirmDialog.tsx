@@ -21,7 +21,7 @@ type Request = ConfirmOptions & { resolve: (ok: boolean) => void }
 
 // A destructive confirm is never the accent primary: danger colour, always with an icon and its label.
 const DESTRUCTIVE = /^(delete|remove|clear|reset|stop|discard)\b/i
-const dangerIcon = (label: string): IconName => /^reset/i.test(label) ? 'refresh' : /^stop/i.test(label) ? 'stop' : 'trash'
+const dangerIcon = (label: string): IconName => /^reset/i.test(label) ? 'refresh' : /^stop/i.test(label) ? 'stop' : /^restore|^undo/i.test(label) ? 'undo' : 'trash'
 
 let enqueue: ((r: Request) => void) | null = null
 

@@ -10,6 +10,7 @@ import { resolveTaskModel } from '../../../shared/models'
 import { formatDuration } from '../../../shared/collabChecks'
 import { isProviderId } from '../../../shared/providers'
 import Icon from './Icon'
+import { ApprovalHead, ApprovalFacts } from './ApprovalCard'
 import { api } from '../api'
 import { Button, IconButton } from './ui/Button'
 import { Menu, MenuItem } from './ui/Menu'
@@ -197,15 +198,21 @@ function CollabCard({ run, providers, onOpenFile }: { run: CollabRun; providers:
         <span className="collab-card-title">Collab · {RUN_LABEL[run.status] ?? run.status}</span>
         {(run.status === 'running' || run.status === 'planning') && <span className="activity-spinner spinner-xs" />}
         <span className="collab-card-spacer" />
-        {cap > 0 && (run.status === 'running' || run.status === 'needs_attention') && (
-          <span className="collab-budget" title={retryRuns ? `Agent runs used vs. budget · ${retryRuns} spent re-doing failed work` : 'Agent runs used vs. budget'}>{spent}/{cap} runs{retryRuns ? ` · ${retryRuns} on retries` : ''}</span>
-        )}
         {(run.status === 'running' || run.status === 'planning') && (
           <Button size="sm" onClick={confirmStop} disabled={busy}>Stop</Button>
         )}
       </div>
 
       <div className="collab-goal">{run.goal}</div>
+
+      {/* D-151: limits as meters, so a pause at the limit never comes as a surprise */}
+      {cap > 0 && (run.status === 'running' || run.status === 'needs_attention') && tasks.length > 0 && (
+        <div className="collab-meters">
+          <Meter label="Tasks done" value={tasks.filter((t) => t.status === 'passed' || t.status === 'skipped').length} max={tasks.length} />
+          <Meter label="Agent runs" value={spent} max={cap} note={retryRuns ? `${retryRuns} on retries` : undefined} />
+        </div>
+      )}
+      {outOfBudget && <div className="collab-limit-note"><Icon name="clock" size="sm" /> Paused at the run limit ({spent}/{cap}). Extend it to let the run finish, or stop here.</div>}
 
       {/* D-064: PLAN/STATUS live in the hidden .workbench/ folder, so link them here;
           deliverables are in a visible folder the file browser shows. */}
@@ -228,6 +235,17 @@ function CollabCard({ run, providers, onOpenFile }: { run: CollabRun; providers:
       )}
       {run.status === 'stopped' && run.summary && <div className="collab-summary">{plain(run.summary)}</div>}
 
+      {/* D-151 D: the plan waits for you like every approval — action, facts, then the plan itself. */}
+      {editing && (
+        <div className="appr-head">
+          <ApprovalHead state="waiting" action={`Start this Collab run: ${rows.length} task${rows.length === 1 ? '' : 's'}`} />
+          <ApprovalFacts facts={[
+            { label: 'Agents', value: [...new Set(rows.map((r) => providers.find((p) => p.id === ((r.kind ?? 'work') === 'review' ? (r.reviewer ?? run.providerId) : (r.provider ?? run.providerId)))?.name ?? String(r.provider ?? run.providerId)))].join(', ') },
+            { label: 'Limits', value: 'A run limit sized to the plan — at the limit it pauses and asks before going on' },
+            { label: 'Undo', value: 'Stop any time from this card. Collab’s file edits have no restore point yet — use git to undo them.' }
+          ]} />
+        </div>
+      )}
       {/* D-121: the app's plan checks and the Planner's own conflicts, before the user approves. */}
       {editing && run.reason && (
         <div className="collab-reason warn collab-checks">
@@ -381,7 +399,7 @@ function CollabCard({ run, providers, onOpenFile }: { run: CollabRun; providers:
           <Button size="sm" variant="ghost" danger className="btn-icon-label" onClick={confirmStop} disabled={busy}><Icon name="stop" size="sm" />Stop run</Button>
           <span className="collab-card-spacer" />
           {outOfBudget
-            ? <Button variant="primary" size="sm" onClick={() => resume(true)} disabled={busy}>Add 12 runs & continue</Button>
+            ? <Button variant="primary" size="sm" onClick={() => resume(true)} disabled={busy}>Extend · +12 runs</Button>
             : !stuck && <Button variant="primary" size="sm" onClick={() => resume(false)} disabled={busy}>Resume</Button>}
         </div>
       )}
@@ -390,6 +408,16 @@ function CollabCard({ run, providers, onOpenFile }: { run: CollabRun; providers:
         const anyFailed = tasks.some((t) => t.status === 'failed')
         return <div className={`collab-summary${anyFailed ? ' warn' : ''}`}>{anyFailed ? '⚠' : '✓'} {plain(run.summary) || 'Collab run complete.'}</div>
       })()}
+    </div>
+  )
+}
+
+function Meter({ label, value, max, note }: { label: string; value: number; max: number; note?: string }) {
+  const ratio = max > 0 ? Math.min(1, value / max) : 0
+  return (
+    <div className={`collab-meter${ratio >= 1 ? ' full' : ratio >= 0.85 ? ' near' : ''}`}>
+      <div className="collab-meter-top"><span>{label}{note ? ` · ${note}` : ''}</span><span className="collab-meter-val">{value} / {max}</span></div>
+      <div className="collab-meter-track" role="meter" aria-label={label} aria-valuenow={value} aria-valuemin={0} aria-valuemax={max}><div className="collab-meter-bar" style={{ width: `${Math.round(ratio * 100)}%` }} /></div>
     </div>
   )
 }

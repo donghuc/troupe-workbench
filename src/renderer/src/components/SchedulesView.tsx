@@ -12,6 +12,12 @@ import { Badge } from './ui/Badge'
 import Switch from './settings/Switch'
 import { describeChange } from '../../../shared/scheduleRules'
 import { failed } from '../notices'
+import ApprovalCard, { ApprovedLine } from './ApprovalCard'
+import { explainMode, type ToolSwitches } from '../../../shared/modeExplain'
+import { CHROME_ACCESS_SETTING } from '../../../shared/providers'
+import { SHELL_SANDBOX_SETTING, sandboxOn } from '../../../shared/shellSandbox'
+import { SCHEDULE_APPROVALS_SETTING, parseApprovals, type ApprovalRecord } from '../../../shared/approvals'
+import { runTimeoutMin, RUN_CEILING } from '../runLimits'
 
 interface Props {
   projects: Project[]
@@ -57,6 +63,15 @@ export default function SchedulesView({ projects, providers, onRun }: Props) {
   const editing = sel.mode === 'edit' ? current : null
   const projName = (id: string) => projects.find((p) => p.id === id)?.name ?? 'Project'
   const provName = (id: string) => providers.find((p) => p.id === id)?.name ?? id
+  // D-151 D: what an approval would let the task do, and the approvals already given.
+  const [switches, setSwitches] = useState<ToolSwitches>({ web: true, shell: true, chrome: false, sandbox: true })
+  const [approvals, setApprovals] = useState<Record<string, ApprovalRecord>>({})
+  const loadApprovals = () => { api.settings.get(SCHEDULE_APPROVALS_SETTING).then((v: string | null) => setApprovals(parseApprovals(v))).catch(() => undefined) }
+  useEffect(() => {
+    Promise.all([api.settings.get('agent_web_access'), api.settings.get('agent_shell_access'), api.settings.get(CHROME_ACCESS_SETTING), api.settings.get(SHELL_SANDBOX_SETTING)])
+      .then(([w, sh, ch, sb]: (string | null)[]) => setSwitches({ web: w !== '0', shell: sh !== '0', chrome: ch === '1', sandbox: sandboxOn(sb) })).catch(() => undefined)
+    loadApprovals()
+  }, [])
 
   const openView = (s: Schedule) => { setMenuOpen(false); setSel({ mode: 'view', id: s.id }) }
   const openNew = () => {
@@ -91,7 +106,7 @@ export default function SchedulesView({ projects, providers, onRun }: Props) {
     if (!approve && s.pending?.kind === 'new' && !(await confirmDialog({ title: 'Discard this task?', message: `“${s.title}” was made by a bot and never ran. Discarding deletes it.`, confirmLabel: 'Discard' }))) return
     if (approve && s.pending?.kind === 'delete' && !(await confirmDialog({ title: 'Delete task?', message: `A bot asked to delete “${s.title}”. It stops running and is removed.`, confirmLabel: 'Delete' }))) return
     const r = await api.schedules.review(s.id, approve).catch(failed('Review task'))
-    await load()
+    await load(); loadApprovals()
     if (r === null) setSel({ mode: 'none' })
   }
   const setManaged = async (s: Schedule, on: boolean) => { await api.schedules.setBotManaged(s.id, on).catch(failed('Bots can manage this task')); load() }
@@ -154,21 +169,27 @@ export default function SchedulesView({ projects, providers, onRun }: Props) {
 
       {sel.mode === 'view' && current && (
         <div className="md-read">
-          {current.pending && (
-            <div className="sched-review" role="region" aria-label="Waiting for your approval">
-              <div className="sched-review-title">{current.pending.kind === 'new' ? 'A bot made this task from the command line' : current.pending.kind === 'delete' ? 'A bot asked to delete this task' : 'A bot changed this task'}</div>
-              <div className="sched-review-text">
-                {current.pending.kind === 'new' ? 'It won’t run until you approve it. Check the instructions, agent and permission below.'
-                  : current.pending.kind === 'delete' ? 'It runs in Full access, so deleting it needs your OK. It’s paused until you decide.'
-                  : 'It runs in Full access, so the change needs your OK. It’s paused until you decide.'}
-              </div>
-              {current.pending.kind === 'edit' && <ul className="sched-review-changes">{describeChange(current.pending).map((l) => <li key={l}>{l}</li>)}</ul>}
-              <div className="sched-review-actions">
-                <Button variant="primary" size="sm" onClick={() => review(current, true)}>{current.pending.kind === 'delete' ? 'Delete task' : current.pending.kind === 'new' ? 'Approve and turn on' : 'Approve change'}</Button>
-                <Button size="sm" onClick={() => review(current, false)}>{current.pending.kind === 'new' ? 'Discard task' : current.pending.kind === 'delete' ? 'Keep task' : 'Discard change'}</Button>
-              </div>
-            </div>
-          )}
+          {current.pending && (() => {
+            const p = current.pending
+            const t = runTimeoutMin()
+            return (
+              <ApprovalCard
+                action={p.kind === 'new' ? `Turn on a scheduled task: “${current.title}”` : p.kind === 'delete' ? `Delete the task “${current.title}”` : `Change the task “${current.title}”`}
+                facts={[
+                  { label: 'Who asked', value: `A bot, from the command line · ${when(p.at)}` },
+                  { label: 'Runs', value: `${cadence(current)} · ${provName(current.provider)} · ${permLabel(current.permissionMode)}` },
+                  ...(p.kind !== 'delete' ? [{ label: 'Can do', value: explainMode(current.permissionMode, switches).can.join(' · ') }] : []),
+                  ...(p.kind !== 'delete' && t > 0 ? [{ label: 'Limits', value: `Each run stops after ${t} min without output, ${t * RUN_CEILING} min at most` }] : []),
+                  { label: 'Undo', value: p.kind === 'new' ? 'Pause or delete it here any time; a run’s file edits can be restored from its chat' : p.kind === 'delete' ? 'A deleted task can’t be brought back' : 'Change it back here any time' }
+                ]}
+                payload={p.kind === 'new' ? { label: 'Exact instructions', body: current.prompt || 'No instructions' } : p.kind === 'edit' ? { label: 'What changes', body: <ul>{describeChange(p).map((l) => <li key={l}>{l}</li>)}</ul> } : undefined}
+              >
+                <Button variant="primary" size="sm" onClick={() => review(current, true)}>{p.kind === 'delete' ? 'Delete task' : p.kind === 'new' ? 'Approve and turn on' : 'Approve change'}</Button>
+                <Button size="sm" onClick={() => review(current, false)}>{p.kind === 'new' ? 'Discard task' : p.kind === 'delete' ? 'Keep task' : 'Discard change'}</Button>
+              </ApprovalCard>
+            )
+          })()}
+          {!current.pending && approvals[current.id] && <ApprovedLine text={`${approvals[current.id].kind === 'new' ? 'Made by a bot, approved by you' : 'A bot’s change, approved by you'} · ${when(approvals[current.id].at)}`} />}
           <div className="md-read-meta">
             {projName(current.projectId)} · {cadence(current)} · {current.enabled ? `next ${when(current.nextRunAt)}` : 'Paused'}
             {current.lastRunAt ? ` · last run ${when(current.lastRunAt)}` : ''}
