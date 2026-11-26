@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseNameStatus, parseNumstat, mergeChanges, totals, laterOverlap, parseUnifiedDiff, changesOf } from './changes'
+import { parseNameStatus, parseNumstat, mergeChanges, totals, laterOverlap, parseUnifiedDiff, changesOf, createdOnly } from './changes'
 
 describe('turn changes (D-151)', () => {
   it('reads git name-status and numstat output', () => {
@@ -31,5 +31,18 @@ describe('turn changes (D-151)', () => {
       { kind: 'ctx', text: '', oldNo: 14, newNo: 14 }
     ])
     expect(parseUnifiedDiff('Binary files a/x.png and b/x.png differ\n').binary).toBe(true)
+  })
+})
+
+describe('createdOnly (B-078)', () => {
+  const base = { before: 'a', after: 'b' }
+  it('is true for a turn that only created a few files', () => {
+    expect(createdOnly({ ...base, files: [{ path: 'research/report.md', status: 'A', add: 200 }] })).toBe(true)
+  })
+  it('is false when a file was edited or deleted, the list is cut, or it was restored', () => {
+    expect(createdOnly({ ...base, files: [{ path: 'a.md', status: 'A' }, { path: 'b.ts', status: 'M' }] })).toBe(false)
+    expect(createdOnly({ ...base, files: [{ path: 'a.md', status: 'D' }] })).toBe(false)
+    expect(createdOnly({ ...base, files: [{ path: 'a.md', status: 'A' }], more: 3 })).toBe(false)
+    expect(createdOnly({ ...base, files: [{ path: 'a.md', status: 'A' }], restored: { at: 1, safety: 's' } })).toBe(false)
   })
 })

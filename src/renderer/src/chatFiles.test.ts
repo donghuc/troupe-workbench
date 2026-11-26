@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { collectChatFiles, replyFiles, fileArtifacts, usageMain, usageBreakdown, toRelPath, userDisplayText } from './chatFiles'
+import { collectChatFiles, replyFiles, fileArtifacts, usageMain, usageBreakdown, toRelPath, userDisplayText, createdAsCards } from './chatFiles'
 import type { Message } from '../../shared/types'
 
 let n = 0
@@ -27,6 +27,15 @@ describe('chat files (D-098, moved from ConversationView)', () => {
     expect(fileArtifacts(m.metadata, cwd)).toEqual(['out/new.md'])
     expect(replyFiles(m, cwd, new Set(['PLAN.md', 'out/new.md']), new Set(['PLAN.md', 'gone.md', 'out/new.md']))).toEqual(['PLAN.md', 'out/new.md'])
     expect(replyFiles(m, cwd, null, new Set())).toEqual(['PLAN.md', 'gone.md', 'out/new.md'])
+  })
+
+  it('a turn that only created files shows them as file cards, once (B-078)', () => {
+    const only = msg('assistant', 'Saved [the report](research/report.md).', { changes: { before: 'b', after: 'a', files: [{ path: 'research/report.md', status: 'A' }, { path: 'research/data.csv', status: 'A' }] } })
+    expect(replyFiles(only, cwd, null, new Set())).toEqual(['research/report.md', 'research/data.csv'])
+    const edited = msg('assistant', 'Done.', { changes: { before: 'b', after: 'a', files: [{ path: 'new.md', status: 'A' }, { path: 'old.md', status: 'M' }] } })
+    expect(replyFiles(edited, cwd, null, new Set())).toEqual([])
+    expect(createdAsCards(only.metadata)).toBe(true)
+    expect(createdAsCards(msg('assistant', 'x', { changes: { before: 'b', after: 'a', files: [{ path: 'model.xlsx', status: 'A' }] } }).metadata)).toBe(false)
   })
 
   it('usage line and breakdown', () => {

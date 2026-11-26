@@ -81,3 +81,8 @@ export function parseUnifiedDiff(diff: string, max = 2000): { lines: DiffLine[];
   }
   return { lines, binary: false, truncated: false }
 }
+
+// Only new files, all listed (at most 5): nothing to diff or restore, so no Changes card — the
+// files show as file cards under the reply instead (B-078). A longer or cut list keeps the card.
+export const createdOnly = (c: TurnChanges): boolean =>
+  !c.restored && !c.more && c.files.length > 0 && c.files.length <= 5 && c.files.every((f) => f.status === 'A')

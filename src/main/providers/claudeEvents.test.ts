@@ -11,3 +11,15 @@ describe('claudeEvents result errors', () => {
     expect(ev.find((e) => e.type === 'error')).toMatchObject({ message: 'error_max_turns' })
   })
 })
+
+describe('claudeEvents several result frames (B-077)', () => {
+  const texts = (frames: object[]) => { const st = newClaudeState(); return frames.flatMap(f => claudeEvents(f, st)).filter(e => e.type === 'text_delta').map(e => (e as { text: string }).text).join('') }
+  const said = (text: string) => ({ type: 'assistant', message: { content: [{ type: 'text', text }] } })
+  const result = { type: 'result', subtype: 'success', usage: {} }
+  it('sends the answer once when later result frames bring no new text', () => {
+    expect(texts([said('Answer'), result, result, result])).toBe('Answer')
+  })
+  it('adds text written after an earlier result, on its own paragraph', () => {
+    expect(texts([said('First'), result, said('Second'), result])).toBe('First\n\nSecond')
+  })
+})

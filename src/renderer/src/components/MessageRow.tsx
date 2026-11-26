@@ -10,7 +10,7 @@ import { Button } from './ui/Button'
 import { changesOf } from '../../../shared/changes'
 import { stoppedTag } from '../../../shared/failures'
 import Icon from './Icon'
-import { ARTIFACT_EXT, IMG_RE, wbfileSrc, usageMain, usageBreakdown, actionsOf, attachmentsMeta, userDisplayText } from '../chatFiles'
+import { ARTIFACT_EXT, IMG_RE, wbfileSrc, usageMain, usageBreakdown, actionsOf, attachmentsMeta, userDisplayText, createdAsCards } from '../chatFiles'
 import { Menu, MenuItem } from './ui/Menu'
 
 /** What a message row can ask its chat to do. One stable object per chat (D-098). */
@@ -85,7 +85,7 @@ function MessageRow({ m, idx, name, cwd, files, menuOpen, isStreaming, otherName
           {!isStreaming && <Button size="sm" variant="ghost" onClick={() => actions.regenerate(m, idx)}>Retry</Button>}
         </div>
       )}
-      {m.role === 'assistant' && changesOf(m.metadata) && (
+      {m.role === 'assistant' && changesOf(m.metadata) && !createdAsCards(m.metadata) && (
         <ChangesCard messageId={m.id} changes={changesOf(m.metadata)!} busy={isStreaming} onRestore={actions.restoreChanges} onUndo={actions.undoRestore} onOpenFile={openArtifact} />
       )}
       {m.role === 'user' && attachmentsMeta(m.metadata).length > 0 && (

@@ -18,6 +18,14 @@ Each version here matches a packaged build — the dmg is named
 > - Bumping rules: PATCH = fixes/small tweaks, MINOR = new features (backward-compatible),
 >   MAJOR = breaking changes or a data format users can't roll back from.
 
+## [2.22.1] - 2026-11-26
+
+### Fixed
+- A long Claude turn could save its answer several times in a row (the same text repeated). Each answer is now saved once.
+
+### Changed
+- A turn that only creates a few files (a report, a note) shows them as file cards under the reply instead of a Changes card, since there's nothing to compare or restore. Turns that edit or delete files keep the Changes card with Restore.
+
 ## [2.22.0] - 2026-11-25
 
 ### Added

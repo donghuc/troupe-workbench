@@ -2,8 +2,10 @@
 // Claude provider (2.4) so user-added agents that print the same format reuse it. Pure.
 import type { AgentEvent } from '../../shared/agent'
 
-export interface ClaudeStreamState { sawTextDelta: boolean; fallbackText: string }
-export const newClaudeState = (): ClaudeStreamState => ({ sawTextDelta: false, fallbackText: '' })
+// `emitted`: the fallback text already sent. Claude Code can print several `result` frames in
+// one run (it keeps going when background tasks finish, B-077); each must add only new text.
+export interface ClaudeStreamState { sawTextDelta: boolean; fallbackText: string; emitted: string }
+export const newClaudeState = (): ClaudeStreamState => ({ sawTextDelta: false, fallbackText: '', emitted: '' })
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function claudeEvents(e: any, st: ClaudeStreamState): AgentEvent[] {
@@ -26,7 +28,10 @@ export function claudeEvents(e: any, st: ClaudeStreamState): AgentEvent[] {
       if (b?.type === 'tool_result') out.push({ type: 'tool_end', tool: 'tool', isError: !!b.is_error, itemId: b.tool_use_id })
     }
   } else if (e.type === 'result') {
-    if (!st.sawTextDelta && st.fallbackText.trim()) out.push({ type: 'text_delta', text: st.fallbackText })
+    if (!st.sawTextDelta && st.fallbackText.trim() && st.fallbackText !== st.emitted) {
+      out.push({ type: 'text_delta', text: (st.emitted ? '\n\n' : '') + st.fallbackText })
+      st.emitted = st.fallbackText
+    }
     const errored = e.is_error === true || (typeof e.subtype === 'string' && e.subtype.startsWith('error'))
     const producedText = st.sawTextDelta || !!st.fallbackText.trim()
     if (errored && !producedText) {

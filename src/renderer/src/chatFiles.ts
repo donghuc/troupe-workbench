@@ -1,5 +1,6 @@
 import type { Message } from '../../shared/types'
 import { IS_WINDOWS, isAbsPath, relUnder } from '../../shared/platform'
+import { changesOf, createdOnly } from '../../shared/changes'
 import type { AgentAction } from '../../shared/agent'
 import type { IconName } from './components/Icon'
 import { normalizeRel } from './links'
@@ -112,6 +113,12 @@ export function fileArtifacts(metadata: Record<string, unknown> | null, cwd: str
   return out
 }
 
+/** The turn only created files that can all show as file cards, so no Changes card is needed (B-078). */
+export function createdAsCards(metadata: Message['metadata']): boolean {
+  const ch = changesOf(metadata)
+  return !!ch && createdOnly(ch) && ch.files.every((f) => ARTIFACT_EXT.test(f.path) && !f.path.split('/').some((seg) => seg.startsWith('.')))
+}
+
 /**
  * File cards under a reply: files it linked, then files it created or edited. Hidden
  * files and files known to be gone (`checked` but not `existing`) are left out.
@@ -129,6 +136,8 @@ export function replyFiles(m: Message, cwd: string | undefined, existing: Set<st
   // Linked images already render inline as thumbnails in the text.
   for (const t of linkTargets(m.content)) if (!IMG_RE.test(normalizeRel(t))) add(t)
   for (const rel of fileArtifacts(m.metadata, cwd)) add(rel)
+  // A turn that only created files shows them here as file cards, not as a Changes card (B-078).
+  if (createdAsCards(m.metadata)) for (const f of changesOf(m.metadata)!.files) add(f.path)
   return out.slice(0, 8)
 }
 
